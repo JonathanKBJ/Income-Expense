@@ -22,7 +22,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		TursoDatabaseURL: getEnv("TURSO_DATABASE_URL", ""),
 		TursoAuthToken:   getEnv("TURSO_AUTH_TOKEN", ""),
-		ServerPort:       getEnv("SERVER_PORT", "8080"),
+		ServerPort:       getEnv("PORT", getEnv("SERVER_PORT", "10000")),
 	}
 
 	if err := cfg.validate(); err != nil {
