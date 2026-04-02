@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ConfigProvider, theme, App as AntApp } from "antd";
+import { ConfigProvider, theme } from "antd";
 import { useAuth } from "./contexts/AuthContext";
 import { useTransactions } from "./hooks/useTransactions";
 import Dashboard from "./components/Dashboard";
@@ -16,7 +16,7 @@ import "./App.css";
 type Page = "dashboard" | "categories" | "admin";
 
 export default function App() {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated } = useAuth();
   const [activePage, setActivePage] = useState<Page>("dashboard");
   const [authView, setAuthView] = useState<"login" | "register">("login");
 
