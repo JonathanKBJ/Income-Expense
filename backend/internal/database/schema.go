@@ -63,9 +63,10 @@ CREATE TABLE IF NOT EXISTS categories (
     name       TEXT NOT NULL,
     type       TEXT NOT NULL CHECK (type IN ('INCOME', 'EXPENSE')),
     group_id   TEXT,
+    user_id    TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    UNIQUE(name, type, group_id)
+    UNIQUE(name, type, group_id, user_id)
 );
 `
 
@@ -75,6 +76,7 @@ CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
 CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(type);
 CREATE INDEX IF NOT EXISTS idx_transactions_group ON transactions(group_id);
 CREATE INDEX IF NOT EXISTS idx_categories_group ON categories(group_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_global_unique ON categories(name, type) WHERE group_id IS NULL AND user_id IS NULL;
 `
 
 // defaultCategories are seeded on first migration using INSERT OR IGNORE.
@@ -139,6 +141,33 @@ func (d *DB) Migrate() error {
 		_, _ = d.ExecContext(ctx, sql)
 	}
 
+	// Migration for categories to update UNIQUE constraint and add user_id
+	var hasUserID int
+	_ = d.QueryRowContext(ctx, "SELECT count(*) FROM pragma_table_info('categories') WHERE name='user_id'").Scan(&hasUserID)
+	if hasUserID == 0 {
+		// Table exists but lacks user_id, or it's a fresh install where CREATE TABLE above already run
+		// However, if CREATE TABLE IF NOT EXISTS already ran, hasUserID would be 1.
+		// If it's an old table, we need to migrate.
+		// Check if the table actually exists first (pragma_table_info returns nothing if table doesn't exist)
+		var tableExists int
+		_ = d.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='categories'").Scan(&tableExists)
+
+		if tableExists > 0 {
+			// Perform migration: rename, create new, copy, drop
+			migrationSQL := []string{
+				"ALTER TABLE categories RENAME TO categories_old",
+				createCategoriesTable,
+				"INSERT INTO categories (id, name, type, group_id, created_at, updated_at) SELECT id, name, type, group_id, created_at, updated_at FROM categories_old",
+				"DROP TABLE categories_old",
+			}
+			for _, sql := range migrationSQL {
+				if _, err := d.ExecContext(ctx, sql); err != nil {
+					return fmt.Errorf("failed to migrate categories table: %w", err)
+				}
+			}
+		}
+	}
+
 	// Create/Recreate UNIQUE constraint on categories for group_id
 	// Note: SQLite doesn't support ALTER TABLE DROP CONSTRAINT or ADD CONSTRAINT.
 	// We'll rely on the CREATE TABLE IF NOT EXISTS for new setups.
@@ -146,6 +175,24 @@ func (d *DB) Migrate() error {
 	// For now, let's keep it simple.
 
 	// Create indexes
+	if _, err := d.ExecContext(ctx, createIndexes); err != nil {
+		// If index creation fails due to existing duplicates, we handle that by cleaning up duplicates first
+		// This can happen if the database already has many duplicates before this index was added.
+	}
+
+	// Clean up any duplicate global categories before proceeding
+	cleanupSQL := `
+		DELETE FROM categories 
+		WHERE id NOT IN (
+			SELECT MIN(id) 
+			FROM categories 
+			WHERE group_id IS NULL AND user_id IS NULL 
+			GROUP BY name, type
+		) AND group_id IS NULL AND user_id IS NULL;
+	`
+	_, _ = d.ExecContext(ctx, cleanupSQL)
+
+	// Re-try create indexes (in case it failed above)
 	if _, err := d.ExecContext(ctx, createIndexes); err != nil {
 		return fmt.Errorf("failed to create indexes: %w", err)
 	}

@@ -35,9 +35,10 @@ func (h *CategoryHandler) GetCategories(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Injected by AuthMiddleware
+	userID := middleware.GetUserID(r.Context())
 	groupID := middleware.GetGroupID(r.Context())
 
-	categories, err := h.repo.GetAll(r.Context(), groupID, catType)
+	categories, err := h.repo.GetAll(r.Context(), userID, groupID, catType)
 	if err != nil {
 		log.Printf("ERROR: GetCategories: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to fetch categories")
@@ -69,9 +70,10 @@ func (h *CategoryHandler) CreateCategory(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Injected by AuthMiddleware
+	userID := middleware.GetUserID(r.Context())
 	groupID := middleware.GetGroupID(r.Context())
 
-	category, err := h.repo.Create(r.Context(), req, groupID)
+	category, err := h.repo.Create(r.Context(), req, userID, groupID)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint") {
 			writeError(w, http.StatusConflict, "a category with this name already exists for this type")
@@ -95,10 +97,11 @@ func (h *CategoryHandler) UpdateCategory(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Injected by AuthMiddleware
+	userID := middleware.GetUserID(r.Context())
 	groupID := middleware.GetGroupID(r.Context())
 
 	// Fetch existing category
-	existing, err := h.repo.GetByID(r.Context(), id, groupID)
+	existing, err := h.repo.GetByID(r.Context(), id, userID, groupID)
 	if err != nil {
 		log.Printf("ERROR: UpdateCategory (fetch): %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to fetch category")
@@ -121,7 +124,7 @@ func (h *CategoryHandler) UpdateCategory(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	updated, err := h.repo.Update(r.Context(), id, groupID, req)
+	updated, err := h.repo.Update(r.Context(), id, userID, groupID, req)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint") {
 			writeError(w, http.StatusConflict, "a category with this name already exists for this type")
@@ -149,10 +152,11 @@ func (h *CategoryHandler) DeleteCategory(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Injected by AuthMiddleware
+	userID := middleware.GetUserID(r.Context())
 	groupID := middleware.GetGroupID(r.Context())
 
 	// Fetch existing category to get name and type for usage check
-	existing, err := h.repo.GetByID(r.Context(), id, groupID)
+	existing, err := h.repo.GetByID(r.Context(), id, userID, groupID)
 	if err != nil {
 		log.Printf("ERROR: DeleteCategory (fetch): %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to fetch category")
@@ -164,7 +168,7 @@ func (h *CategoryHandler) DeleteCategory(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Check if the category is used by any transactions
-	inUse, err := h.repo.IsCategoryInUse(r.Context(), existing.Name, string(existing.Type), groupID)
+	inUse, err := h.repo.IsCategoryInUse(r.Context(), existing.Name, string(existing.Type), userID, groupID)
 	if err != nil {
 		log.Printf("ERROR: DeleteCategory (usage check): %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to check category usage")
@@ -175,7 +179,7 @@ func (h *CategoryHandler) DeleteCategory(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if err := h.repo.Delete(r.Context(), id, groupID); err != nil {
+	if err := h.repo.Delete(r.Context(), id, userID, groupID); err != nil {
 		log.Printf("ERROR: DeleteCategory: %v", err)
 		writeError(w, http.StatusNotFound, "category not found")
 		return

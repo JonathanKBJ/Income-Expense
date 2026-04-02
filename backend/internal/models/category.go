@@ -2,12 +2,13 @@ package models
 
 // Category represents an income or expense category that users can manage.
 type Category struct {
-	ID        string          `json:"id"`
-	Name      string          `json:"name"`
-	Type      TransactionType `json:"type"` // INCOME or EXPENSE
-	GroupID   *string         `json:"groupId"`
-	CreatedAt string          `json:"createdAt"`
-	UpdatedAt string          `json:"updatedAt"`
+	ID        string           `json:"id"`
+	Name      string           `json:"name"`
+	Type      TransactionType  `json:"type"` // INCOME or EXPENSE
+	GroupID   *string          `json:"groupId"`
+	UserID    *string          `json:"userId"`
+	CreatedAt string           `json:"createdAt"`
+	UpdatedAt string           `json:"updatedAt"`
 }
 
 // CreateCategoryRequest is the payload for POST /api/categories.
