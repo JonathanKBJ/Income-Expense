@@ -197,6 +197,20 @@ func (d *DB) Migrate() error {
 		return fmt.Errorf("failed to create indexes: %w", err)
 	}
 
+	// Fix orphaned transactions and categories by assigning them to their user's primary group
+	migrationSQL := []string{
+		`UPDATE transactions 
+		 SET group_id = (SELECT group_id FROM group_members WHERE user_id = transactions.user_id LIMIT 1) 
+		 WHERE (group_id IS NULL OR group_id = '') AND user_id IS NOT NULL`,
+
+		`UPDATE categories 
+		 SET group_id = (SELECT group_id FROM group_members WHERE user_id = categories.user_id LIMIT 1) 
+		 WHERE (group_id IS NULL OR group_id = '') AND user_id IS NOT NULL`,
+	}
+	for _, sql := range migrationSQL {
+		_, _ = d.ExecContext(ctx, sql)
+	}
+
 	// Seed default categories for NULL group (global defaults or template)
 	if err := d.seedCategories(ctx); err != nil {
 		return fmt.Errorf("failed to seed default categories: %w", err)

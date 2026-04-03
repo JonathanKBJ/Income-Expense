@@ -24,9 +24,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Restore session from localStorage
-    const savedToken = localStorage.getItem("auth_token");
-    const savedUser = localStorage.getItem("auth_user");
+    // Restore session from sessionStorage
+    const savedToken = sessionStorage.getItem("auth_token");
+    const savedUser = sessionStorage.getItem("auth_user");
 
     if (savedToken && savedUser) {
       setToken(savedToken);
@@ -38,15 +38,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = (newToken: string, newUser: User) => {
     setToken(newToken);
     setUser(newUser);
-    localStorage.setItem("auth_token", newToken);
-    localStorage.setItem("auth_user", JSON.stringify(newUser));
+    sessionStorage.setItem("auth_token", newToken);
+    sessionStorage.setItem("auth_user", JSON.stringify(newUser));
   };
 
   const logout = () => {
     setToken(null);
     setUser(null);
-    localStorage.removeItem("auth_token");
-    localStorage.removeItem("auth_user");
+    sessionStorage.removeItem("auth_token");
+    sessionStorage.removeItem("auth_user");
   };
 
   const isAuthenticated = !!token;

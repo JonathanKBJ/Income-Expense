@@ -55,6 +55,10 @@ func (h *TransactionHandler) GetTransactions(w http.ResponseWriter, r *http.Requ
 
 	// Injected by AuthMiddleware
 	groupID := middleware.GetGroupID(r.Context())
+	if groupID == "" {
+		writeError(w, http.StatusForbidden, "group identification required for this operation")
+		return
+	}
 
 	result, err := h.repo.GetByMonthYear(r.Context(), month, year, groupID)
 	if err != nil {
@@ -84,6 +88,11 @@ func (h *TransactionHandler) CreateTransaction(w http.ResponseWriter, r *http.Re
 	// Injected by AuthMiddleware
 	userID := middleware.GetUserID(r.Context())
 	groupID := middleware.GetGroupID(r.Context())
+
+	if groupID == "" {
+		writeError(w, http.StatusForbidden, "group identification required for this operation")
+		return
+	}
 
 	transaction, err := h.repo.Create(r.Context(), req, userID, groupID)
 	if err != nil {
@@ -115,6 +124,11 @@ func (h *TransactionHandler) CreateTransactionsBatch(w http.ResponseWriter, r *h
 	userID := middleware.GetUserID(r.Context())
 	groupID := middleware.GetGroupID(r.Context())
 
+	if groupID == "" {
+		writeError(w, http.StatusForbidden, "group identification required for this operation")
+		return
+	}
+
 	err := h.repo.CreateBatch(r.Context(), reqs, userID, groupID)
 	if err != nil {
 		log.Printf("ERROR: CreateTransactionsBatch: %v", err)
@@ -136,6 +150,10 @@ func (h *TransactionHandler) UpdateTransaction(w http.ResponseWriter, r *http.Re
 
 	// Injected by AuthMiddleware
 	groupID := middleware.GetGroupID(r.Context())
+	if groupID == "" {
+		writeError(w, http.StatusForbidden, "group identification required for this operation")
+		return
+	}
 
 	// Fetch existing transaction
 	existing, err := h.repo.GetByID(r.Context(), id, groupID)
@@ -185,6 +203,10 @@ func (h *TransactionHandler) DeleteTransaction(w http.ResponseWriter, r *http.Re
 
 	// Injected by AuthMiddleware
 	groupID := middleware.GetGroupID(r.Context())
+	if groupID == "" {
+		writeError(w, http.StatusForbidden, "group identification required for this operation")
+		return
+	}
 
 	if err := h.repo.Delete(r.Context(), id, groupID); err != nil {
 		log.Printf("ERROR: DeleteTransaction: %v", err)

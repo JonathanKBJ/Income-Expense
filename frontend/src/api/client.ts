@@ -1,7 +1,7 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
 
 export async function apiFetch(endpoint: string, options: RequestInit = {}) {
-  const token = localStorage.getItem("auth_token");
+  const token = sessionStorage.getItem("auth_token");
   
   const headers = {
     "Content-Type": "application/json",
