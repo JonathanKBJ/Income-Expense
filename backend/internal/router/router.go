@@ -75,6 +75,7 @@ func New(
 				r.Get("/groups", adminHandler.ListGroups)
 				r.Get("/groups/{id}/members", adminHandler.GetGroupMembers)
 				r.Post("/groups/{id}/members", adminHandler.AddMemberToGroup)
+				r.Delete("/groups/{id}/members/{userID}", adminHandler.RemoveMemberFromGroup)
 			})
 		})
 	})

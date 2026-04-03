@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DatePicker, Select, InputNumber, Input, Button } from "antd";
 import { CopyOutlined, DownOutlined, UpOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
@@ -36,6 +36,13 @@ export default function TransactionForm({
 }: TransactionFormProps) {
   const [form, setForm] = useState<TransactionFormState>(initialState);
   const [isExpanded, setIsExpanded] = useState(true);
+  
+  useEffect(() => {
+    // Collapse by default on mobile
+    if (window.innerWidth <= 768) {
+      setIsExpanded(false);
+    }
+  }, []);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -141,7 +148,7 @@ export default function TransactionForm({
             onClick={() => setCopyModalOpen(true)}
             className="copy-btn"
           >
-            Copy from Month
+            <span className="btn-text">Copy from Month</span>
           </Button>
           <Button
             className="expand-toggle-btn"

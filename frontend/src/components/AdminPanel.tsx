@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { Table, Tag, Switch, Space, Card, Typography, Select, Button, Modal, List, Badge, App as AntApp } from "antd";
-import { UserOutlined, TeamOutlined, UserAddOutlined } from "@ant-design/icons";
+import { Table, Tag, Switch, Space, Card, Typography, Select, Button, Modal, List, Badge, App as AntApp, Popconfirm } from "antd";
+import { UserOutlined, TeamOutlined, UserAddOutlined, DeleteOutlined } from "@ant-design/icons";
 import { apiFetch } from "../api/client";
 
 const { Title, Text } = Typography;
@@ -86,6 +86,20 @@ const AdminPanel: React.FC = () => {
       message.success("Member added to group");
       setAddUserToGroupOpen(false);
       showGroupMembers(selectedGroup); // Refresh members List
+    } catch (error: any) {
+      message.error(error.message);
+    }
+  };
+
+  const handleRemoveMember = async (userID: string) => {
+    if (!selectedGroup) return;
+
+    try {
+      await apiFetch(`/api/admin/groups/${selectedGroup.id}/members/${userID}`, {
+        method: "DELETE",
+      });
+      message.success("Member removed from group");
+      showGroupMembers(selectedGroup); // Refresh members list
     } catch (error: any) {
       message.error(error.message);
     }
@@ -205,7 +219,26 @@ const AdminPanel: React.FC = () => {
         <List
           dataSource={groupMembers}
           renderItem={(item) => (
-            <List.Item>
+            <List.Item
+              actions={[
+                <Popconfirm
+                  key="delete"
+                  title="Remove from group?"
+                  description="Are you sure you want to remove this user from the group?"
+                  onConfirm={() => handleRemoveMember(item.id)}
+                  okText="Yes"
+                  cancelText="No"
+                  placement="left"
+                >
+                  <Button 
+                    type="text" 
+                    danger 
+                    icon={<DeleteOutlined />} 
+                    size="small"
+                  />
+                </Popconfirm>
+              ]}
+            >
               <List.Item.Meta
                 avatar={<UserOutlined />}
                 title={item.username}

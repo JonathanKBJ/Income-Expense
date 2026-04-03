@@ -355,13 +355,30 @@
 
 @media (max-width: 480px) {
   .section-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: nowrap;
   }
+  
+  #transaction-form .section-header {
+    margin-bottom: 16px;
+  }
+
+  .header-actions {
+    margin-left: auto;
+  }
+
   .section-header .copy-btn {
-    width: 100%;
-    justify-content: center;
+    width: auto;
+    padding: 4px 8px;
+  }
+}
+
+/* Hide button text on mobile size */
+@media (max-width: 768px) {
+  .copy-btn .btn-text {
+    display: none;
   }
 }
 .transaction-count {

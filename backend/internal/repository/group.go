@@ -116,3 +116,13 @@ func (r *GroupRepository) GetGroupMembers(ctx context.Context, groupID string) (
 	}
 	return users, nil
 }
+
+// RemoveMember removes a specific user from a group.
+func (r *GroupRepository) RemoveMember(ctx context.Context, groupID, userID string) error {
+	query := `DELETE FROM group_members WHERE group_id = ? AND user_id = ?`
+	_, err := r.db.ExecContext(ctx, query, groupID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to remove group member: %w", err)
+	}
+	return nil
+}

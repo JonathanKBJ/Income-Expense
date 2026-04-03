@@ -87,3 +87,16 @@ func (h *AdminHandler) GetGroupMembers(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, members)
 }
+
+// RemoveMemberFromGroup handles DELETE /api/admin/groups/{id}/members/{userID}
+func (h *AdminHandler) RemoveMemberFromGroup(w http.ResponseWriter, r *http.Request) {
+	groupID := chi.URLParam(r, "id")
+	userID := chi.URLParam(r, "userID")
+
+	if err := h.groupRepo.RemoveMember(r.Context(), groupID, userID); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to remove member from group")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "member removed from group"})
+}
