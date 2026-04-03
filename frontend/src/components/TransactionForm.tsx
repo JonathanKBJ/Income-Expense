@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { DatePicker, Select, InputNumber, Input, Button } from "antd";
-import { CopyOutlined } from "@ant-design/icons";
+import { CopyOutlined, DownOutlined, UpOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import type {
   CreateTransactionRequest,
@@ -19,7 +19,7 @@ interface TransactionFormProps {
 }
 
 const initialState: TransactionFormState = {
-  type: "EXPENSE",
+  type: "INCOME",
   category: "",
   description: "",
   amount: "",
@@ -35,6 +35,7 @@ export default function TransactionForm({
   currentYear 
 }: TransactionFormProps) {
   const [form, setForm] = useState<TransactionFormState>(initialState);
+  const [isExpanded, setIsExpanded] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -118,6 +119,7 @@ export default function TransactionForm({
       await onSubmit(req);
       setForm(prev => ({
         ...initialState,
+        type: prev.type, // Preserve type after successful add
         date: prev.date, // Preserve date after successful add
       }));
       setSuccess(true);
@@ -133,16 +135,25 @@ export default function TransactionForm({
     <section className="transaction-form-section" id="transaction-form">
       <div className="section-header">
         <h2 className="section-title" style={{ margin: 0 }}>Add Transaction</h2>
-        <Button 
-          icon={<CopyOutlined />} 
-          onClick={() => setCopyModalOpen(true)}
-          className="copy-btn"
-        >
-          Copy from Month
-        </Button>
+        <div className="header-actions">
+          <Button 
+            icon={<CopyOutlined />} 
+            onClick={() => setCopyModalOpen(true)}
+            className="copy-btn"
+          >
+            Copy from Month
+          </Button>
+          <Button
+            className="expand-toggle-btn"
+            icon={isExpanded ? <UpOutlined /> : <DownOutlined />}
+            onClick={() => setIsExpanded(!isExpanded)}
+            title={isExpanded ? "Collapse form" : "Expand form"}
+          />
+        </div>
       </div>
 
-      <form className="transaction-form" onSubmit={handleSubmit}>
+      <div className={`transaction-form-body ${isExpanded ? "expanded" : "collapsed"}`}>
+        <form className="transaction-form" onSubmit={handleSubmit}>
         {/* Type Toggle */}
         <div className="type-toggle" id="type-toggle">
           <button
@@ -282,7 +293,8 @@ export default function TransactionForm({
             </>
           )}
         </button>
-      </form>
+        </form>
+      </div>
 
       <CopyTransactionsModal
         open={copyModalOpen}

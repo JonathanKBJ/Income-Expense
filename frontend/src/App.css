@@ -327,6 +327,32 @@
   flex-wrap: wrap;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.expand-toggle-btn {
+  display: none !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid var(--border-subtle) !important;
+  color: var(--text-secondary) !important;
+  transition: all var(--transition-fast) !important;
+}
+
+.expand-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-light) !important;
+}
+
+@media (max-width: 1024px) {
+  .expand-toggle-btn {
+    display: flex !important;
+  }
+}
+
 @media (max-width: 480px) {
   .section-header {
     flex-direction: column;
@@ -366,6 +392,19 @@
   top: 80px;
   overflow: hidden;
   min-width: 0;
+}
+
+.transaction-form-body {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  max-height: 800px;
+  opacity: 1;
+}
+
+.transaction-form-body.collapsed {
+  max-height: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* Type Toggle */
