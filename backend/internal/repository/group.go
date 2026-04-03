@@ -117,12 +117,48 @@ func (r *GroupRepository) GetGroupMembers(ctx context.Context, groupID string) (
 	return users, nil
 }
 
-// RemoveMember removes a specific user from a group.
+// RemoveMember removes a specific user from a group and returns them to their personal group.
 func (r *GroupRepository) RemoveMember(ctx context.Context, groupID, userID string) error {
-	query := `DELETE FROM group_members WHERE group_id = ? AND user_id = ?`
-	_, err := r.db.ExecContext(ctx, query, groupID, userID)
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// 1. Get the user's username
+	var username string
+	err = tx.QueryRowContext(ctx, `SELECT username FROM users WHERE id = ?`, userID).Scan(&username)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("user not found")
+		}
+		return fmt.Errorf("failed to get user info: %w", err)
+	}
+
+	// 2. Remove from current group
+	_, err = tx.ExecContext(ctx, `DELETE FROM group_members WHERE group_id = ? AND user_id = ?`, groupID, userID)
 	if err != nil {
 		return fmt.Errorf("failed to remove group member: %w", err)
 	}
-	return nil
+
+	// 3. Find personal group (name pattern: 'username's Group')
+	personalGroupName := fmt.Sprintf("%s's Group", username)
+	var personalGroupID string
+	err = tx.QueryRowContext(ctx, `SELECT id FROM groups WHERE name = ? LIMIT 1`, personalGroupName).Scan(&personalGroupID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// No personal group found, just commit the removal
+			return tx.Commit()
+		}
+		return fmt.Errorf("failed to find personal group: %w", err)
+	}
+
+	// 4. Restore membership to personal group
+	// Note: We use INSERT OR IGNORE just in case they are already in it somehow (though internal logic should prevent it)
+	_, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO group_members (group_id, user_id) VALUES (?, ?)`, personalGroupID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to restore to personal group: %w", err)
+	}
+
+	return tx.Commit()
 }
