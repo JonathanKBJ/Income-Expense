@@ -11,6 +11,7 @@ import CategoryManager from "./components/CategoryManager";
 import Login from "./components/Login";
 import Register from "./components/Register";
 import AdminPanel from "./components/AdminPanel";
+import { Analytics } from "@vercel/analytics/react"
 import "./App.css";
 
 type Page = "dashboard" | "categories" | "admin";
@@ -53,12 +54,13 @@ export default function App() {
           {authView === "login" ? (
             <Login onRegisterClick={() => setAuthView("register")} />
           ) : (
-            <Register 
-              onBackToLogin={() => setAuthView("login")} 
-              onSuccess={() => setAuthView("login")} 
+            <Register
+              onBackToLogin={() => setAuthView("login")}
+              onSuccess={() => setAuthView("login")}
             />
           )}
         </div>
+        <Analytics />
       </ConfigProvider>
     );
   }
@@ -136,8 +138,8 @@ export default function App() {
               <Dashboard summary={summary} month={month} year={year} />
 
               <div className="content-grid">
-                <TransactionForm 
-                  onSubmit={create} 
+                <TransactionForm
+                  onSubmit={create}
                   onCopyBatch={createBatch}
                   currentMonth={month}
                   currentYear={year}
@@ -160,6 +162,7 @@ export default function App() {
           <p>Monthly Expense Tracker &copy; {new Date().getFullYear()}</p>
         </footer>
       </div>
+      <Analytics />
     </ConfigProvider>
   );
 }
