@@ -11,24 +11,39 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
+	"crypto/sha256"
+	"encoding/hex"
 )
 
 type AuthService struct {
-	userRepo  *repository.UserRepository
-	groupRepo *repository.GroupRepository
-	jwtSecret []byte
+	userRepo     *repository.UserRepository
+	groupRepo    *repository.GroupRepository
+	jwtSecret    []byte
+	pepperSecret string
 }
 
 func NewAuthService(userRepo *repository.UserRepository, groupRepo *repository.GroupRepository) *AuthService {
-	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
-		secret = "default_secret_key" // Fallback for safety during dev
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		jwtSecret = "default_jwt_secret" // Fallback for dev
+	}
+	pepper := os.Getenv("PEPPER_SECRET")
+	if pepper == "" {
+		pepper = "default_pepper_key" // Fallback for dev
 	}
 	return &AuthService{
-		userRepo:  userRepo,
-		groupRepo: groupRepo,
-		jwtSecret: []byte(secret),
+		userRepo:     userRepo,
+		groupRepo:    groupRepo,
+		jwtSecret:    []byte(jwtSecret),
+		pepperSecret: pepper,
 	}
+}
+
+// hashWithPepper combines the password with user-specific data and a system secret.
+func (s *AuthService) hashWithPepper(password, username string) string {
+	data := fmt.Sprintf("%s:%s:%s", password, username, s.pepperSecret)
+	hash := sha256.Sum256([]byte(data))
+	return hex.EncodeToString(hash[:])
 }
 
 // Register creates a new user and an associated group.
@@ -42,8 +57,9 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 		return nil, fmt.Errorf("username already taken")
 	}
 
-	// Hash password
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	// Hash password with pepper and username
+	pepperedPassword := s.hashWithPepper(req.Password, req.Username)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(pepperedPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
@@ -101,8 +117,9 @@ func (s *AuthService) Login(ctx context.Context, req models.LoginRequest) (strin
 		return "", nil, fmt.Errorf("account is disabled")
 	}
 
-	// Compare password
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+	// Compare password (using pepper and username)
+	pepperedPassword := s.hashWithPepper(req.Password, req.Username)
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(pepperedPassword)); err != nil {
 		return "", nil, fmt.Errorf("invalid username or password")
 	}
 

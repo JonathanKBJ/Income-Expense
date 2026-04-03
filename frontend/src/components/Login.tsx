@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Form, Input, Button, Card, Typography, Divider, App as AntApp } from "antd";
 import { UserOutlined, LockOutlined } from "@ant-design/icons";
 import { useAuth } from "../contexts/AuthContext";
+import { hashPassword } from "../api/security";
 
 const { Title, Text } = Typography;
 
@@ -17,11 +18,18 @@ const Login: React.FC<LoginProps> = ({ onRegisterClick }) => {
   const onFinish = async (values: any) => {
     setLoading(true);
     try {
+      // Hash password on client side to avoid sending plain text
+      const hashedPassword = await hashPassword(values.username, values.password);
+      const payload = {
+        ...values,
+        password: hashedPassword,
+      };
+
       const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
       const response = await fetch(`${API_BASE}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Form, Input, Button, Card, Typography, Divider, App as AntApp } from "antd";
 import { UserOutlined, LockOutlined, ArrowLeftOutlined } from "@ant-design/icons";
+import { hashPassword } from "../api/security";
 
 const { Title, Text } = Typography;
 
@@ -16,13 +17,20 @@ const Register: React.FC<RegisterProps> = ({ onBackToLogin, onSuccess }) => {
   const onFinish = async (values: any) => {
     setLoading(true);
     try {
+      // Hash password on client side
+      const hashedPassword = await hashPassword(values.username, values.password);
+      const payload = {
+        username: values.username,
+        password: hashedPassword,
+      };
+
       const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
       const response = await fetch(`${API_BASE}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
+        body: JSON.stringify(payload),
       });
-
+  
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || "Registration failed");
