@@ -38,6 +38,24 @@ func (h *CategoryHandler) GetCategories(w http.ResponseWriter, r *http.Request) 
 	userID := middleware.GetUserID(r.Context())
 	groupID := middleware.GetGroupID(r.Context())
 
+	// Check if the user has any categories at all
+	allCats, err := h.repo.GetAll(r.Context(), userID, groupID, "")
+	if err == nil && len(allCats) == 0 {
+		// Auto-seed initial Thai categories 
+		defaults := []models.CreateCategoryRequest{
+			{Name: "เงินเดือน", Type: models.TypeIncome},
+			{Name: "รายได้พิเศษ", Type: models.TypeIncome},
+			{Name: "อื่นๆ", Type: models.TypeIncome},
+			{Name: "อาหารและเครื่องดื่ม", Type: models.TypeExpense},
+			{Name: "บัตรเครดิต", Type: models.TypeExpense},
+			{Name: "ค่าเดินทาง", Type: models.TypeExpense},
+			{Name: "อื่นๆ", Type: models.TypeExpense},
+		}
+		for _, req := range defaults {
+			_, _ = h.repo.Create(r.Context(), req, userID, groupID)
+		}
+	}
+
 	categories, err := h.repo.GetAll(r.Context(), userID, groupID, catType)
 	if err != nil {
 		log.Printf("ERROR: GetCategories: %v", err)

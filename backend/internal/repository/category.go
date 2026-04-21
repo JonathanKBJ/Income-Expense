@@ -28,7 +28,7 @@ func (r *CategoryRepository) GetAll(ctx context.Context, userID, groupID, catTyp
 	var query string
 	var args []interface{}
 
-	// Query categories that belong to the user's group OR the user themselves OR are global (null user_id)
+	// Query categories that belong to the user's group OR the user themselves
 	// If groupID is provided, we prioritize group categories.
 	// Filter by type if provided.
 	baseQuery := `SELECT id, name, type, group_id, user_id, created_at, updated_at FROM categories WHERE `
@@ -40,10 +40,10 @@ func (r *CategoryRepository) GetAll(ctx context.Context, userID, groupID, catTyp
 	}
 
 	if groupID != "" {
-		filters = append(filters, "(group_id = ? OR user_id IS NULL)")
+		filters = append(filters, "group_id = ?")
 		args = append(args, groupID)
 	} else {
-		filters = append(filters, "(user_id = ? OR user_id IS NULL)")
+		filters = append(filters, "user_id = ?")
 		args = append(args, userID)
 	}
 
@@ -77,7 +77,7 @@ func (r *CategoryRepository) GetAll(ctx context.Context, userID, groupID, catTyp
 
 // GetByID retrieves a single category by its ID and either group ID or user ID.
 func (r *CategoryRepository) GetByID(ctx context.Context, id, userID, groupID string) (*models.Category, error) {
-	query := `SELECT id, name, type, group_id, user_id, created_at, updated_at FROM categories WHERE id = ? AND (group_id = ? OR user_id = ? OR user_id IS NULL)`
+	query := `SELECT id, name, type, group_id, user_id, created_at, updated_at FROM categories WHERE id = ? AND (group_id = ? OR user_id = ?)`
 
 	var cat models.Category
 	err := r.db.QueryRowContext(ctx, query, id, groupID, userID).Scan(
