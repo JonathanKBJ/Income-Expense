@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 
-type Page = "dashboard" | "categories" | "admin";
+type Page = "dashboard" | "annual" | "categories" | "admin";
 
 interface SidebarProps {
   activePage: Page;
@@ -82,13 +82,25 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="7" height="7" rx="1" />
               <rect x="14" y="3" width="7" height="7" rx="1" />
-              <rect x="3" y="14" width="7" height="7" rx="1" />
-              <rect x="14" y="14" width="7" height="7" rx="1" />
-            </svg>
-            <span>Dashboard</span>
-          </button>
+            <rect x="3" y="14" width="7" height="7" rx="1" />
+            <rect x="14" y="14" width="7" height="7" rx="1" />
+          </svg>
+          <span>Dashboard</span>
+        </button>
 
-          {isAdmin && (
+        {/* Annual Dashboard */}
+        <button
+          className={`sidebar-item ${activePage === "annual" ? "active" : ""}`}
+          onClick={() => handleNavigate("annual")}
+          id="nav-annual"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+          </svg>
+          <span>Annual Dashboard</span>
+        </button>
+
+        {isAdmin && (
             <button
               className={`sidebar-item ${activePage === "admin" ? "active" : ""}`}
               onClick={() => handleNavigate("admin")}

@@ -53,6 +53,7 @@ func New(
 			// Transaction routes
 			r.Route("/transactions", func(r chi.Router) {
 				r.Get("/", txHandler.GetTransactions)
+				r.Get("/annual", txHandler.GetAnnualSummary)
 				r.Post("/", txHandler.CreateTransaction)
 				r.Post("/batch", txHandler.CreateTransactionsBatch)
 				r.Patch("/{id}", txHandler.UpdateTransaction)

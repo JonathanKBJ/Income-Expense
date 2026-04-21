@@ -70,6 +70,46 @@ func (h *TransactionHandler) GetTransactions(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, result)
 }
 
+// GetAnnualSummary handles GET /api/transactions/annual?year={Y}
+func (h *TransactionHandler) GetAnnualSummary(w http.ResponseWriter, r *http.Request) {
+	now := time.Now()
+	yearStr := r.URL.Query().Get("year")
+	year := now.Year()
+
+	if yearStr != "" {
+		y, err := strconv.Atoi(yearStr)
+		if err != nil || y < 2000 || y > 2100 {
+			writeError(w, http.StatusBadRequest, "year must be between 2000 and 2100")
+			return
+		}
+		year = y
+	}
+
+	// Injected by AuthMiddleware
+	groupID := middleware.GetGroupID(r.Context())
+	if groupID == "" {
+		writeError(w, http.StatusForbidden, "group identification required for this operation")
+		return
+	}
+
+	result, err := h.repo.GetAnnualSummary(r.Context(), year, groupID)
+	if err != nil {
+		log.Printf("ERROR: GetAnnualSummary: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to fetch annual summary")
+		return
+	}
+
+	// Return empty slices for frontend map safety if no data
+	if result.MonthlyData == nil {
+		result.MonthlyData = []models.MonthlySummary{}
+	}
+	if result.CategoryData == nil {
+		result.CategoryData = []models.CategorySummary{}
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
 // CreateTransaction handles POST /api/transactions
 // Creates a new income or expense transaction.
 func (h *TransactionHandler) CreateTransaction(w http.ResponseWriter, r *http.Request) {

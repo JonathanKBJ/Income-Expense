@@ -4,6 +4,7 @@ import { useAuth } from "./contexts/AuthContext";
 import { useTransactions } from "./hooks/useTransactions";
 import Dashboard from "./components/Dashboard";
 import MonthPicker from "./components/MonthPicker";
+import YearPicker from "./components/YearPicker";
 import TransactionForm from "./components/TransactionForm";
 import TransactionList from "./components/TransactionList";
 import Sidebar from "./components/Sidebar";
@@ -11,15 +12,17 @@ import CategoryManager from "./components/CategoryManager";
 import Login from "./components/Login";
 import Register from "./components/Register";
 import AdminPanel from "./components/AdminPanel";
+import AnnualDashboard from "./components/AnnualDashboard";
 import { Analytics } from "@vercel/analytics/react"
 import "./App.css";
 
-type Page = "dashboard" | "categories" | "admin";
+type Page = "dashboard" | "annual" | "categories" | "admin";
 
 export default function App() {
   const { isAuthenticated } = useAuth();
   const [activePage, setActivePage] = useState<Page>("dashboard");
   const [authView, setAuthView] = useState<"login" | "register">("login");
+  const [annualYear, setAnnualYear] = useState<number>(new Date().getFullYear());
 
   const {
     transactions,
@@ -100,6 +103,21 @@ export default function App() {
                 onYearChange={setYear}
               />
             )}
+            {activePage === "annual" && (
+              <YearPicker
+                year={annualYear}
+                onYearChange={setAnnualYear}
+              />
+            )}
+            {activePage === "annual" && (
+              <div className="page-breadcrumb">
+                <span className="breadcrumb-parent">Performance</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+                <span className="breadcrumb-current">Annual Dashboard</span>
+              </div>
+            )}
             {activePage === "categories" && (
               <div className="page-breadcrumb">
                 <span className="breadcrumb-parent">Settings</span>
@@ -154,6 +172,7 @@ export default function App() {
             </>
           )}
 
+          {activePage === "annual" && <AnnualDashboard year={annualYear} />}
           {activePage === "categories" && <CategoryManager />}
           {activePage === "admin" && <AdminPanel />}
         </main>

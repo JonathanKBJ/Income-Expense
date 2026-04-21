@@ -3,6 +3,7 @@ import type {
   Transaction,
   TransactionsResponse,
   UpdateTransactionRequest,
+  AnnualSummaryResponse,
 } from "../types/transaction";
 import { apiFetch } from "./client";
 
@@ -65,4 +66,12 @@ export async function deleteTransaction(id: string): Promise<void> {
   return apiFetch(`/api/transactions/${id}`, {
     method: "DELETE",
   });
+}
+
+/**
+ * Fetch annual summary statistics.
+ * GET /api/transactions/annual?year={Y}
+ */
+export async function getAnnualSummary(year: number): Promise<AnnualSummaryResponse> {
+  return apiFetch(`/api/transactions/annual?year=${year}`);
 }

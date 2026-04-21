@@ -339,6 +339,97 @@ func (r *TransactionRepository) Delete(ctx context.Context, id, groupID string) 
 	return nil
 }
 
+// GetAnnualSummary retrieves and aggregates all transactions for a given year and group.
+func (r *TransactionRepository) GetAnnualSummary(ctx context.Context, year int, groupID string) (*models.AnnualSummaryResponse, error) {
+	startDate := fmt.Sprintf("%04d-01-01", year)
+	endDate := fmt.Sprintf("%04d-01-01", year+1)
+
+	query := `
+		SELECT type, category, amount, date, status, paid_amount
+		FROM transactions
+		WHERE date >= ? AND date < ? AND group_id = ?
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, startDate, endDate, groupID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query annual transactions: %w", err)
+	}
+	defer rows.Close()
+
+	summary := &models.AnnualSummaryResponse{
+		Year: year,
+	}
+
+	monthlyMap := make(map[int]*models.MonthlySummary)
+	for i := 1; i <= 12; i++ {
+		monthlyMap[i] = &models.MonthlySummary{Month: i}
+	}
+	
+	categoryMap := make(map[string]*models.CategorySummary)
+
+	for rows.Next() {
+		var txType string
+		var category string
+		var amount float64
+		var dateStr string
+		var status sql.NullString
+		var paidAmount sql.NullFloat64
+
+		if err := rows.Scan(&txType, &category, &amount, &dateStr, &status, &paidAmount); err != nil {
+			return nil, fmt.Errorf("failed to scan row: %w", err)
+		}
+
+		// parse month from YYYY-MM-DD
+		var tYear, tMonth, tDay int
+		fmt.Sscanf(dateStr, "%04d-%02d-%02d", &tYear, &tMonth, &tDay)
+
+		tType := models.TransactionType(txType)
+		
+		// calculate active amount for expenses (pending + paid)
+		if tType == models.TypeExpense {
+			// For expenses, we just use the full amount for trend and category summaries.
+			// Alternatively if we only count paidAmount:
+			// activeAmount = 0
+			// if paidAmount.Valid { activeAmount += paidAmount.Float64 }
+			// But usually budget tracks the total expense amount.
+			// So we use amount directly.
+			summary.TotalExpense += amount
+			monthlyMap[tMonth].Expense += amount
+		} else {
+			summary.TotalIncome += amount
+			monthlyMap[tMonth].Income += amount
+		}
+
+		// Category aggregation
+		catKey := fmt.Sprintf("%s|%s", tType, category)
+		if _, exists := categoryMap[catKey]; !exists {
+			categoryMap[catKey] = &models.CategorySummary{
+				Category: category,
+				Type:     tType,
+				Amount:   0,
+			}
+		}
+		categoryMap[catKey].Amount += amount
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating transaction rows: %w", err)
+	}
+
+	summary.NetBalance = summary.TotalIncome - summary.TotalExpense
+
+	// Convert maps to slices
+	for i := 1; i <= 12; i++ {
+		summary.MonthlyData = append(summary.MonthlyData, *monthlyMap[i])
+	}
+
+	for _, v := range categoryMap {
+		summary.CategoryData = append(summary.CategoryData, *v)
+	}
+
+	return summary, nil
+}
+
 // joinStrings joins a slice of strings with a separator.
 // A simple helper to avoid importing strings package just for this.
 func joinStrings(parts []string, sep string) string {

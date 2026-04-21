@@ -124,3 +124,25 @@ type ErrorResponse struct {
 	Error   string `json:"error"`
 	Details string `json:"details,omitempty"`
 }
+
+// AnnualSummaryResponse is the payload for GET /api/transactions/annual.
+type AnnualSummaryResponse struct {
+	Year         int               `json:"year"`
+	TotalIncome  float64           `json:"totalIncome"`
+	TotalExpense float64           `json:"totalExpense"` // totalPaid + totalPending
+	NetBalance   float64           `json:"netBalance"`   // totalIncome - totalExpense
+	MonthlyData  []MonthlySummary  `json:"monthlyData"`
+	CategoryData []CategorySummary `json:"categoryData"`
+}
+
+type MonthlySummary struct {
+	Month   int     `json:"month"` // 1-12
+	Income  float64 `json:"income"`
+	Expense float64 `json:"expense"`
+}
+
+type CategorySummary struct {
+	Category string          `json:"category"`
+	Type     TransactionType `json:"type"` // INCOME or EXPENSE
+	Amount   float64         `json:"amount"`
+}

@@ -81,6 +81,27 @@ export interface TransactionsResponse {
   summary: TransactionSummary;
 }
 
+export interface MonthlySummary {
+  month: number;
+  income: number;
+  expense: number;
+}
+
+export interface CategorySummary {
+  category: string;
+  type: TransactionType;
+  amount: number;
+}
+
+export interface AnnualSummaryResponse {
+  year: number;
+  totalIncome: number;
+  totalExpense: number;
+  netBalance: number;
+  monthlyData: MonthlySummary[];
+  categoryData: CategorySummary[];
+}
+
 export interface ErrorResponse {
   error: string;
   details?: string;
