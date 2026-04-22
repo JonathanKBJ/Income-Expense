@@ -1,7 +1,10 @@
-import type { TransactionSummary } from "../types/transaction";
+import { useMemo } from "react";
+import type { Transaction, TransactionSummary, CategorySummary } from "../types/transaction";
+import CategoryDonutChart from "./charts/CategoryDonutChart";
 
 interface DashboardProps {
   summary: TransactionSummary;
+  transactions: Transaction[];
   month: number;
   year: number;
 }
@@ -19,8 +22,26 @@ function formatCurrency(value: number): string {
   }).format(value);
 }
 
-export default function Dashboard({ summary, month, year }: DashboardProps) {
+export default function Dashboard({ summary, transactions, month, year }: DashboardProps) {
   const netBalance = summary.totalIncome - summary.totalPaid - summary.totalPending;
+
+  const categoryData = useMemo(() => {
+    const categories: Record<string, CategorySummary> = {};
+
+    transactions.forEach((t) => {
+      const key = `${t.type}-${t.category}`;
+      if (!categories[key]) {
+        categories[key] = {
+          category: t.category,
+          type: t.type,
+          amount: 0,
+        };
+      }
+      categories[key].amount += t.amount;
+    });
+
+    return Object.values(categories);
+  }, [transactions]);
 
   return (
     <section className="dashboard" id="dashboard">
@@ -80,6 +101,33 @@ export default function Dashboard({ summary, month, year }: DashboardProps) {
             <span className="metric-label">Net Balance</span>
             <span className="metric-value">{formatCurrency(netBalance)}</span>
           </div>
+        </div>
+      </div>
+
+      <div className="chart-grid" style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+        gap: "1.5rem",
+        marginTop: "1.5rem"
+      }}>
+        <div className="chart-container" style={{
+          backgroundColor: "var(--bg-card, #1e1e2d)",
+          borderRadius: "12px",
+          padding: "1.5rem",
+          border: "1px solid rgba(255,255,255,0.05)"
+        }}>
+          <h3 style={{ color: "var(--text-primary, #fff)", marginBottom: "0.5rem", textAlign: "center", fontWeight: 600 }}>Income by Category</h3>
+          <CategoryDonutChart data={categoryData} type="INCOME" />
+        </div>
+
+        <div className="chart-container" style={{
+          backgroundColor: "var(--bg-card, #1e1e2d)",
+          borderRadius: "12px",
+          padding: "1.5rem",
+          border: "1px solid rgba(255,255,255,0.05)"
+        }}>
+          <h3 style={{ color: "var(--text-primary, #fff)", marginBottom: "0.5rem", textAlign: "center", fontWeight: 600 }}>Expenses by Category</h3>
+          <CategoryDonutChart data={categoryData} type="EXPENSE" />
         </div>
       </div>
     </section>

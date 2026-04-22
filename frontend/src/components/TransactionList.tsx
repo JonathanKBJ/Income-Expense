@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Select, InputNumber } from "antd";
+import { Modal, Select, InputNumber, Upload, Button, message } from "antd";
+import { FileImageOutlined, PictureOutlined, DeleteOutlined } from "@ant-design/icons";
 import type {
   Transaction,
   UpdateTransactionRequest,
@@ -42,7 +43,10 @@ export default function TransactionList({
   const [editAmount, setEditAmount] = useState<number>(0);
   const [editStatus, setEditStatus] = useState<ExpenseStatus>("PENDING");
   const [editPaidAmount, setEditPaidAmount] = useState<number>(0);
+  const [editReceiptImage, setEditReceiptImage] = useState<string | undefined>(undefined);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerImage, setViewerImage] = useState<string | null>(null);
 
   function startEdit(t: Transaction) {
     setEditingId(t.id);
@@ -50,19 +54,73 @@ export default function TransactionList({
     if (isExpense(t)) {
       setEditStatus(t.status);
       setEditPaidAmount(t.paidAmount);
+      setEditReceiptImage(t.receiptImage);
+    } else {
+      setEditReceiptImage(t.receiptImage);
     }
   }
+
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const MAX_WIDTH = 1000;
+          const MAX_HEIGHT = 1000;
+          let width = img.width;
+          let height = img.height;
+          if (width > height) {
+            if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+          } else {
+            if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          ctx?.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+          resolve(dataUrl);
+        };
+        img.onerror = (e) => reject(new Error("Failed to load image: " + e));
+      };
+      reader.onerror = (e) => reject(new Error("Failed to read file: " + e));
+    });
+  };
+
+  const handleEditImageUpload = async (file: File) => {
+    try {
+      const compressed = await compressImage(file);
+      setEditReceiptImage(compressed);
+      setEditStatus("PAID");
+      setEditPaidAmount(editAmount);
+      return false;
+    } catch (err) {
+      message.error("Failed to process image");
+      return false;
+    }
+  };
 
   async function handleSave(t: Transaction) {
     setActionLoading(t.id);
     try {
       const req: UpdateTransactionRequest = { amount: editAmount };
       if (isExpense(t)) {
+        if (editStatus === "PAID" && !editReceiptImage && !t.receiptImage) {
+          message.error("Receipt image is required to mark as PAID");
+          setActionLoading(null);
+          return;
+        }
         req.status = editStatus;
         req.paidAmount = editPaidAmount;
       }
+      req.receiptImage = editReceiptImage;
       await onUpdate(t.id, req);
       setEditingId(null);
+      setEditReceiptImage(undefined);
     } catch {
       // Error handled by parent
     } finally {
@@ -183,7 +241,22 @@ export default function TransactionList({
                         ]}
                       />
                     ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <StatusBadge status={t.status} />
+                      {t.receiptImage && (
+                        <Button 
+                          size="small" 
+                          type="text" 
+                          icon={<FileImageOutlined />} 
+                          className="receipt-icon-btn-styled"
+                          onClick={() => {
+                            setViewerImage(t.receiptImage!);
+                            setViewerOpen(true);
+                          }}
+                          title="View Receipt"
+                        />
+                      )}
+                    </div>
                     )
                   ) : (
                     <span className="na-text">—</span>
@@ -192,21 +265,59 @@ export default function TransactionList({
                 <td className="col-paid text-right">
                   {isExpense(t) ? (
                     editingId === t.id ? (
-                      <InputNumber
-                        size="small"
-                        className="edit-input-number"
-                        value={editPaidAmount}
-                        onChange={(val) => setEditPaidAmount(val || 0)}
-                        min={0}
-                        step={0.01}
-                        precision={2}
-                        style={{ width: 100 }}
-                      />
+                      <div className="edit-paid-cell">
+                        <InputNumber
+                          size="small"
+                          className="edit-input-number"
+                          value={editPaidAmount}
+                          onChange={(val) => setEditPaidAmount(val || 0)}
+                          min={0}
+                          step={0.01}
+                          precision={2}
+                        />
+                        {!editReceiptImage ? (
+                          <Upload
+                            accept="image/*"
+                            showUploadList={false}
+                            beforeUpload={handleEditImageUpload}
+                          >
+                            <Button size="small" icon={<PictureOutlined />} className="add-receipt-inline-btn">
+                              Receipt
+                            </Button>
+                          </Upload>
+                        ) : (
+                          <div className="receipt-status-inline">
+                            <span className="receipt-ok">OK</span>
+                            <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={() => setEditReceiptImage(undefined)} />
+                          </div>
+                        )}
+                      </div>
                     ) : (
                       formatCurrency(t.paidAmount)
                     )
                   ) : (
-                    <span className="na-text">—</span>
+                    editingId === t.id ? (
+                       <div className="edit-paid-cell">
+                         {!editReceiptImage ? (
+                           <Upload
+                             accept="image/*"
+                             showUploadList={false}
+                             beforeUpload={handleEditImageUpload}
+                           >
+                             <Button size="small" icon={<PictureOutlined />} className="add-receipt-inline-btn">
+                               Receipt
+                             </Button>
+                           </Upload>
+                         ) : (
+                           <div className="receipt-status-inline">
+                             <span className="receipt-ok">OK</span>
+                             <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={() => setEditReceiptImage(undefined)} />
+                           </div>
+                         )}
+                       </div>
+                    ) : (
+                      <span className="na-text">—</span>
+                    )
                   )}
                 </td>
                 <td className="col-actions">
@@ -230,6 +341,23 @@ export default function TransactionList({
                     </div>
                   ) : (
                     <div className="action-btns">
+                      {t.receiptImage && (
+                        <button
+                          className="action-btn view-receipt"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setViewerImage(t.receiptImage!);
+                            setViewerOpen(true);
+                          }}
+                          title="View Receipt"
+                          style={{ marginRight: '4px' }}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                            <circle cx="12" cy="12" r="3" />
+                          </svg>
+                        </button>
+                      )}
                       <button
                         className="action-btn edit"
                         onClick={() => startEdit(t)}
@@ -311,6 +439,24 @@ export default function TransactionList({
                     </div>
                   </>
                 )}
+                <div className="form-group full-width" style={{ marginTop: '4px' }}>
+                  {!editReceiptImage ? (
+                    <Upload
+                      accept="image/*"
+                      showUploadList={false}
+                      beforeUpload={handleEditImageUpload}
+                    >
+                      <Button block icon={<PictureOutlined />}>
+                        Upload Receipt
+                      </Button>
+                    </Upload>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px', background: 'rgba(34, 197, 94, 0.1)', borderRadius: '4px' }}>
+                      <span style={{ color: '#22c55e', fontWeight: 600 }}>Receipt Attached</span>
+                      <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={() => setEditReceiptImage(undefined)} />
+                    </div>
+                  )}
+                </div>
                 <div className="card-actions" style={{ justifyContent: 'flex-end', marginTop: '8px' }}>
                   <button className="action-btn save" onClick={() => handleSave(t)} disabled={actionLoading === t.id}>Save</button>
                   <button className="action-btn cancel" onClick={() => setEditingId(null)}>Cancel</button>
@@ -349,7 +495,19 @@ export default function TransactionList({
                       <span className="na-text">—</span>
                     )}
                   </div>
-                  <div className="card-actions">
+                  <div className="card-actions" style={{ gap: '8px' }}>
+                    {t.receiptImage && (
+                      <Button 
+                        icon={<FileImageOutlined />} 
+                        onClick={() => {
+                          setViewerImage(t.receiptImage!);
+                          setViewerOpen(true);
+                        }}
+                        className="mobile-view-receipt-btn"
+                      >
+                        Receipt
+                      </Button>
+                    )}
                     <button
                       className="action-btn edit"
                       onClick={() => startEdit(t)}
@@ -377,6 +535,24 @@ export default function TransactionList({
           </div>
         ))}
       </div>
+
+      {/* Image Viewer Modal */}
+      <Modal
+        open={viewerOpen}
+        onCancel={() => setViewerOpen(false)}
+        footer={null}
+        width={600}
+        centered
+        className="receipt-viewer-modal"
+      >
+        {viewerImage && (
+          <img 
+            src={viewerImage} 
+            alt="Receipt" 
+            className="receipt-thumbnail" 
+          />
+        )}
+      </Modal>
     </section>
   );
 }

@@ -617,6 +617,129 @@
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+/* Receipt Upload */
+.receipt-upload-group {
+  margin-top: 8px;
+}
+.receipt-upload-container {
+  margin-top: 4px;
+}
+.receipt-uploader {
+  width: 100%;
+}
+.receipt-preview-wrapper {
+  position: relative;
+  width: 100%;
+  max-width: 200px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  background: rgba(0, 0, 0, 0.2);
+}
+.receipt-preview-img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.remove-receipt-btn {
+  position: absolute !important;
+  top: 8px;
+  right: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5) !important;
+}
+.receipt-icon-btn {
+  color: var(--blue-400);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.receipt-icon-btn:hover {
+  color: var(--blue-300);
+  transform: scale(1.1);
+}
+.receipt-thumbnail {
+  width: 100%;
+  max-height: 80vh;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+  background: #000;
+}
+
+.edit-paid-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  min-width: 100px;
+}
+
+.edit-paid-cell .edit-input-number {
+  width: 100% !important;
+}
+
+.add-receipt-inline-btn {
+  font-size: 10px !important;
+  height: 22px !important;
+  padding: 0 8px !important;
+  width: 100%;
+  background: rgba(59, 130, 246, 0.1) !important;
+  border-color: rgba(59, 130, 246, 0.2) !important;
+  color: var(--blue-400) !important;
+}
+
+.receipt-status-inline {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: flex-end;
+  width: 100%;
+}
+
+.receipt-ok {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--green-400);
+  background: var(--green-glow);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.action-btn.view-receipt {
+  color: var(--blue-400) !important;
+  background: rgba(59, 130, 246, 0.1) !important;
+}
+
+.action-btn.view-receipt:hover {
+  background: rgba(59, 130, 246, 0.2) !important;
+  color: var(--blue-300) !important;
+}
+
+.mobile-view-receipt-btn {
+  background: rgba(59, 130, 246, 0.1) !important;
+  border: 1px solid rgba(59, 130, 246, 0.2) !important;
+  color: var(--blue-400) !important;
+  font-size: 0.8rem !important;
+  height: 32px !important;
+  padding: 4px 12px !important;
+  border-radius: var(--radius-sm) !important;
+}
+
+.mobile-view-receipt-btn:hover {
+  background: rgba(59, 130, 246, 0.2) !important;
+  color: var(--blue-300) !important;
+}
+
+.receipt-viewer-modal .ant-modal-content {
+  background: #0a0a0f !important;
+  border: 1px solid var(--border-light);
+  padding: 12px !important;
+}
+
+.receipt-viewer-modal .ant-modal-close {
+  color: white !important;
+}
 
 /* =============================================================================
    TRANSACTION LIST

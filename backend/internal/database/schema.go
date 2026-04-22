@@ -49,10 +49,11 @@ CREATE TABLE IF NOT EXISTS transactions (
     date        TEXT NOT NULL,
     status      TEXT CHECK (status IN ('PENDING', 'PAID') OR status IS NULL),
     paid_amount REAL CHECK (paid_amount >= 0 OR paid_amount IS NULL),
-    group_id    TEXT,
-    user_id     TEXT,
-    created_at  TEXT NOT NULL,
-    updated_at  TEXT NOT NULL
+    group_id      TEXT,
+    user_id       TEXT,
+    receipt_image TEXT,
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL
 );
 `
 
@@ -133,6 +134,7 @@ func (d *DB) Migrate() error {
 	alterations := []string{
 		"ALTER TABLE transactions ADD COLUMN group_id TEXT",
 		"ALTER TABLE transactions ADD COLUMN user_id TEXT",
+		"ALTER TABLE transactions ADD COLUMN receipt_image TEXT",
 		"ALTER TABLE categories ADD COLUMN group_id TEXT",
 	}
 

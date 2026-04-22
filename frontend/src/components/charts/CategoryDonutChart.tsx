@@ -10,9 +10,9 @@ const COLORS_EXPENSE = ["#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16", "
 const COLORS_INCOME = ["#3b82f6", "#6366f1", "#8b5cf6", "#a855f7", "#d946ef", "#ec4899", "#f43f5e", "#737373"];
 
 function formatCompactCurrency(value: number) {
-  if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
-  if (value >= 1000) return `$${(value / 1000).toFixed(1)}K`;
-  return `$${value.toFixed(0)}`;
+  if (value >= 1000000) return `฿${(value / 1000000).toFixed(1)}M`;
+  if (value >= 1000) return `฿${(value / 1000).toFixed(1)}K`;
+  return `฿${value.toFixed(0)}`;
 }
 
 export default function CategoryDonutChart({ data, type }: Props) {
@@ -22,8 +22,8 @@ export default function CategoryDonutChart({ data, type }: Props) {
 
   if (filteredData.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full text-gray-500">
-        No {type.toLowerCase()}s recorded for this year.
+      <div className="flex items-center justify-center h-full text-gray-500" style={{ minHeight: "150px" }}>
+        No {type.toLowerCase()}s recorded for this period.
       </div>
     );
   }
@@ -55,7 +55,7 @@ export default function CategoryDonutChart({ data, type }: Props) {
           />
         </Pie>
         <Tooltip
-          formatter={(value: any) => [`$${Number(value).toFixed(2)}`, "Amount"]}
+          formatter={(value: any) => [`฿${Number(value).toLocaleString()}`, "Amount"]}
           contentStyle={{ backgroundColor: "#1e1e2d", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", color: "#fff" }}
         />
         <Legend verticalAlign="bottom" height={36} wrapperStyle={{ fontSize: "12px", marginTop: "10px" }} />

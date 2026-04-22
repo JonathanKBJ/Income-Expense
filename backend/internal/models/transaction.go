@@ -31,9 +31,10 @@ type Transaction struct {
 	Status      *ExpenseStatus  `json:"status"`      // nil for INCOME
 	PaidAmount  *float64        `json:"paidAmount"`  // nil for INCOME
 	GroupID     *string         `json:"groupId"`     // Owner group
-	UserID      *string         `json:"userId"`      // Creator user
-	CreatedAt   string          `json:"createdAt"`
-	UpdatedAt   string          `json:"updatedAt"`
+	UserID       *string         `json:"userId"`      // Creator user
+	ReceiptImage *string         `json:"receiptImage"`
+	CreatedAt    string          `json:"createdAt"`
+	UpdatedAt    string          `json:"updatedAt"`
 }
 
 // TransactionRow is used for scanning database rows where nullable fields
@@ -48,9 +49,10 @@ type TransactionRow struct {
 	Status      sql.NullString
 	PaidAmount  sql.NullFloat64
 	GroupID     sql.NullString
-	UserID      sql.NullString
-	CreatedAt   string
-	UpdatedAt   string
+	UserID       sql.NullString
+	ReceiptImage sql.NullString
+	CreatedAt    string
+	UpdatedAt    string
 }
 
 // ToTransaction converts a database row representation to the domain model.
@@ -67,20 +69,28 @@ func (r *TransactionRow) ToTransaction() Transaction {
 	}
 
 	if r.Status.Valid {
-		status := ExpenseStatus(r.Status.String)
-		t.Status = &status
+		val := ExpenseStatus(r.Status.String)
+		t.Status = &val
 	}
 
 	if r.PaidAmount.Valid {
-		t.PaidAmount = &r.PaidAmount.Float64
+		val := r.PaidAmount.Float64
+		t.PaidAmount = &val
 	}
 
 	if r.GroupID.Valid {
-		t.GroupID = &r.GroupID.String
+		val := r.GroupID.String
+		t.GroupID = &val
 	}
 
 	if r.UserID.Valid {
-		t.UserID = &r.UserID.String
+		val := r.UserID.String
+		t.UserID = &val
+	}
+	
+	if r.ReceiptImage.Valid {
+		val := r.ReceiptImage.String
+		t.ReceiptImage = &val
 	}
 
 	return t
@@ -95,15 +105,17 @@ type CreateTransactionRequest struct {
 	Description string          `json:"description"`
 	Amount      float64         `json:"amount"`
 	Date        string          `json:"date"`
-	Status      *ExpenseStatus  `json:"status,omitempty"`
-	PaidAmount  *float64        `json:"paidAmount,omitempty"`
+	Status       *ExpenseStatus  `json:"status,omitempty"`
+	PaidAmount   *float64        `json:"paidAmount,omitempty"`
+	ReceiptImage *string         `json:"receiptImage,omitempty"`
 }
 
 // UpdateTransactionRequest is the payload for PATCH /api/transactions/{id}.
 type UpdateTransactionRequest struct {
 	Amount     *float64       `json:"amount,omitempty"`
-	Status     *ExpenseStatus `json:"status,omitempty"`
-	PaidAmount *float64       `json:"paidAmount,omitempty"`
+	Status       *ExpenseStatus `json:"status,omitempty"`
+	PaidAmount   *float64       `json:"paidAmount,omitempty"`
+	ReceiptImage *string        `json:"receiptImage,omitempty"`
 }
 
 // TransactionSummary holds aggregated dashboard metrics for a given month.

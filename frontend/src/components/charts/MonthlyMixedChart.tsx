@@ -85,7 +85,7 @@ export default function MonthlyMixedChart({ data }: Props) {
           tick={{ fill: "#888", fontSize: 12 }}
           tickLine={false}
           axisLine={false}
-          tickFormatter={(value) => `$${value}`}
+          tickFormatter={(value) => `฿${value.toLocaleString()}`}
         />
         <Tooltip
           contentStyle={{

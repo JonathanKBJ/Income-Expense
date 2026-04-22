@@ -153,7 +153,7 @@ export default function App() {
                 </div>
               )}
 
-              <Dashboard summary={summary} month={month} year={year} />
+              <Dashboard summary={summary} transactions={transactions} month={month} year={year} />
 
               <div className="content-grid">
                 <TransactionForm

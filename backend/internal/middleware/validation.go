@@ -95,8 +95,8 @@ func ValidateUpdateRequest(req *models.UpdateTransactionRequest, existing *model
 	}
 
 	// 3. Must provide at least one field to update
-	if req.Amount == nil && req.Status == nil && req.PaidAmount == nil {
-		return fmt.Errorf("at least one of amount, status or paidAmount must be provided")
+	if req.Amount == nil && req.Status == nil && req.PaidAmount == nil && req.ReceiptImage == nil {
+		return fmt.Errorf("at least one of amount, status, paidAmount or receiptImage must be provided")
 	}
 
 	// Validate status value if provided

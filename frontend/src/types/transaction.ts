@@ -19,6 +19,8 @@ interface BaseTransaction {
   description: string;
   amount: number;
   date: string; // YYYY-MM-DD
+  userId?: string;
+  receiptImage?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -48,6 +50,7 @@ export interface CreateIncomeRequest {
   description: string;
   amount: number;
   date: string;
+  receiptImage?: string;
 }
 
 export interface CreateExpenseRequest {
@@ -58,6 +61,7 @@ export interface CreateExpenseRequest {
   date: string;
   status: ExpenseStatus;
   paidAmount: number;
+  receiptImage?: string;
 }
 
 export type CreateTransactionRequest = CreateIncomeRequest | CreateExpenseRequest;
@@ -66,6 +70,7 @@ export interface UpdateTransactionRequest {
   amount?: number;
   status?: ExpenseStatus;
   paidAmount?: number;
+  receiptImage?: string;
 }
 
 // --- API Response Types ---
@@ -117,6 +122,7 @@ export interface TransactionFormState {
   date: string;
   status: ExpenseStatus;
   paidAmount: string; // string for controlled input binding
+  receiptImage?: string;
 }
 
 // --- Utility type guards ---

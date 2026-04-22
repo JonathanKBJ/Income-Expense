@@ -38,7 +38,7 @@ func (r *TransactionRepository) GetByMonthYear(ctx context.Context, month, year 
 
 	query := `
 		SELECT id, type, category, description, amount, date,
-		       status, paid_amount, group_id, user_id, created_at, updated_at
+		       status, paid_amount, group_id, user_id, receipt_image, created_at, updated_at
 		FROM transactions
 		WHERE date >= ? AND date < ? AND group_id = ?
 		ORDER BY date DESC, created_at DESC
@@ -66,6 +66,7 @@ func (r *TransactionRepository) GetByMonthYear(ctx context.Context, month, year 
 			&row.PaidAmount,
 			&row.GroupID,
 			&row.UserID,
+			&row.ReceiptImage,
 			&row.CreatedAt,
 			&row.UpdatedAt,
 		)
@@ -113,7 +114,7 @@ func (r *TransactionRepository) GetByMonthYear(ctx context.Context, month, year 
 func (r *TransactionRepository) GetByID(ctx context.Context, id, groupID string) (*models.Transaction, error) {
 	query := `
 		SELECT id, type, category, description, amount, date,
-		       status, paid_amount, group_id, user_id, created_at, updated_at
+		       status, paid_amount, group_id, user_id, receipt_image, created_at, updated_at
 		FROM transactions
 		WHERE id = ? AND group_id = ?
 	`
@@ -130,6 +131,7 @@ func (r *TransactionRepository) GetByID(ctx context.Context, id, groupID string)
 		&row.PaidAmount,
 		&row.GroupID,
 		&row.UserID,
+		&row.ReceiptImage,
 		&row.CreatedAt,
 		&row.UpdatedAt,
 	)
@@ -170,12 +172,19 @@ func (r *TransactionRepository) Create(ctx context.Context, req models.CreateTra
 			zero := 0.0
 			paidAmount = &zero
 		}
+
+		// Logic: If receipt is attached, set to PAID automatically
+		if req.ReceiptImage != nil && *req.ReceiptImage != "" {
+			s := string(models.StatusPaid)
+			status = &s
+			paidAmount = &req.Amount
+		}
 	}
 	// For INCOME: status and paidAmount remain nil
-
+	
 	query := `
-		INSERT INTO transactions (id, type, category, description, amount, date, status, paid_amount, group_id, user_id, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO transactions (id, type, category, description, amount, date, status, paid_amount, group_id, user_id, receipt_image, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	_, err := r.db.ExecContext(ctx, query,
@@ -189,6 +198,7 @@ func (r *TransactionRepository) Create(ctx context.Context, req models.CreateTra
 		paidAmount,
 		groupID,
 		userID,
+		req.ReceiptImage,
 		now,
 		now,
 	)
@@ -215,8 +225,8 @@ func (r *TransactionRepository) CreateBatch(ctx context.Context, requests []mode
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	query := `
-		INSERT INTO transactions (id, type, category, description, amount, date, status, paid_amount, group_id, user_id, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO transactions (id, type, category, description, amount, date, status, paid_amount, group_id, user_id, receipt_image, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	stmt, err := tx.PrepareContext(ctx, query)
@@ -258,6 +268,7 @@ func (r *TransactionRepository) CreateBatch(ctx context.Context, requests []mode
 			paidAmount,
 			groupID,
 			userID,
+			req.ReceiptImage,
 			now,
 			now,
 		)
@@ -294,6 +305,47 @@ func (r *TransactionRepository) Update(ctx context.Context, id, groupID string, 
 	if req.PaidAmount != nil {
 		setClauses = append(setClauses, "paid_amount = ?")
 		args = append(args, *req.PaidAmount)
+	}
+
+	if req.ReceiptImage != nil {
+		setClauses = append(setClauses, "receipt_image = ?")
+		args = append(args, *req.ReceiptImage)
+	}
+
+	// Fetch existing transaction to validate status change rules
+	existing, err := r.GetByID(ctx, id, groupID)
+	if err != nil {
+		return nil, err
+	}
+	if existing == nil {
+		return nil, nil
+	}
+
+	// Logic: If status is being changed to PAID for an expense, require a receipt
+	if req.Status != nil && *req.Status == models.StatusPaid && existing.Type == models.TypeExpense {
+		hasNewReceipt := req.ReceiptImage != nil && *req.ReceiptImage != ""
+		hasExistingReceipt := existing.ReceiptImage != nil && *existing.ReceiptImage != ""
+		
+		if !hasNewReceipt && !hasExistingReceipt {
+			return nil, fmt.Errorf("receipt image is required to set expense status to PAID")
+		}
+		
+		// If no paid amount provided, default to full amount when marking as PAID
+		if req.PaidAmount == nil && (existing.PaidAmount == nil || *existing.PaidAmount == 0) {
+			setClauses = append(setClauses, "paid_amount = ?")
+			args = append(args, existing.Amount)
+		}
+	}
+	
+	// If a receipt is being added to an expense, automatically set status to PAID
+	if existing.Type == models.TypeExpense && req.ReceiptImage != nil && *req.ReceiptImage != "" && (req.Status == nil || *req.Status != models.StatusPaid) {
+		setClauses = append(setClauses, "status = ?")
+		args = append(args, string(models.StatusPaid))
+		
+		if req.PaidAmount == nil && (existing.PaidAmount == nil || *existing.PaidAmount == 0) {
+			setClauses = append(setClauses, "paid_amount = ?")
+			args = append(args, existing.Amount)
+		}
 	}
 
 	args = append(args, id, groupID)

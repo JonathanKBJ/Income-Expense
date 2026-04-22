@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { DatePicker, Select, InputNumber, Input, Button } from "antd";
-import { CopyOutlined, DownOutlined, UpOutlined } from "@ant-design/icons";
+import { DatePicker, Select, InputNumber, Input, Button, Upload, message } from "antd";
+import { CopyOutlined, DownOutlined, UpOutlined, PictureOutlined, DeleteOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import type {
   CreateTransactionRequest,
@@ -36,6 +36,75 @@ export default function TransactionForm({
 }: TransactionFormProps) {
   const [form, setForm] = useState<TransactionFormState>(initialState);
   const [isExpanded, setIsExpanded] = useState(true);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const MAX_WIDTH = 1000;
+          const MAX_HEIGHT = 1000;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          ctx?.drawImage(img, 0, 0, width, height);
+          
+          // Quality 0.7 for medium-high but economical
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+          resolve(dataUrl);
+        };
+        img.onerror = (e) => reject(new Error("Failed to load image: " + e));
+      };
+      reader.onerror = (e) => reject(new Error("Failed to read file: " + e));
+    });
+  };
+
+  const handleImageUpload = async (file: File) => {
+    try {
+      const compressed = await compressImage(file);
+      setPreviewImage(compressed);
+      updateField("receiptImage", compressed);
+      
+      // Auto-set status to PAID for Expenses
+      if (form.type === "EXPENSE") {
+        setForm(prev => ({
+          ...prev,
+          status: "PAID",
+          paidAmount: prev.amount || prev.paidAmount,
+          receiptImage: compressed
+        }));
+      }
+      return false; // Prevent default upload
+    } catch (err) {
+      message.error("Failed to process image");
+      return false;
+    }
+  };
+
+  const removeImage = () => {
+    setPreviewImage(null);
+    updateField("receiptImage", undefined);
+  };
   
   useEffect(() => {
     // Collapse by default on mobile
@@ -58,7 +127,9 @@ export default function TransactionForm({
       category: "", // Reset category when switching type
       status: "PENDING",
       paidAmount: "",
+      receiptImage: undefined,
     }));
+    setPreviewImage(null);
     setError(null);
   }
 
@@ -102,6 +173,7 @@ export default function TransactionForm({
         description: form.description,
         amount,
         date: form.date,
+        receiptImage: form.receiptImage,
       };
     } else {
       const paidAmount = form.paidAmount ? parseFloat(form.paidAmount) : 0;
@@ -118,6 +190,7 @@ export default function TransactionForm({
         date: form.date,
         status: form.status as ExpenseStatus,
         paidAmount: isNaN(paidAmount) ? 0 : paidAmount,
+        receiptImage: form.receiptImage,
       };
     }
 
@@ -129,6 +202,7 @@ export default function TransactionForm({
         type: prev.type, // Preserve type after successful add
         date: prev.date, // Preserve date after successful add
       }));
+      setPreviewImage(null);
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {
@@ -275,6 +349,42 @@ export default function TransactionForm({
               </div>
             </>
           )}
+
+          {/* Receipt Image Upload */}
+          <div className="form-group full-width receipt-upload-group">
+            <label>Receipt Attachment</label>
+            <div className="receipt-upload-container">
+              {!previewImage ? (
+                <Upload
+                  accept="image/*"
+                  showUploadList={false}
+                  beforeUpload={handleImageUpload}
+                  className="receipt-uploader"
+                >
+                  <Button icon={<PictureOutlined />} className="antd-btn-full">
+                    Upload Receipt
+                  </Button>
+                </Upload>
+              ) : (
+                <div className="receipt-preview-wrapper">
+                  <img src={previewImage} alt="Receipt Preview" className="receipt-preview-img" />
+                  <Button 
+                    type="primary" 
+                    danger 
+                    shape="circle" 
+                    icon={<DeleteOutlined />} 
+                    className="remove-receipt-btn"
+                    onClick={removeImage}
+                  />
+                </div>
+              )}
+            </div>
+            {form.type === "EXPENSE" && form.status === "PAID" && !previewImage && (
+              <span style={{ fontSize: "12px", color: "#f97316", marginTop: "4px", display: "block" }}>
+                * Receipt is required to mark as PAID
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Error / Success Messages */}
