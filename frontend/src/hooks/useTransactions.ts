@@ -34,9 +34,14 @@ const defaultSummary: TransactionSummary = {
  * and all CRUD operations. Acts as the central state manager for the app.
  */
 export function useTransactions(): UseTransactionsReturn {
-  const now = new Date();
-  const [month, setMonth] = useState(now.getMonth() + 1); // 1-12
-  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(() => {
+    const saved = localStorage.getItem("filter_month");
+    return saved ? parseInt(saved, 10) : new Date().getMonth() + 1;
+  });
+  const [year, setYear] = useState(() => {
+    const saved = localStorage.getItem("filter_year");
+    return saved ? parseInt(saved, 10) : new Date().getFullYear();
+  });
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [summary, setSummary] = useState<TransactionSummary>(defaultSummary);
   const [loading, setLoading] = useState(true);
@@ -59,7 +64,9 @@ export function useTransactions(): UseTransactionsReturn {
   // Fetch when month/year changes
   useEffect(() => {
     refresh();
-  }, [refresh]);
+    localStorage.setItem("filter_month", month.toString());
+    localStorage.setItem("filter_year", year.toString());
+  }, [refresh, month, year]);
 
   const create = useCallback(
     async (req: CreateTransactionRequest) => {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ConfigProvider, theme } from "antd";
 import { useAuth } from "./contexts/AuthContext";
 import { useTransactions } from "./hooks/useTransactions";
@@ -20,9 +20,14 @@ type Page = "dashboard" | "annual" | "categories" | "admin";
 
 export default function App() {
   const { isAuthenticated } = useAuth();
-  const [activePage, setActivePage] = useState<Page>("dashboard");
+  const [activePage, setActivePage] = useState<Page>(() => {
+    return (localStorage.getItem("active_page") as Page) || "dashboard";
+  });
   const [authView, setAuthView] = useState<"login" | "register">("login");
-  const [annualYear, setAnnualYear] = useState<number>(new Date().getFullYear());
+  const [annualYear, setAnnualYear] = useState<number>(() => {
+    const saved = localStorage.getItem("annual_year");
+    return saved ? parseInt(saved, 10) : new Date().getFullYear();
+  });
 
   const {
     transactions,
@@ -38,6 +43,14 @@ export default function App() {
     update,
     remove,
   } = useTransactions();
+
+  useEffect(() => {
+    localStorage.setItem("active_page", activePage);
+  }, [activePage]);
+
+  useEffect(() => {
+    localStorage.setItem("annual_year", annualYear.toString());
+  }, [annualYear]);
 
   if (!isAuthenticated) {
     return (
