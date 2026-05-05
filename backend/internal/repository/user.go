@@ -19,9 +19,12 @@ func NewUserRepository(db *sql.DB) *UserRepository {
 
 // CreateUser inserts a new user into the database.
 func (r *UserRepository) CreateUser(ctx context.Context, user *models.User) error {
-	now := time.Now().UTC().Format(time.RFC3339)
-	user.CreatedAt = time.Now().UTC()
-	user.UpdatedAt = time.Now().UTC()
+	now := time.Now().UTC()
+	nowStr := now.Format(time.RFC3339)
+
+	// Keep struct in sync with what's written to DB (same timestamp value)
+	user.CreatedAt = now
+	user.UpdatedAt = now
 
 	query := `
 		INSERT INTO users (id, username, password_hash, role, status, created_at, updated_at)
@@ -33,8 +36,8 @@ func (r *UserRepository) CreateUser(ctx context.Context, user *models.User) erro
 		user.PasswordHash,
 		user.Role,
 		user.Status,
-		now,
-		now,
+		nowStr,
+		nowStr,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create user: %w", err)
@@ -111,9 +114,18 @@ func (r *UserRepository) ListUsers(ctx context.Context) ([]models.User, error) {
 func (r *UserRepository) UpdateStatus(ctx context.Context, id string, status models.UserStatus) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	query := `UPDATE users SET status = ?, updated_at = ? WHERE id = ?`
-	_, err := r.db.ExecContext(ctx, query, status, now, id)
+	result, err := r.db.ExecContext(ctx, query, status, now, id)
 	if err != nil {
 		return fmt.Errorf("failed to update user status: %w", err)
 	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("user not found")
+	}
+
 	return nil
 }

@@ -41,6 +41,10 @@ func (h *AdminHandler) UpdateUserStatus(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if err := h.userRepo.UpdateStatus(r.Context(), id, req.Status); err != nil {
+		if err.Error() == "user not found" {
+			writeError(w, http.StatusNotFound, "user not found")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "failed to update user status")
 		return
 	}

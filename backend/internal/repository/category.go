@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strings"
 	"time"
 
 	"expense-tracker/internal/database"
@@ -24,30 +23,45 @@ func NewCategoryRepository(db *database.DB) *CategoryRepository {
 }
 
 // GetAll retrieves all categories for a group or user, optionally filtered by type.
+// Returns both group-specific/user-specific categories AND global categories (group_id IS NULL).
 func (r *CategoryRepository) GetAll(ctx context.Context, userID, groupID, catType string) ([]models.Category, error) {
-	var query string
 	var args []interface{}
 
-	// Query categories that belong to the user's group OR the user themselves
-	// If groupID is provided, we prioritize group categories.
-	// Filter by type if provided.
-	baseQuery := `SELECT id, name, type, group_id, user_id, created_at, updated_at FROM categories WHERE `
-	var filters []string
-
+	// Build query: fetch categories belonging to the group (or user) UNION global defaults
+	// Global categories have group_id IS NULL AND user_id IS NULL (seeded at migration)
+	typeFilter := ""
 	if catType != "" {
-		filters = append(filters, "type = ?")
-		args = append(args, catType)
+		typeFilter = "AND type = ?"
+		args = append(args, catType, catType) // used twice — once per UNION branch
 	}
 
+	var query string
 	if groupID != "" {
-		filters = append(filters, "group_id = ?")
-		args = append(args, groupID)
+		query = fmt.Sprintf(`
+			SELECT id, name, type, group_id, user_id, created_at, updated_at
+			FROM categories
+			WHERE group_id = ? %s
+			UNION
+			SELECT id, name, type, group_id, user_id, created_at, updated_at
+			FROM categories
+			WHERE group_id IS NULL AND user_id IS NULL %s
+			ORDER BY type ASC, name ASC
+		`, typeFilter, typeFilter)
+		// Prepend groupID before the type args
+		args = append([]interface{}{groupID}, args...)
 	} else {
-		filters = append(filters, "user_id = ?")
-		args = append(args, userID)
+		query = fmt.Sprintf(`
+			SELECT id, name, type, group_id, user_id, created_at, updated_at
+			FROM categories
+			WHERE user_id = ? %s
+			UNION
+			SELECT id, name, type, group_id, user_id, created_at, updated_at
+			FROM categories
+			WHERE group_id IS NULL AND user_id IS NULL %s
+			ORDER BY type ASC, name ASC
+		`, typeFilter, typeFilter)
+		args = append([]interface{}{userID}, args...)
 	}
-
-	query = baseQuery + strings.Join(filters, " AND ") + " ORDER BY type ASC, name ASC"
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {

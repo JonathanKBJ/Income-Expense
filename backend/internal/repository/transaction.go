@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"expense-tracker/internal/database"
@@ -338,7 +339,9 @@ func (r *TransactionRepository) Update(ctx context.Context, id, groupID string, 
 	}
 	
 	// If a receipt is being added to an expense, automatically set status to PAID
-	if existing.Type == models.TypeExpense && req.ReceiptImage != nil && *req.ReceiptImage != "" && (req.Status == nil || *req.Status != models.StatusPaid) {
+	// Guard: only append status if it wasn't already appended above (req.Status == nil)
+	// to prevent duplicate SET clauses in the SQL query.
+	if existing.Type == models.TypeExpense && req.ReceiptImage != nil && *req.ReceiptImage != "" && req.Status == nil {
 		setClauses = append(setClauses, "status = ?")
 		args = append(args, string(models.StatusPaid))
 		
@@ -351,7 +354,7 @@ func (r *TransactionRepository) Update(ctx context.Context, id, groupID string, 
 	args = append(args, id, groupID)
 
 	query := fmt.Sprintf("UPDATE transactions SET %s WHERE id = ? AND group_id = ?",
-		joinStrings(setClauses, ", "))
+		strings.Join(setClauses, ", "))
 
 	result, err := r.db.ExecContext(ctx, query, args...)
 	if err != nil {
@@ -480,17 +483,4 @@ func (r *TransactionRepository) GetAnnualSummary(ctx context.Context, year int, 
 	}
 
 	return summary, nil
-}
-
-// joinStrings joins a slice of strings with a separator.
-// A simple helper to avoid importing strings package just for this.
-func joinStrings(parts []string, sep string) string {
-	result := ""
-	for i, part := range parts {
-		if i > 0 {
-			result += sep
-		}
-		result += part
-	}
-	return result
 }

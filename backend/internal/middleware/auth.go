@@ -38,9 +38,19 @@ func AuthMiddleware(authService *service.AuthService) func(http.Handler) http.Ha
 				return
 			}
 
-			ctx := context.WithValue(r.Context(), UserIDKey, claims["sub"].(string))
-			ctx = context.WithValue(ctx, UserRoleKey, claims["role"].(string))
-			ctx = context.WithValue(ctx, GroupIDKey, claims["groupId"].(string))
+			// Use comma-ok pattern to avoid panic when claims are missing or wrong type
+			sub, _ := claims["sub"].(string)
+			role, _ := claims["role"].(string)
+			groupId, _ := claims["groupId"].(string)
+
+			if sub == "" || role == "" {
+				http.Error(w, "invalid token claims", http.StatusUnauthorized)
+				return
+			}
+
+			ctx := context.WithValue(r.Context(), UserIDKey, sub)
+			ctx = context.WithValue(ctx, UserRoleKey, role)
+			ctx = context.WithValue(ctx, GroupIDKey, groupId)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

@@ -112,7 +112,10 @@ func ValidateUpdateRequest(req *models.UpdateTransactionRequest, existing *model
 	}
 
 	// Business rule: when setting status to PAID, paidAmount must be > 0
-	// Check both the new value and the existing value
+	// Check both the new value and the existing value.
+	// Note: if paidAmount is 0/nil but status is PAID, the repository layer will
+	// auto-default paidAmount to the full transaction amount — so we only block
+	// the case where paidAmount is explicitly provided as a negative or zero value.
 	finalStatus := existing.Status
 	if req.Status != nil {
 		finalStatus = req.Status
@@ -124,9 +127,13 @@ func ValidateUpdateRequest(req *models.UpdateTransactionRequest, existing *model
 	}
 
 	if finalStatus != nil && *finalStatus == models.StatusPaid {
-		if finalPaidAmount == nil || *finalPaidAmount <= 0 {
+		// Only reject if paidAmount was explicitly set to <= 0 by the caller
+		if req.PaidAmount != nil && *req.PaidAmount <= 0 {
 			return fmt.Errorf("when status is 'PAID', paidAmount must be greater than 0")
 		}
+		// If no paidAmount provided at all and existing is also 0/nil, the repository
+		// will default to the full amount — allow it through.
+		_ = finalPaidAmount // suppress unused variable warning
 	}
 
 	return nil

@@ -13,17 +13,28 @@ import Login from "./components/Login";
 import Register from "./components/Register";
 import AdminPanel from "./components/AdminPanel";
 import AnnualDashboard from "./components/AnnualDashboard";
-import { Analytics } from "@vercel/analytics/react"
+import { Analytics } from "@vercel/analytics/react";
+import { AUTH_EXPIRED_EVENT } from "./api/client";
 import "./App.css";
 
 type Page = "dashboard" | "annual" | "categories" | "admin";
 
-export default function App() {
-  const { isAuthenticated } = useAuth();
+const darkTheme = {
+  algorithm: theme.darkAlgorithm,
+  token: {
+    colorPrimary: "#3b82f6",
+    borderRadius: 12,
+    colorBgContainer: "#12121a",
+  },
+};
+
+// ─── Authenticated shell ──────────────────────────────────────────────────────
+// Rendered only when isAuthenticated is true, so useTransactions never fires
+// on the login page and cannot trigger a 401 → reload loop.
+function AuthenticatedApp() {
   const [activePage, setActivePage] = useState<Page>(() => {
     return (localStorage.getItem("active_page") as Page) || "dashboard";
   });
-  const [authView, setAuthView] = useState<"login" | "register">("login");
   const [annualYear, setAnnualYear] = useState<number>(() => {
     const saved = localStorage.getItem("annual_year");
     return saved ? parseInt(saved, 10) : new Date().getFullYear();
@@ -52,18 +63,118 @@ export default function App() {
     localStorage.setItem("annual_year", annualYear.toString());
   }, [annualYear]);
 
+  return (
+    <div className="app" id="app">
+      <div className="bg-blob blob-1" />
+      <div className="bg-blob blob-2" />
+      <div className="bg-blob blob-3" />
+
+      <Sidebar activePage={activePage} onNavigate={setActivePage} />
+
+      <header className="app-header" id="app-header">
+        <div className="header-content">
+          <div className="logo">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="5" width="20" height="14" rx="2" />
+              <line x1="2" y1="10" x2="22" y2="10" />
+            </svg>
+            <h1>Expense Tracker</h1>
+          </div>
+          {activePage === "dashboard" && (
+            <MonthPicker month={month} year={year} onMonthChange={setMonth} onYearChange={setYear} />
+          )}
+          {activePage === "annual" && (
+            <YearPicker year={annualYear} onYearChange={setAnnualYear} />
+          )}
+          {activePage === "annual" && (
+            <div className="page-breadcrumb">
+              <span className="breadcrumb-parent">Performance</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+              <span className="breadcrumb-current">Annual Dashboard</span>
+            </div>
+          )}
+          {activePage === "categories" && (
+            <div className="page-breadcrumb">
+              <span className="breadcrumb-parent">Settings</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+              <span className="breadcrumb-current">Categories</span>
+            </div>
+          )}
+          {activePage === "admin" && (
+            <div className="page-breadcrumb">
+              <span className="breadcrumb-parent">System</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+              <span className="breadcrumb-current">Admin Panel</span>
+            </div>
+          )}
+        </div>
+      </header>
+
+      <main className="app-main">
+        {activePage === "dashboard" && (
+          <>
+            {error && (
+              <div className="global-error" id="global-error">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="15" y1="9" x2="9" y2="15" />
+                  <line x1="9" y1="9" x2="15" y2="15" />
+                </svg>
+                {error}
+              </div>
+            )}
+            <Dashboard summary={summary} transactions={transactions} month={month} year={year} />
+            <div className="content-grid">
+              <TransactionForm
+                onSubmit={create}
+                onCopyBatch={createBatch}
+                currentMonth={month}
+                currentYear={year}
+              />
+              <TransactionList
+                transactions={transactions}
+                loading={loading}
+                onUpdate={update}
+                onDelete={remove}
+              />
+            </div>
+          </>
+        )}
+        {activePage === "annual" && <AnnualDashboard year={annualYear} />}
+        {activePage === "categories" && <CategoryManager />}
+        {activePage === "admin" && <AdminPanel />}
+      </main>
+
+      <footer className="app-footer">
+        <p>Monthly Expense Tracker &copy; {new Date().getFullYear()}</p>
+      </footer>
+    </div>
+  );
+}
+
+// ─── Root ─────────────────────────────────────────────────────────────────────
+export default function App() {
+  const { isAuthenticated, logout } = useAuth();
+  const [authView, setAuthView] = useState<"login" | "register">("login");
+
+  // Listen for token-expiry events dispatched by apiFetch (401 responses).
+  // Calling logout() updates AuthContext state which re-renders to the login view
+  // without a hard page reload, preventing the fetch-on-login-page loop.
+  useEffect(() => {
+    const handleExpired = () => logout();
+    window.addEventListener(AUTH_EXPIRED_EVENT, handleExpired);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleExpired);
+  }, [logout]);
+
   if (!isAuthenticated) {
     return (
-      <ConfigProvider
-        theme={{
-          algorithm: theme.darkAlgorithm,
-          token: {
-            colorPrimary: "#3b82f6",
-            borderRadius: 12,
-            colorBgContainer: "#12121a",
-          },
-        }}
-      >
+      <ConfigProvider theme={darkTheme}>
         <div className="app guest">
           <div className="bg-blob blob-1" />
           <div className="bg-blob blob-2" />
@@ -82,118 +193,8 @@ export default function App() {
   }
 
   return (
-    <ConfigProvider
-      theme={{
-        algorithm: theme.darkAlgorithm,
-        token: {
-          colorPrimary: "#3b82f6",
-          borderRadius: 12,
-          colorBgContainer: "#12121a",
-        },
-      }}
-    >
-      <div className="app" id="app">
-        <div className="bg-blob blob-1" />
-        <div className="bg-blob blob-2" />
-        <div className="bg-blob blob-3" />
-
-        <Sidebar activePage={activePage} onNavigate={setActivePage} />
-
-        <header className="app-header" id="app-header">
-          <div className="header-content">
-            <div className="logo">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="5" width="20" height="14" rx="2" />
-                <line x1="2" y1="10" x2="22" y2="10" />
-              </svg>
-              <h1>Expense Tracker</h1>
-            </div>
-            {activePage === "dashboard" && (
-              <MonthPicker
-                month={month}
-                year={year}
-                onMonthChange={setMonth}
-                onYearChange={setYear}
-              />
-            )}
-            {activePage === "annual" && (
-              <YearPicker
-                year={annualYear}
-                onYearChange={setAnnualYear}
-              />
-            )}
-            {activePage === "annual" && (
-              <div className="page-breadcrumb">
-                <span className="breadcrumb-parent">Performance</span>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="9 18 15 12 9 6" />
-                </svg>
-                <span className="breadcrumb-current">Annual Dashboard</span>
-              </div>
-            )}
-            {activePage === "categories" && (
-              <div className="page-breadcrumb">
-                <span className="breadcrumb-parent">Settings</span>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="9 18 15 12 9 6" />
-                </svg>
-                <span className="breadcrumb-current">Categories</span>
-              </div>
-            )}
-            {activePage === "admin" && (
-              <div className="page-breadcrumb">
-                <span className="breadcrumb-parent">System</span>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="9 18 15 12 9 6" />
-                </svg>
-                <span className="breadcrumb-current">Admin Panel</span>
-              </div>
-            )}
-          </div>
-        </header>
-
-        <main className="app-main">
-          {activePage === "dashboard" && (
-            <>
-              {error && (
-                <div className="global-error" id="global-error">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10" />
-                    <line x1="15" y1="9" x2="9" y2="15" />
-                    <line x1="9" y1="9" x2="15" y2="15" />
-                  </svg>
-                  {error}
-                </div>
-              )}
-
-              <Dashboard summary={summary} transactions={transactions} month={month} year={year} />
-
-              <div className="content-grid">
-                <TransactionForm
-                  onSubmit={create}
-                  onCopyBatch={createBatch}
-                  currentMonth={month}
-                  currentYear={year}
-                />
-                <TransactionList
-                  transactions={transactions}
-                  loading={loading}
-                  onUpdate={update}
-                  onDelete={remove}
-                />
-              </div>
-            </>
-          )}
-
-          {activePage === "annual" && <AnnualDashboard year={annualYear} />}
-          {activePage === "categories" && <CategoryManager />}
-          {activePage === "admin" && <AdminPanel />}
-        </main>
-
-        <footer className="app-footer">
-          <p>Monthly Expense Tracker &copy; {new Date().getFullYear()}</p>
-        </footer>
-      </div>
+    <ConfigProvider theme={darkTheme}>
+      <AuthenticatedApp />
       <Analytics />
     </ConfigProvider>
   );
