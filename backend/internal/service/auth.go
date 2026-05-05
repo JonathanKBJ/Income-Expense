@@ -2,24 +2,26 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"expense-tracker/internal/models"
 	"expense-tracker/internal/repository"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
-	"crypto/sha256"
-	"encoding/hex"
 )
 
 type AuthService struct {
-	userRepo     *repository.UserRepository
-	groupRepo    *repository.GroupRepository
-	jwtSecret    []byte
-	pepperSecret string
+	userRepo       *repository.UserRepository
+	groupRepo      *repository.GroupRepository
+	jwtSecret      []byte
+	pepperSecret   string
+	adminUsernames map[string]bool
 }
 
 func NewAuthService(userRepo *repository.UserRepository, groupRepo *repository.GroupRepository) *AuthService {
@@ -31,11 +33,29 @@ func NewAuthService(userRepo *repository.UserRepository, groupRepo *repository.G
 	if pepper == "" {
 		pepper = "default_pepper_key" // Fallback for dev
 	}
+
+	// Load admin usernames from env: comma-separated list e.g. "admin,adminkb"
+	adminUsernames := make(map[string]bool)
+	if raw := os.Getenv("ADMIN_USERNAMES"); raw != "" {
+		for _, name := range strings.Split(raw, ",") {
+			name = strings.TrimSpace(name)
+			if name != "" {
+				adminUsernames[name] = true
+			}
+		}
+	}
+	// Default fallback for dev (should be overridden in production via env)
+	if len(adminUsernames) == 0 {
+		adminUsernames["admin"] = true
+		adminUsernames["adminkb"] = true
+	}
+
 	return &AuthService{
-		userRepo:     userRepo,
-		groupRepo:    groupRepo,
-		jwtSecret:    []byte(jwtSecret),
-		pepperSecret: pepper,
+		userRepo:       userRepo,
+		groupRepo:      groupRepo,
+		jwtSecret:      []byte(jwtSecret),
+		pepperSecret:   pepper,
+		adminUsernames: adminUsernames,
 	}
 }
 
@@ -64,9 +84,9 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
 
-	// Determine role (admin or adminkb)
+	// Determine role: check against configured admin usernames
 	role := models.RoleUser
-	if req.Username == "admin" || req.Username == "adminkb" {
+	if s.adminUsernames[req.Username] {
 		role = models.RoleAdmin
 	}
 
