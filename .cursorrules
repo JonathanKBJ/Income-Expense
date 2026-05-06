@@ -1,0 +1,26 @@
+# Income-Expense Project Rules
+
+## Tech Stack
+- **Frontend**: React 19, Vite, TypeScript, Ant Design (antd), Vanilla CSS (No Tailwind unless requested), dayjs.
+- **Backend**: Go 1.25, Chi Router, Turso DB (SQLite).
+
+## Architecture
+- **Frontend SPA**: `src/App.tsx` handles state-based routing. 
+  - `src/components/`: UI components.
+  - `src/contexts/` & `src/hooks/`: State & API fetching.
+  - `src/App.css` & `src/index.css`: Global styling & dark mode themes.
+- **Backend**: Layered Architecture. 
+  - `cmd/server/main.go`: Entry point.
+  - `internal/router/`: API pathways & middleware setup.
+  - `internal/handlers/`: HTTP request parsing & response formatting.
+  - `internal/service/`: Complex business logic.
+  - `internal/repository/`: DB Queries/SQL (`libsql`).
+  - `internal/models/`: Data Structs & JSON payloads.
+
+## Key Rules
+1. **UI/CSS**: Use `antd` components first. Use plain CSS for custom styling. Do NOT use Tailwind. Maintain the premium dark mode aesthetic.
+2. **Backend API**: Add routes in `router.go`, implement logic in `handlers/` and `repository/`. Always return standard JSON formats (e.g., `{"error": "message"}`).
+3. **Auth/Security**: Endpoints under `/api/*` require JWT (`AuthMiddleware`). `/api/admin/*` requires `AdminOnly` middleware.
+4. **Database**: Use standard SQLite syntax for Turso DB. See `backend/internal/database/schema.go` for schemas.
+
+*(For more comprehensive details, please refer to `AI_DEVELOPMENT_GUIDE.md`)*
