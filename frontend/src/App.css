@@ -780,6 +780,121 @@
   padding: 24px;
 }
 
+.list-header-flex {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.list-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mobile-select-all {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.mobile-select-all label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.btn-text-mobile {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .list-header-flex {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+  
+  .list-controls {
+    justify-content: flex-start;
+  }
+  
+  .mobile-select-all {
+    display: flex;
+    margin-left: auto;
+  }
+  
+  .btn-text {
+    display: none;
+  }
+  
+  .btn-text-mobile {
+    display: inline;
+  }
+
+  .status-filter-select {
+    flex: 1;
+    min-width: 100px;
+  }
+}
+
+.col-checkbox {
+  width: 40px;
+  text-align: center;
+}
+
+.col-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.transaction-row.selected {
+  background: rgba(59, 130, 246, 0.08) !important;
+}
+
+.transaction-card.selected {
+  border-color: var(--blue-400) !important;
+  box-shadow: 0 0 0 1px var(--blue-400), var(--shadow-md) !important;
+}
+
+.card-selection-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  background: rgba(59, 130, 246, 0.03); /* Extremely subtle tint */
+  cursor: pointer;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 10px;
+  border-radius: var(--radius-lg);
+  transition: background 0.2s ease;
+}
+
+.card-selection-overlay:hover {
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.card-selection-overlay input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  pointer-events: none; /* Let the div handle the click */
+}
+
 /* Loading & Empty States */
 .loading-state,
 .empty-state {
@@ -1077,6 +1192,7 @@
 }
 
 .transaction-card {
+  position: relative; /* Crucial for absolute positioning of overlay */
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);

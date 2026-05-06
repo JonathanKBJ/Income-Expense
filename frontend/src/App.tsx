@@ -61,6 +61,7 @@ function AuthenticatedApp() {
     createBatch,
     update,
     remove,
+    removeBatch,
   } = useTransactions();
 
   useEffect(() => {
@@ -174,6 +175,7 @@ function AuthenticatedApp() {
                 loading={loading}
                 onUpdate={update}
                 onDelete={remove}
+                onRemoveBatch={removeBatch}
               />
             </div>
           </>

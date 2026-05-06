@@ -69,6 +69,17 @@ export async function deleteTransaction(id: string): Promise<void> {
 }
 
 /**
+ * Delete multiple transactions in a batch.
+ * DELETE /api/transactions/batch
+ */
+export async function deleteTransactionsBatch(ids: string[]): Promise<void> {
+  return apiFetch("/api/transactions/batch", {
+    method: "DELETE",
+    body: JSON.stringify({ ids }),
+  });
+}
+
+/**
  * Fetch annual summary statistics.
  * GET /api/transactions/annual?year={Y}
  */

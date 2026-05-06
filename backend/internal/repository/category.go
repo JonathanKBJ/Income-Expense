@@ -91,7 +91,7 @@ func (r *CategoryRepository) GetAll(ctx context.Context, userID, groupID, catTyp
 
 // GetByID retrieves a single category by its ID and either group ID or user ID.
 func (r *CategoryRepository) GetByID(ctx context.Context, id, userID, groupID string) (*models.Category, error) {
-	query := `SELECT id, name, type, group_id, user_id, created_at, updated_at FROM categories WHERE id = ? AND (group_id = ? OR user_id = ?)`
+	query := `SELECT id, name, type, group_id, user_id, created_at, updated_at FROM categories WHERE id = ? AND (group_id = ? OR user_id = ? OR (group_id IS NULL AND user_id IS NULL))`
 
 	var cat models.Category
 	err := r.db.QueryRowContext(ctx, query, id, groupID, userID).Scan(
@@ -134,7 +134,7 @@ func (r *CategoryRepository) Create(ctx context.Context, req models.CreateCatego
 func (r *CategoryRepository) Update(ctx context.Context, id, userID, groupID string, req models.UpdateCategoryRequest) (*models.Category, error) {
 	now := time.Now().UTC().Format(time.RFC3339)
 
-	query := `UPDATE categories SET name = ?, updated_at = ? WHERE id = ? AND (group_id = ? OR user_id = ?)`
+	query := `UPDATE categories SET name = ?, updated_at = ? WHERE id = ? AND (group_id = ? OR user_id = ? OR (group_id IS NULL AND user_id IS NULL))`
 
 	result, err := r.db.ExecContext(ctx, query, req.Name, now, id, groupID, userID)
 	if err != nil {
@@ -155,7 +155,7 @@ func (r *CategoryRepository) Update(ctx context.Context, id, userID, groupID str
 
 // Delete removes a category by ID if it belongs to the specified group or user.
 func (r *CategoryRepository) Delete(ctx context.Context, id, userID, groupID string) error {
-	query := `DELETE FROM categories WHERE id = ? AND (group_id = ? OR user_id = ?)`
+	query := `DELETE FROM categories WHERE id = ? AND (group_id = ? OR user_id = ? OR (group_id IS NULL AND user_id IS NULL))`
 
 	result, err := r.db.ExecContext(ctx, query, id, groupID, userID)
 	if err != nil {
