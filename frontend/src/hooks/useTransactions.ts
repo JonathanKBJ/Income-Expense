@@ -21,6 +21,7 @@ interface UseTransactionsReturn {
   createBatch: (reqs: CreateTransactionRequest[]) => Promise<void>;
   update: (id: string, req: UpdateTransactionRequest) => Promise<void>;
   remove: (id: string) => Promise<void>;
+  removeBatch: (ids: string[]) => Promise<void>;
 }
 
 const defaultSummary: TransactionSummary = {
@@ -100,6 +101,14 @@ export function useTransactions(): UseTransactionsReturn {
     [refresh]
   );
 
+  const removeBatch = useCallback(
+    async (ids: string[]) => {
+      await api.deleteTransactionsBatch(ids);
+      await refresh();
+    },
+    [refresh]
+  );
+
   return {
     transactions,
     summary,
@@ -114,5 +123,6 @@ export function useTransactions(): UseTransactionsReturn {
     createBatch,
     update,
     remove,
+    removeBatch,
   };
 }
