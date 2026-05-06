@@ -122,7 +122,7 @@ const Login: React.FC<LoginProps> = ({ onRegisterClick }) => {
           margin-top: 10px;
         }
         .glass-morphism {
-          background: rgba(18, 18, 26, 0.8) !important;
+          background: var(--bg-card) !important;
           backdrop-filter: blur(12px);
           -webkit-backdrop-filter: blur(12px);
           border: 1px solid rgba(255, 255, 255, 0.1);

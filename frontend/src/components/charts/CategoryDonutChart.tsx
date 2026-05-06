@@ -47,7 +47,7 @@ export default function CategoryDonutChart({ data, type }: Props) {
           <Label
             value={formatCompactCurrency(total)}
             position="center"
-            fill="#ffffff"
+            fill="var(--text-primary)"
             style={{
               fontSize: "20px",
               fontWeight: "bold",
@@ -55,8 +55,14 @@ export default function CategoryDonutChart({ data, type }: Props) {
           />
         </Pie>
         <Tooltip
-          formatter={(value: any) => [`฿${Number(value).toLocaleString()}`, "Amount"]}
-          contentStyle={{ backgroundColor: "#1e1e2d", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", color: "#fff" }}
+          formatter={(value: any, name: any) => [`฿${Number(value).toLocaleString()}`, name]}
+          contentStyle={{ 
+            backgroundColor: "var(--bg-secondary)", 
+            border: "1px solid var(--border-subtle)", 
+            borderRadius: "8px", 
+            color: "var(--text-primary)" 
+          }}
+          itemStyle={{ color: "var(--text-primary)" }}
         />
         <Legend verticalAlign="bottom" height={36} wrapperStyle={{ fontSize: "12px", marginTop: "10px" }} />
       </PieChart>

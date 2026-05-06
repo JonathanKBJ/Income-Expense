@@ -28,13 +28,37 @@ export default function MonthlyMixedChart({ data }: Props) {
   }, []);
 
   // Base formatting
-  let formattedData = data.map((item) => ({
-    name: MONTH_NAMES[item.month - 1],
-    monthNum: item.month, // keep raw month for sorting/filtering
-    Income: item.income,
-    Expense: item.expense,
-    "Net Balance": item.income - item.expense,
-  }));
+  const formattedDataRaw = data.map((item, index) => {
+    const prevItem = index > 0 ? data[index - 1] : null;
+
+    // Expense Change calculation
+    let expenseChange = 0;
+    if (prevItem && prevItem.expense > 0) {
+      expenseChange = ((item.expense - prevItem.expense) / prevItem.expense) * 100;
+    } else if (prevItem && prevItem.expense === 0 && item.expense > 0) {
+      expenseChange = 100;
+    }
+
+    // Income Change calculation
+    let incomeChange = 0;
+    if (prevItem && prevItem.income > 0) {
+      incomeChange = ((item.income - prevItem.income) / prevItem.income) * 100;
+    } else if (prevItem && prevItem.income === 0 && item.income > 0) {
+      incomeChange = 100;
+    }
+
+    return {
+      name: MONTH_NAMES[item.month - 1],
+      monthNum: item.month,
+      Income: item.income,
+      Expense: item.expense,
+      "Net Balance": item.income - item.expense,
+      "Expense Change %": parseFloat(expenseChange.toFixed(1)),
+      "Income Change %": parseFloat(incomeChange.toFixed(1)),
+    };
+  });
+
+  let formattedData = [...formattedDataRaw];
 
   // Mobile specific logic
   if (isMobile) {
@@ -48,15 +72,12 @@ export default function MonthlyMixedChart({ data }: Props) {
     }
 
     if (lastDataIndex !== -1) {
-      // Take the last month with data and the 3 preceding months (total 4 months)
       let startIndex = lastDataIndex - 3;
       if (startIndex < 0) startIndex = 0;
-      
-      // Slice the array and reverse it to show e.g. 7, 6, 5, 4
+
       const slicedData = formattedData.slice(startIndex, lastDataIndex + 1);
       formattedData = slicedData.reverse();
     } else {
-      // No data at all, just limit to last 4 months (Dec, Nov, Oct, Sep)
       formattedData = formattedData.slice(-4).reverse();
     }
   }
@@ -72,48 +93,82 @@ export default function MonthlyMixedChart({ data }: Props) {
           left: 20,
         }}
       >
-        <CartesianGrid stroke="#333" strokeDasharray="3 3" vertical={false} />
+        <CartesianGrid stroke="var(--border-subtle)" strokeDasharray="3 3" vertical={false} />
         <XAxis
           dataKey="name"
-          stroke="#888"
-          tick={{ fill: "#888", fontSize: 12 }}
+          stroke="var(--text-muted)"
+          tick={{ fill: "var(--text-muted)", fontSize: 12 }}
           tickLine={false}
           axisLine={false}
         />
         <YAxis
-          stroke="#888"
-          tick={{ fill: "#888", fontSize: 12 }}
+          yAxisId="left"
+          stroke="var(--text-muted)"
+          tick={{ fill: "var(--text-muted)", fontSize: 12 }}
           tickLine={false}
           axisLine={false}
           tickFormatter={(value) => `฿${value.toLocaleString()}`}
         />
+        <YAxis
+          yAxisId="right"
+          orientation="right"
+          stroke="var(--text-muted)"
+          tick={{ fill: "var(--text-muted)", fontSize: 10 }}
+          tickLine={false}
+          axisLine={false}
+          tickFormatter={(value) => `${value}%`}
+          domain={['auto', 'auto']}
+        />
         <Tooltip
           contentStyle={{
-            backgroundColor: "#1e1e2d",
-            border: "1px solid rgba(255,255,255,0.1)",
+            backgroundColor: "var(--bg-secondary)",
+            border: "1px solid var(--border-subtle)",
             borderRadius: "8px",
-            color: "#fff",
+            color: "var(--text-primary)",
           }}
-          itemStyle={{ color: "#fff" }}
+          itemStyle={{ color: "var(--text-primary)" }}
+          formatter={(value: any, name: any) => {
+            if (name.includes("%")) return [`${value}%`, name];
+            return [`฿${Number(value).toLocaleString()}`, name];
+          }}
         />
         <Legend wrapperStyle={{ paddingTop: "20px" }} />
-        <Bar dataKey="Income" barSize={20} fill="#22c55e" radius={[4, 4, 0, 0]} />
-        <Bar dataKey="Expense" barSize={20} fill="#ef4444" radius={[4, 4, 0, 0]} />
+        <Bar yAxisId="left" dataKey="Income" barSize={20} fill="#22c55e" radius={[4, 4, 0, 0]} opacity={0.6} />
+        <Bar yAxisId="left" dataKey="Expense" barSize={20} fill="#ef4444" radius={[4, 4, 0, 0]} opacity={0.6} />
+
+        {/* Income Change % Line */}
         <Line
+          yAxisId="right"
+          type="monotone"
+          dataKey="Income Change %"
+          name="Income Change (%)"
+          stroke="#22c55e"
+          strokeWidth={2}
+          dot={{ r: 4, fill: "#22c55e", strokeWidth: 0 }}
+          activeDot={{ r: 6 }}
+        />
+
+        {/* Expense Change % Line */}
+        <Line
+          yAxisId="right"
+          type="monotone"
+          dataKey="Expense Change %"
+          name="Expense Change (%)"
+          stroke="#f97316"
+          strokeWidth={2}
+          strokeDasharray="5 5"
+          dot={{ r: 3, fill: "#f97316", strokeWidth: 0 }}
+        />
+
+        {/* Net Balance Line */}
+        <Line
+          yAxisId="left"
           type="monotone"
           dataKey="Net Balance"
           stroke="#3b82f6"
           strokeWidth={3}
           dot={{ r: 4, fill: "#3b82f6", strokeWidth: 0 }}
           activeDot={{ r: 6 }}
-        />
-        <Line
-          type="monotone"
-          dataKey="Expense"
-          stroke="#f97316"
-          strokeWidth={2}
-          strokeDasharray="5 5"
-          dot={{ r: 3, fill: "#f97316", strokeWidth: 0 }}
         />
       </ComposedChart>
     </ResponsiveContainer>

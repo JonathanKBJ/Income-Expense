@@ -1,4 +1,5 @@
-import { DatePicker } from "antd";
+import { DatePicker, Button } from "antd";
+import { LeftOutlined, RightOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 
 interface MonthPickerProps {
@@ -14,8 +15,6 @@ export default function MonthPicker({
   onMonthChange,
   onYearChange,
 }: MonthPickerProps) {
-  // Create a dayjs object from month/year props
-  // dayjs months are 0-indexed, but our props are 1-indexed
   const value = dayjs().year(year).month(month - 1);
 
   const handleChange = (date: dayjs.Dayjs | null) => {
@@ -25,17 +24,33 @@ export default function MonthPicker({
     }
   };
 
+  const handlePrev = () => {
+    const newDate = value.subtract(1, 'month');
+    onMonthChange(newDate.month() + 1);
+    onYearChange(newDate.year());
+  };
+
+  const handleNext = () => {
+    const newDate = value.add(1, 'month');
+    onMonthChange(newDate.month() + 1);
+    onYearChange(newDate.year());
+  };
+
   return (
-    <div className="month-picker-wrapper" id="month-picker">
+    <div className="date-navigator-wrapper" id="month-picker">
+      <Button type="text" icon={<LeftOutlined />} onClick={handlePrev} className="nav-arrow-btn" />
       <DatePicker
         picker="month"
         value={value}
         onChange={handleChange}
         allowClear={false}
         format="MMM YYYY"
-        className="antd-month-picker"
+        className="antd-month-picker-borderless"
         inputReadOnly
+        bordered={false}
+        suffixIcon={null}
       />
+      <Button type="text" icon={<RightOutlined />} onClick={handleNext} className="nav-arrow-btn" />
     </div>
   );
 }
