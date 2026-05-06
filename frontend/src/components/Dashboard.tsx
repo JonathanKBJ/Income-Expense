@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { Transaction, TransactionSummary, CategorySummary } from "../types/transaction";
 import CategoryDonutChart from "./charts/CategoryDonutChart";
+import { useLanguage } from "../contexts/LanguageContext";
 
 interface DashboardProps {
   summary: TransactionSummary;
@@ -8,11 +9,6 @@ interface DashboardProps {
   month: number;
   year: number;
 }
-
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -23,6 +19,7 @@ function formatCurrency(value: number): string {
 }
 
 export default function Dashboard({ summary, transactions, month, year }: DashboardProps) {
+  const { t } = useLanguage();
   const netBalance = summary.totalIncome - summary.totalPaid - summary.totalPending;
 
   const categoryData = useMemo(() => {
@@ -46,7 +43,7 @@ export default function Dashboard({ summary, transactions, month, year }: Dashbo
   return (
     <section className="dashboard" id="dashboard">
       <h2 className="dashboard-title">
-        <span className="dashboard-month">{MONTH_NAMES[month - 1]}</span>
+        <span className="dashboard-month">{t.months[month - 1]}</span>
         <span className="dashboard-year">{year}</span>
       </h2>
 
@@ -59,7 +56,7 @@ export default function Dashboard({ summary, transactions, month, year }: Dashbo
             </svg>
           </div>
           <div className="metric-content">
-            <span className="metric-label">Total Income</span>
+            <span className="metric-label">{t.dashboard.totalIncome}</span>
             <span className="metric-value">{formatCurrency(summary.totalIncome)}</span>
           </div>
         </div>
@@ -72,7 +69,7 @@ export default function Dashboard({ summary, transactions, month, year }: Dashbo
             </svg>
           </div>
           <div className="metric-content">
-            <span className="metric-label">Total Paid</span>
+            <span className="metric-label">{t.dashboard.totalPaid}</span>
             <span className="metric-value">{formatCurrency(summary.totalPaid)}</span>
           </div>
         </div>
@@ -85,7 +82,7 @@ export default function Dashboard({ summary, transactions, month, year }: Dashbo
             </svg>
           </div>
           <div className="metric-content">
-            <span className="metric-label">Total Pending</span>
+            <span className="metric-label">{t.dashboard.totalPending}</span>
             <span className="metric-value">{formatCurrency(summary.totalPending)}</span>
           </div>
         </div>
@@ -98,7 +95,7 @@ export default function Dashboard({ summary, transactions, month, year }: Dashbo
             </svg>
           </div>
           <div className="metric-content">
-            <span className="metric-label">Net Balance</span>
+            <span className="metric-label">{t.dashboard.netBalance}</span>
             <span className="metric-value">{formatCurrency(netBalance)}</span>
           </div>
         </div>
@@ -116,7 +113,7 @@ export default function Dashboard({ summary, transactions, month, year }: Dashbo
           padding: "1.5rem",
           border: "1px solid rgba(255,255,255,0.05)"
         }}>
-          <h3 style={{ color: "var(--text-primary, #fff)", marginBottom: "0.5rem", textAlign: "center", fontWeight: 600 }}>Income by Category</h3>
+          <h3 style={{ color: "var(--text-primary, #fff)", marginBottom: "0.5rem", textAlign: "center", fontWeight: 600 }}>{t.dashboard.incomeByCategory}</h3>
           <CategoryDonutChart data={categoryData} type="INCOME" />
         </div>
 
@@ -126,7 +123,7 @@ export default function Dashboard({ summary, transactions, month, year }: Dashbo
           padding: "1.5rem",
           border: "1px solid rgba(255,255,255,0.05)"
         }}>
-          <h3 style={{ color: "var(--text-primary, #fff)", marginBottom: "0.5rem", textAlign: "center", fontWeight: 600 }}>Expenses by Category</h3>
+          <h3 style={{ color: "var(--text-primary, #fff)", marginBottom: "0.5rem", textAlign: "center", fontWeight: 600 }}>{t.dashboard.expensesByCategory}</h3>
           <CategoryDonutChart data={categoryData} type="EXPENSE" />
         </div>
       </div>

@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(grep \":$\")"
+      "Bash(grep \":$\")",
+      "Bash(Get-ChildItem -Path \"D:\\\\PERSONAL\\\\Income-Expense\" -Recurse -Force)",
+      "Bash(Select-Object -Property FullName)",
+      "Bash(Sort-Object FullName)"
     ]
   }
 }

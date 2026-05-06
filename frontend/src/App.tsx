@@ -1,6 +1,9 @@
-import { useEffect, useState } from "react";
-import { ConfigProvider, theme } from "antd";
+import { useEffect, useState, useMemo } from "react";
+import { ConfigProvider, theme, Switch, Segmented, Space, Tooltip } from "antd";
+import { MoonOutlined, SunOutlined } from "@ant-design/icons";
 import { useAuth } from "./contexts/AuthContext";
+import { useLanguage } from "./contexts/LanguageContext";
+import { useTheme } from "./contexts/ThemeContext";
 import { useTransactions } from "./hooks/useTransactions";
 import Dashboard from "./components/Dashboard";
 import MonthPicker from "./components/MonthPicker";
@@ -19,19 +22,24 @@ import "./App.css";
 
 type Page = "dashboard" | "annual" | "categories" | "admin";
 
-const darkTheme = {
-  algorithm: theme.darkAlgorithm,
+const getAntdTheme = (isDark: boolean) => ({
+  algorithm: isDark ? theme.darkAlgorithm : theme.defaultAlgorithm,
   token: {
     colorPrimary: "#3b82f6",
     borderRadius: 12,
-    colorBgContainer: "#12121a",
+    colorBgContainer: isDark ? "#12121a" : "#ffffff",
+    colorBgLayout: isDark ? "#0a0a0f" : "#f8fafc",
+    fontFamily: "'Kanit', 'Inter', sans-serif",
   },
-};
+});
 
 // ─── Authenticated shell ──────────────────────────────────────────────────────
 // Rendered only when isAuthenticated is true, so useTransactions never fires
 // on the login page and cannot trigger a 401 → reload loop.
 function AuthenticatedApp() {
+  const { t, language, setLanguage } = useLanguage();
+  const { mode, toggleTheme, isDark } = useTheme();
+
   const [activePage, setActivePage] = useState<Page>(() => {
     return (localStorage.getItem("active_page") as Page) || "dashboard";
   });
@@ -78,8 +86,32 @@ function AuthenticatedApp() {
               <rect x="2" y="5" width="20" height="14" rx="2" />
               <line x1="2" y1="10" x2="22" y2="10" />
             </svg>
-            <h1>Expense Tracker</h1>
+            <h1>{t.common.appName}</h1>
           </div>
+
+          <div className="header-controls">
+            <Space size="middle">
+              <Segmented
+                options={[
+                  { label: "TH", value: "th" },
+                  { label: "EN", value: "en" },
+                ]}
+                value={language}
+                onChange={(value) => setLanguage(value as "th" | "en")}
+                className="language-selector"
+              />
+              <Tooltip title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}>
+                <Switch
+                  checkedChildren={<MoonOutlined />}
+                  unCheckedChildren={<SunOutlined />}
+                  checked={isDark}
+                  onChange={toggleTheme}
+                  className="theme-switch"
+                />
+              </Tooltip>
+            </Space>
+          </div>
+
           {activePage === "dashboard" && (
             <MonthPicker month={month} year={year} onMonthChange={setMonth} onYearChange={setYear} />
           )}
@@ -152,7 +184,7 @@ function AuthenticatedApp() {
       </main>
 
       <footer className="app-footer">
-        <p>Monthly Expense Tracker &copy; {new Date().getFullYear()}</p>
+        <p>{t.common.copyright} &copy; {new Date().getFullYear()}</p>
       </footer>
     </div>
   );
@@ -161,7 +193,10 @@ function AuthenticatedApp() {
 // ─── Root ─────────────────────────────────────────────────────────────────────
 export default function App() {
   const { isAuthenticated, logout } = useAuth();
+  const { isDark } = useTheme();
   const [authView, setAuthView] = useState<"login" | "register">("login");
+
+  const antdThemeConfig = useMemo(() => getAntdTheme(isDark), [isDark]);
 
   // Listen for token-expiry events dispatched by apiFetch (401 responses).
   // Calling logout() updates AuthContext state which re-renders to the login view
@@ -174,7 +209,7 @@ export default function App() {
 
   if (!isAuthenticated) {
     return (
-      <ConfigProvider theme={darkTheme}>
+      <ConfigProvider theme={antdThemeConfig}>
         <div className="app guest">
           <div className="bg-blob blob-1" />
           <div className="bg-blob blob-2" />
@@ -193,7 +228,7 @@ export default function App() {
   }
 
   return (
-    <ConfigProvider theme={darkTheme}>
+    <ConfigProvider theme={antdThemeConfig}>
       <AuthenticatedApp />
       <Analytics />
     </ConfigProvider>
