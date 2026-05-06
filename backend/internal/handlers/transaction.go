@@ -257,6 +257,37 @@ func (h *TransactionHandler) DeleteTransaction(w http.ResponseWriter, r *http.Re
 	writeJSON(w, http.StatusOK, map[string]string{"message": "transaction deleted"})
 }
 
+// DeleteTransactionsBatch handles DELETE /api/transactions/batch
+func (h *TransactionHandler) DeleteTransactionsBatch(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		IDs []string `json:"ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON payload: "+err.Error())
+		return
+	}
+
+	if len(req.IDs) == 0 {
+		writeError(w, http.StatusBadRequest, "no transaction ids provided")
+		return
+	}
+
+	// Injected by AuthMiddleware
+	groupID := middleware.GetGroupID(r.Context())
+	if groupID == "" {
+		writeError(w, http.StatusForbidden, "group identification required for this operation")
+		return
+	}
+
+	if err := h.repo.DeleteBatch(r.Context(), req.IDs, groupID); err != nil {
+		log.Printf("ERROR: DeleteTransactionsBatch: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to delete transactions in batch")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "transactions deleted successfully"})
+}
+
 // --- Response helpers ---
 
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {

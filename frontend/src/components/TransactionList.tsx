@@ -14,6 +14,7 @@ interface TransactionListProps {
   loading: boolean;
   onUpdate: (id: string, req: UpdateTransactionRequest) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  onRemoveBatch: (ids: string[]) => Promise<void>;
 }
 
 function formatCurrency(value: number): string {
@@ -38,6 +39,7 @@ export default function TransactionList({
   loading,
   onUpdate,
   onDelete,
+  onRemoveBatch,
 }: TransactionListProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState<number>(0);
@@ -47,6 +49,11 @@ export default function TransactionList({
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerImage, setViewerImage] = useState<string | null>(null);
+
+  // New states for filtering and bulk actions
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   function startEdit(t: Transaction) {
     setEditingId(t.id);
@@ -138,6 +145,46 @@ export default function TransactionList({
     }
   }
 
+  async function handleBulkDelete() {
+    if (selectedIds.length === 0) return;
+    if (!window.confirm(`Delete ${selectedIds.length} selected transactions?`)) return;
+    
+    setActionLoading("bulk");
+    try {
+      await onRemoveBatch(selectedIds);
+      setSelectedIds([]);
+      setSelectionMode(false);
+      message.success("Deleted successfully");
+    } catch {
+      message.error("Failed to delete items");
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  }
+
+  function toggleSelectAll(filteredTx: Transaction[]) {
+    if (selectedIds.length === filteredTx.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredTx.map(t => t.id));
+    }
+  }
+
+  const filteredTransactions = transactions.filter(t => {
+    if (statusFilter === "ALL") return true;
+    if (statusFilter === "INCOME") return t.type === "INCOME";
+    if (isExpense(t)) {
+      return t.status === statusFilter;
+    }
+    return false;
+  });
+
   if (loading) {
     return (
       <section className="transaction-list-section" id="transaction-list">
@@ -168,15 +215,77 @@ export default function TransactionList({
 
   return (
     <section className="transaction-list-section" id="transaction-list">
-      <h2 className="section-title">
-        Transactions
-        <span className="transaction-count">{transactions.length}</span>
-      </h2>
+      <div className="list-header-flex">
+        <h2 className="section-title">
+          Transactions
+          <span className="transaction-count">{filteredTransactions.length}</span>
+        </h2>
+        
+        <div className="list-controls">
+          <Select 
+            value={statusFilter} 
+            onChange={setStatusFilter}
+            style={{ width: 120 }}
+            className="status-filter-select"
+            options={[
+              { label: "All Status", value: "ALL" },
+              { label: "Pending", value: "PENDING" },
+              { label: "Paid", value: "PAID" },
+              { label: "Income", value: "INCOME" },
+            ]}
+          />
+          
+          <Button 
+            type={selectionMode ? "primary" : "default"}
+            onClick={() => {
+              setSelectionMode(!selectionMode);
+              if (selectionMode) setSelectedIds([]);
+            }}
+          >
+            {selectionMode ? "Cancel Select" : "Select"}
+          </Button>
+
+          {selectionMode && selectedIds.length > 0 && (
+            <Button 
+              danger 
+              type="primary" 
+              icon={<DeleteOutlined />} 
+              onClick={handleBulkDelete}
+              loading={actionLoading === "bulk"}
+              className="bulk-delete-btn"
+            >
+              <span className="btn-text">Delete ({selectedIds.length})</span>
+              <span className="btn-text-mobile">({selectedIds.length})</span>
+            </Button>
+          )}
+
+          {selectionMode && (
+            <div className="mobile-select-all">
+              <input 
+                type="checkbox" 
+                id="mobile-select-all-checkbox"
+                checked={selectedIds.length === filteredTransactions.length && filteredTransactions.length > 0}
+                onChange={() => toggleSelectAll(filteredTransactions)}
+              />
+              <label htmlFor="mobile-select-all-checkbox">All</label>
+            </div>
+          )}
+        </div>
+      </div>
 
       <div className="transaction-table-wrapper">
         <table className="transaction-table">
           <thead>
             <tr>
+              {selectionMode && (
+                <th style={{ width: 40 }}>
+                  <input 
+                    type="checkbox" 
+                    checked={selectedIds.length === filteredTransactions.length && filteredTransactions.length > 0}
+                    onChange={() => toggleSelectAll(filteredTransactions)}
+                  />
+                </th>
+              )}
               <th>Date</th>
               <th>Category</th>
               <th>Description</th>
@@ -188,8 +297,17 @@ export default function TransactionList({
             </tr>
           </thead>
           <tbody>
-            {transactions.map((t) => (
-              <tr key={t.id} className={`transaction-row ${t.type.toLowerCase()}`} id={`tx-${t.id}`}>
+            {filteredTransactions.map((t) => (
+              <tr key={t.id} className={`transaction-row ${t.type.toLowerCase()} ${selectedIds.includes(t.id) ? 'selected' : ''}`} id={`tx-${t.id}`}>
+                {selectionMode && (
+                  <td className="col-checkbox">
+                    <input 
+                      type="checkbox" 
+                      checked={selectedIds.includes(t.id)} 
+                      onChange={() => toggleSelect(t.id)} 
+                    />
+                  </td>
+                )}
                 <td className="col-date">{formatDate(t.date)}</td>
                 <td className="col-category">{t.category}</td>
                 <td className="col-description">{t.description || "—"}</td>
@@ -391,8 +509,17 @@ export default function TransactionList({
 
       {/* Mobile Card View */}
       <div className="transaction-cards" id="transaction-cards-mobile">
-        {transactions.map((t) => (
-          <div key={t.id} className={`transaction-card ${t.type.toLowerCase()}`}>
+        {filteredTransactions.map((t) => (
+          <div key={t.id} className={`transaction-card ${t.type.toLowerCase()} ${selectedIds.includes(t.id) ? 'selected' : ''}`}>
+            {selectionMode && (
+              <div className="card-selection-overlay" onClick={() => toggleSelect(t.id)}>
+                <input 
+                  type="checkbox" 
+                  checked={selectedIds.includes(t.id)} 
+                  onChange={() => {}} // Handled by div click
+                />
+              </div>
+            )}
             {editingId === t.id ? (
               <div className="card-edit-grid">
                 <div className="form-group">

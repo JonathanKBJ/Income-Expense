@@ -63,6 +63,7 @@ func New(
 				r.Post("/batch", txHandler.CreateTransactionsBatch)
 				r.Patch("/{id}", txHandler.UpdateTransaction)
 				r.Delete("/{id}", txHandler.DeleteTransaction)
+				r.Delete("/batch", txHandler.DeleteTransactionsBatch)
 			})
 
 			// Category routes

@@ -394,6 +394,41 @@ func (r *TransactionRepository) Delete(ctx context.Context, id, groupID string) 
 	return nil
 }
 
+// DeleteBatch removes multiple transactions by their IDs if they belong to the specified group.
+func (r *TransactionRepository) DeleteBatch(ctx context.Context, ids []string, groupID string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	// Build query with IN clause
+	placeholders := make([]string, len(ids))
+	args := make([]interface{}, len(ids)+1)
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	args[len(ids)] = groupID
+
+	query := fmt.Sprintf("DELETE FROM transactions WHERE id IN (%s) AND group_id = ?", 
+		strings.Join(placeholders, ", "))
+
+	result, err := r.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to delete transactions in batch: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("no transactions found to delete")
+	}
+
+	return nil
+}
+
 // GetAnnualSummary retrieves and aggregates all transactions for a given year and group.
 func (r *TransactionRepository) GetAnnualSummary(ctx context.Context, year int, groupID string) (*models.AnnualSummaryResponse, error) {
 	startDate := fmt.Sprintf("%04d-01-01", year)
