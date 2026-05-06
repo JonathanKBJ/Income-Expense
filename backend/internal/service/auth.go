@@ -7,6 +7,7 @@ import (
 	"expense-tracker/internal/models"
 	"expense-tracker/internal/repository"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"time"
@@ -27,11 +28,11 @@ type AuthService struct {
 func NewAuthService(userRepo *repository.UserRepository, groupRepo *repository.GroupRepository) *AuthService {
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
-		jwtSecret = "default_jwt_secret" // Fallback for dev
+		log.Fatal("JWT_SECRET environment variable is required and must not be empty")
 	}
 	pepper := os.Getenv("PEPPER_SECRET")
 	if pepper == "" {
-		pepper = "default_pepper_key" // Fallback for dev
+		log.Fatal("PEPPER_SECRET environment variable is required and must not be empty")
 	}
 
 	// Load admin usernames from env: comma-separated list e.g. "admin,adminkb"
@@ -44,10 +45,8 @@ func NewAuthService(userRepo *repository.UserRepository, groupRepo *repository.G
 			}
 		}
 	}
-	// Default fallback for dev (should be overridden in production via env)
 	if len(adminUsernames) == 0 {
-		adminUsernames["admin"] = true
-		adminUsernames["adminkb"] = true
+		log.Fatal("ADMIN_USERNAMES environment variable is required and must not be empty")
 	}
 
 	return &AuthService{
