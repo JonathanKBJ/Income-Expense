@@ -38,7 +38,7 @@ const getAntdTheme = (isDark: boolean) => ({
 // on the login page and cannot trigger a 401 → reload loop.
 function AuthenticatedApp() {
   const { t, language, setLanguage } = useLanguage();
-  const { mode, toggleTheme, isDark } = useTheme();
+  const { toggleTheme, isDark } = useTheme();
 
   const [activePage, setActivePage] = useState<Page>(() => {
     return (localStorage.getItem("active_page") as Page) || "dashboard";
