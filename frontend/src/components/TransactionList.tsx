@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Modal, Select, InputNumber, Upload, Button, message } from "antd";
-import { FileImageOutlined, PictureOutlined, DeleteOutlined } from "@ant-design/icons";
+import { FileImageOutlined, DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import type {
   Transaction,
   UpdateTransactionRequest,
@@ -105,7 +105,7 @@ export default function TransactionList({
       setEditStatus("PAID");
       setEditPaidAmount(editAmount);
       return false;
-    } catch (err) {
+    } catch {
       message.error("Failed to process image");
       return false;
     }
@@ -359,22 +359,7 @@ export default function TransactionList({
                         ]}
                       />
                     ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <StatusBadge status={t.status} />
-                      {t.receiptImage && (
-                        <Button 
-                          size="small" 
-                          type="text" 
-                          icon={<FileImageOutlined />} 
-                          className="receipt-icon-btn-styled"
-                          onClick={() => {
-                            setViewerImage(t.receiptImage!);
-                            setViewerOpen(true);
-                          }}
-                          title="View Receipt"
-                        />
-                      )}
-                    </div>
                     )
                   ) : (
                     <span className="na-text">—</span>
@@ -393,54 +378,57 @@ export default function TransactionList({
                           step={0.01}
                           precision={2}
                         />
-                        {!editReceiptImage ? (
-                          <Upload
-                            accept="image/*"
-                            showUploadList={false}
-                            beforeUpload={handleEditImageUpload}
-                          >
-                            <Button size="small" icon={<PictureOutlined />} className="add-receipt-inline-btn">
-                              Receipt
-                            </Button>
-                          </Upload>
-                        ) : (
-                          <div className="receipt-status-inline">
-                            <span className="receipt-ok">OK</span>
-                            <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={() => setEditReceiptImage(undefined)} />
-                          </div>
-                        )}
                       </div>
                     ) : (
                       formatCurrency(t.paidAmount)
                     )
                   ) : (
-                    editingId === t.id ? (
-                       <div className="edit-paid-cell">
-                         {!editReceiptImage ? (
-                           <Upload
-                             accept="image/*"
-                             showUploadList={false}
-                             beforeUpload={handleEditImageUpload}
-                           >
-                             <Button size="small" icon={<PictureOutlined />} className="add-receipt-inline-btn">
-                               Receipt
-                             </Button>
-                           </Upload>
-                         ) : (
-                           <div className="receipt-status-inline">
-                             <span className="receipt-ok">OK</span>
-                             <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={() => setEditReceiptImage(undefined)} />
-                           </div>
-                         )}
-                       </div>
-                    ) : (
-                      <span className="na-text">—</span>
-                    )
+                    <span className="na-text">—</span>
                   )}
                 </td>
                 <td className="col-actions">
                   {editingId === t.id ? (
                     <div className="action-btns">
+                      {editReceiptImage ? (
+                        <>
+                          <button
+                            className="action-btn view-receipt"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setViewerImage(editReceiptImage);
+                              setViewerOpen(true);
+                            }}
+                            title="View Receipt"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                              <circle cx="12" cy="12" r="3" />
+                            </svg>
+                          </button>
+                          <button
+                            className="action-btn delete"
+                            onClick={() => setEditReceiptImage(undefined)}
+                            title="Remove Receipt"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <polyline points="3 6 5 6 21 6" />
+                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                            </svg>
+                          </button>
+                        </>
+                      ) : (
+                        <Upload accept="image/*" showUploadList={false} beforeUpload={handleEditImageUpload}>
+                          <button
+                            className="action-btn view-receipt"
+                            title="Attach Receipt"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <line x1="12" y1="5" x2="12" y2="19" />
+                              <line x1="5" y1="12" x2="19" y2="12" />
+                            </svg>
+                          </button>
+                        </Upload>
+                      )}
                       <button
                         className="action-btn save"
                         onClick={() => handleSave(t)}
@@ -556,34 +544,55 @@ export default function TransactionList({
                     </div>
                     <div className="form-group">
                       <label>Paid Amount</label>
-                      <InputNumber
-                        className="antd-input-number-full"
-                        value={editPaidAmount}
-                        onChange={(val) => setEditPaidAmount(val || 0)}
-                        min={0}
-                        precision={2}
-                      />
+                      <div className="paid-amount-row">
+                        <InputNumber
+                          className="antd-input-number-full"
+                          value={editPaidAmount}
+                          onChange={(val) => setEditPaidAmount(val || 0)}
+                          min={0}
+                          precision={2}
+                        />
+                        <div className="receipt-actions-inline">
+                          {editReceiptImage ? (
+                            <>
+                              <Button size="small" type="text" icon={<FileImageOutlined />}
+                                onClick={() => { setViewerImage(editReceiptImage); setViewerOpen(true); }}
+                                title="View Receipt" />
+                              <Button size="small" type="text" danger icon={<DeleteOutlined />}
+                                onClick={() => setEditReceiptImage(undefined)}
+                                title="Remove Receipt" />
+                            </>
+                          ) : (
+                            <Upload accept="image/*" showUploadList={false} beforeUpload={handleEditImageUpload}>
+                              <Button size="small" type="text" icon={<PlusOutlined />} title="Attach Receipt" />
+                            </Upload>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </>
                 )}
-                <div className="form-group full-width" style={{ marginTop: '4px' }}>
-                  {!editReceiptImage ? (
-                    <Upload
-                      accept="image/*"
-                      showUploadList={false}
-                      beforeUpload={handleEditImageUpload}
-                    >
-                      <Button block icon={<PictureOutlined />}>
-                        Upload Receipt
-                      </Button>
-                    </Upload>
-                  ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px', background: 'rgba(34, 197, 94, 0.1)', borderRadius: '4px' }}>
-                      <span style={{ color: '#22c55e', fontWeight: 600 }}>Receipt Attached</span>
-                      <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={() => setEditReceiptImage(undefined)} />
+                {!isExpense(t) && (
+                  <div className="form-group">
+                    <label>Receipt</label>
+                    <div className="receipt-actions-inline">
+                      {editReceiptImage ? (
+                        <>
+                          <Button size="small" type="text" icon={<FileImageOutlined />}
+                            onClick={() => { setViewerImage(editReceiptImage); setViewerOpen(true); }}
+                            title="View Receipt" />
+                          <Button size="small" type="text" danger icon={<DeleteOutlined />}
+                            onClick={() => setEditReceiptImage(undefined)}
+                            title="Remove Receipt" />
+                        </>
+                      ) : (
+                        <Upload accept="image/*" showUploadList={false} beforeUpload={handleEditImageUpload}>
+                          <Button size="small" type="text" icon={<PlusOutlined />} title="Attach Receipt" />
+                        </Upload>
+                      )}
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
                 <div className="card-actions" style={{ justifyContent: 'flex-end', marginTop: '8px' }}>
                   <button className="action-btn save" onClick={() => handleSave(t)} disabled={actionLoading === t.id}>Save</button>
                   <button className="action-btn cancel" onClick={() => setEditingId(null)}>Cancel</button>
@@ -609,53 +618,59 @@ export default function TransactionList({
                 {t.description && <div className="card-desc">{t.description}</div>}
 
                 <div className="card-footer">
-                  <div className="card-status-info">
-                    {isExpense(t) ? (
-                      <>
+                  <div className="card-footer-top">
+                    <div className="card-status-badge">
+                      {isExpense(t) ? (
                         <StatusBadge status={t.status} />
-                        <div className="card-paid-info">
-                          <span className="card-paid-label">Paid: </span>
-                          <span className="card-paid-value">{formatCurrency(t.paidAmount)}</span>
-                        </div>
-                      </>
-                    ) : (
-                      <span className="na-text">—</span>
-                    )}
-                  </div>
-                  <div className="card-actions" style={{ gap: '8px' }}>
-                    {t.receiptImage && (
-                      <Button 
-                        icon={<FileImageOutlined />} 
-                        onClick={() => {
-                          setViewerImage(t.receiptImage!);
-                          setViewerOpen(true);
-                        }}
-                        className="mobile-view-receipt-btn"
+                      ) : (
+                        <span className="na-text">—</span>
+                      )}
+                    </div>
+                    <div className="card-actions" style={{ gap: '8px' }}>
+                      {t.receiptImage && (
+                        <button
+                          className="action-btn view-receipt"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setViewerImage(t.receiptImage!);
+                            setViewerOpen(true);
+                          }}
+                          title="View Receipt"
+                        >
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                            <circle cx="12" cy="12" r="3" />
+                          </svg>
+                        </button>
+                      )}
+                      <button
+                        className="action-btn edit"
+                        onClick={() => startEdit(t)}
+                        disabled={actionLoading === t.id}
                       >
-                        Receipt
-                      </Button>
-                    )}
-                    <button
-                      className="action-btn edit"
-                      onClick={() => startEdit(t)}
-                      disabled={actionLoading === t.id}
-                    >
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                      </svg>
-                    </button>
-                    <button
-                      className="action-btn delete"
-                      onClick={() => handleDelete(t.id)}
-                      disabled={actionLoading === t.id}
-                    >
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polyline points="3 6 5 6 21 6" />
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                      </svg>
-                    </button>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                        </svg>
+                      </button>
+                      <button
+                        className="action-btn delete"
+                        onClick={() => handleDelete(t.id)}
+                        disabled={actionLoading === t.id}
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
+                  {isExpense(t) && (
+                    <div className="card-paid-info">
+                      <span className="card-paid-label">Paid: </span>
+                      <span className="card-paid-value">{formatCurrency(t.paidAmount)}</span>
+                    </div>
+                  )}
                 </div>
               </>
             )}

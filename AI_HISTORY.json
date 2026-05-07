@@ -229,6 +229,17 @@
   },
   {
     "date": "2026-05-07",
+    "scope": "[Frontend]",
+    "task": "Paid cell UX fix: Receipt buttons in edit mode redesigned to prevent layout overflow in desktop table and mobile card",
+    "files_touched": [
+      "frontend/src/components/TransactionList.tsx",
+      "frontend/src/App.css"
+    ],
+    "logic_changed": "Desktop Paid cell (.edit-paid-cell): switched from flex-direction:column to flex-direction:row so InputNumber and receipt buttons share one horizontal row. When receipt IS attached: replaced 'OK' text badge with FileImageOutlined 'View' button (opens viewer modal) + DeleteOutlined danger button (removes receipt) — both type='text' size='small'. When NO receipt: replaced wide 'Receipt' label button with compact PlusOutlined icon button. Mobile card-edit-grid: for EXPENSE, receipt controls now live inline inside the Paid Amount row (.paid-amount-row flex container) instead of a separate full-width block below. For INCOME, receipt section kept as compact form-group with same icon-only buttons. Removed PictureOutlined import (no longer used). Removed CSS: .add-receipt-inline-btn, .receipt-status-inline, .receipt-ok. Added CSS: .receipt-actions-inline (flex row gap:2px), .paid-amount-row, .edit-paid-cell.income-edit-receipt.",
+    "ai_warning": "The receipt-actions-inline pattern (View + Delete when attached, PlusOutlined Upload when empty) is duplicated 4 times in TransactionList.tsx (desktop EXPENSE, desktop INCOME, mobile EXPENSE, mobile INCOME). If receipt button behavior changes, update ALL four occurrences. The plus icon button uses type='text' which may be hard to discover for users expecting a visible upload button — monitor UX feedback. paid-amount-row uses flex:1 on InputNumber to fill available space alongside receipt buttons."
+  },
+  {
+    "date": "2026-05-07",
     "scope": "[Documentation]",
     "task": "Project configuration and AI guidance: CLAUDE.md architecture docs, AI history protocol, audit report",
     "files_touched": [

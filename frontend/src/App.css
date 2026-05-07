@@ -696,41 +696,37 @@
 
 .edit-paid-cell {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-  min-width: 100px;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-end;
 }
 
 .edit-paid-cell .edit-input-number {
-  width: 100% !important;
+  width: 90px !important;
 }
 
-.add-receipt-inline-btn {
-  font-size: 10px !important;
-  height: 22px !important;
-  padding: 0 8px !important;
-  width: 100%;
-  background: rgba(59, 130, 246, 0.1) !important;
-  border-color: rgba(59, 130, 246, 0.2) !important;
-  color: var(--blue-400) !important;
+.edit-paid-cell.income-edit-receipt {
+  min-width: auto;
 }
 
-.receipt-status-inline {
+.receipt-actions-inline {
   display: flex;
   align-items: center;
-  gap: 4px;
-  justify-content: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+/* Mobile: Paid Amount + receipt buttons in one row */
+.paid-amount-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   width: 100%;
 }
 
-.receipt-ok {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--green-400);
-  background: var(--green-glow);
-  padding: 2px 6px;
-  border-radius: 4px;
+.paid-amount-row .ant-input-number {
+  flex: 1;
 }
 
 .action-btn.view-receipt {
@@ -1264,21 +1260,23 @@
 
 .card-footer {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
   padding-top: 12px;
   border-top: 1px solid var(--border-subtle);
+}
+
+.card-footer-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
 }
 
 .card-actions {
   display: flex;
   gap: 8px;
-}
-
-.card-status-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
 }
 
 .card-paid-label {
@@ -1324,29 +1322,24 @@
    ============================================================================= */
 .hamburger-btn {
   position: fixed;
-  top: 16px;
+  top: 14px;
   left: 16px;
   z-index: 200;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 42px;
-  height: 42px;
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-secondary);
-  opacity: 0.85;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  color: var(--text-secondary);
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: all var(--transition-normal);
+  transition: all var(--transition-fast);
 }
 .hamburger-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text-primary);
-  border-color: var(--border-light);
-  transform: scale(1.05);
+  background: rgba(128, 128, 128, 0.1);
+  color: var(--blue-400);
 }
 
 /* Shift header content to make room for hamburger & optimize layout */
