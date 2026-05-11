@@ -80,6 +80,48 @@ CREATE INDEX IF NOT EXISTS idx_categories_group ON categories(group_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_global_unique ON categories(name, type) WHERE group_id IS NULL AND user_id IS NULL;
 `
 
+// createActivityLogTable is the DDL for the activity_log table (Phase 1: Group Awareness).
+const createActivityLogTable = `
+CREATE TABLE IF NOT EXISTS activity_log (
+    id         TEXT PRIMARY KEY,
+    group_id   TEXT NOT NULL,
+    user_id    TEXT NOT NULL,
+    action     TEXT NOT NULL CHECK (action IN (
+        'CREATE_TRANSACTION', 'UPDATE_TRANSACTION', 'DELETE_TRANSACTION',
+        'CREATE_CATEGORY', 'UPDATE_CATEGORY', 'DELETE_CATEGORY',
+        'MEMBER_JOINED', 'MEMBER_LEFT', 'GROUP_CREATED'
+    )),
+    entity_type TEXT NOT NULL,
+    entity_id   TEXT,
+    details     TEXT,
+    created_at  TEXT NOT NULL,
+    FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+`
+
+const createActivityLogIndex = `
+CREATE INDEX IF NOT EXISTS idx_activity_log_group ON activity_log(group_id, created_at);
+`
+
+// createGroupInvitesTable is the DDL for the group_invites table (Phase 2: Self-Service).
+const createGroupInvitesTable = `
+CREATE TABLE IF NOT EXISTS group_invites (
+    id         TEXT PRIMARY KEY,
+    group_id   TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    code       TEXT UNIQUE NOT NULL,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+);
+`
+
+const createGroupInvitesIndex = `
+CREATE INDEX IF NOT EXISTS idx_group_invites_code ON group_invites(code);
+`
+
 // defaultCategories are seeded on first migration using INSERT OR IGNORE.
 var defaultCategories = map[string][]string{
 	"INCOME": {
@@ -121,6 +163,8 @@ func (d *DB) Migrate() error {
 		{"group_members", createGroupMembersTable},
 		{"transactions", createTransactionsTable},
 		{"categories", createCategoriesTable},
+		{"activity_log", createActivityLogTable},
+		{"group_invites", createGroupInvitesTable},
 	}
 
 	for _, t := range tables {
@@ -176,6 +220,21 @@ func (d *DB) Migrate() error {
 	// For existing ones, we might need a more complex migration if we want to enforce it.
 	// For now, let's keep it simple.
 
+	// Migration for group_members to add role column (Phase 1: Group Awareness)
+	var hasRole int
+	_ = d.QueryRowContext(ctx, "SELECT count(*) FROM pragma_table_info('group_members') WHERE name='role'").Scan(&hasRole)
+	if hasRole == 0 {
+		// Add role column with default 'MEMBER'
+		_, _ = d.ExecContext(ctx, `ALTER TABLE group_members ADD COLUMN role TEXT NOT NULL DEFAULT 'EDITOR' CHECK (role IN ('OWNER', 'EDITOR', 'VIEWER'))`)
+		// Promote the first member of each group to OWNER
+		_, _ = d.ExecContext(ctx, `
+			UPDATE group_members SET role = 'OWNER'
+			WHERE rowid IN (
+				SELECT MIN(rowid) FROM group_members GROUP BY group_id
+			)
+		`)
+	}
+
 	// Create indexes
 	if _, err := d.ExecContext(ctx, createIndexes); err != nil {
 		// If index creation fails due to existing duplicates, we handle that by cleaning up duplicates first
@@ -197,6 +256,14 @@ func (d *DB) Migrate() error {
 	// Re-try create indexes (in case it failed above)
 	if _, err := d.ExecContext(ctx, createIndexes); err != nil {
 		return fmt.Errorf("failed to create indexes: %w", err)
+	}
+
+	// Create new feature indexes (Phase 1: activity_log, Phase 2: group_invites)
+	if _, err := d.ExecContext(ctx, createActivityLogIndex); err != nil {
+		return fmt.Errorf("failed to create activity_log index: %w", err)
+	}
+	if _, err := d.ExecContext(ctx, createGroupInvitesIndex); err != nil {
+		return fmt.Errorf("failed to create group_invites index: %w", err)
 	}
 
 	// Fix orphaned transactions and categories by assigning them to their user's primary group

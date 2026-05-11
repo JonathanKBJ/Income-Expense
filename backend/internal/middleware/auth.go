@@ -11,9 +11,10 @@ import (
 type contextKey string
 
 const (
-	UserIDKey   contextKey = "userID"
-	UserRoleKey contextKey = "userRole"
-	GroupIDKey  contextKey = "groupID"
+	UserIDKey     contextKey = "userID"
+	UserRoleKey   contextKey = "userRole"
+	GroupIDKey    contextKey = "groupID"
+	GroupRoleKey  contextKey = "groupRole"
 )
 
 // AuthMiddleware validates JWT token and adds user info to context.
@@ -42,6 +43,7 @@ func AuthMiddleware(authService *service.AuthService) func(http.Handler) http.Ha
 			sub, _ := claims["sub"].(string)
 			role, _ := claims["role"].(string)
 			groupId, _ := claims["groupId"].(string)
+			groupRole, _ := claims["groupRole"].(string)
 
 			if sub == "" || role == "" {
 				http.Error(w, "invalid token claims", http.StatusUnauthorized)
@@ -51,6 +53,7 @@ func AuthMiddleware(authService *service.AuthService) func(http.Handler) http.Ha
 			ctx := context.WithValue(r.Context(), UserIDKey, sub)
 			ctx = context.WithValue(ctx, UserRoleKey, role)
 			ctx = context.WithValue(ctx, GroupIDKey, groupId)
+			ctx = context.WithValue(ctx, GroupRoleKey, groupRole)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -79,6 +82,13 @@ func GetUserID(ctx context.Context) string {
 
 func GetGroupID(ctx context.Context) string {
 	if v := ctx.Value(GroupIDKey); v != nil {
+		return v.(string)
+	}
+	return ""
+}
+
+func GetGroupRole(ctx context.Context) string {
+	if v := ctx.Value(GroupRoleKey); v != nil {
 		return v.(string)
 	}
 	return ""

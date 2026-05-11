@@ -264,5 +264,40 @@
         "date":  "2026-05-08",
         "ai_warning":  "mobileOffset useEffect depends on [data, isMobile] — removing either breaks reset-on-navigate behavior. The chart pagination slice logic (endIndex = lastDataIndex - offset) is order-sensitive — changing slice direction breaks Older/Newer semantics. .card-selection-overlay CSS checkbox uses appearance:none with custom :checked::after ✓ glyph — changing font or size may misalign the checkmark. The 4 receipt-action patterns from commit f57eacf (View+Delete when attached, PlusOutlined when empty) remain duplicated across desktop/mobile × EXPENSE/INCOME — changes to receipt UX must update ALL four.",
         "task":  "Mobile UX: Selection mode checkboxes + MonthlyMixedChart pagination with Older/Newer buttons"
+    },
+    {
+        "date":  "2026-05-11",
+        "scope":  "[Full-Stack]",
+        "task":  "Group Collaboration feature: multi-user groups with roles (OWNER/EDITOR/VIEWER), invites, activity logging, and author tracking",
+        "files_touched":  [
+                              "backend/internal/database/schema.go",
+                              "backend/internal/models/group.go",
+                              "backend/internal/models/transaction.go",
+                              "backend/internal/repository/activity_log.go",
+                              "backend/internal/repository/group_invite.go",
+                              "backend/internal/repository/group.go",
+                              "backend/internal/repository/transaction.go",
+                              "backend/internal/middleware/group_role.go",
+                              "backend/internal/middleware/auth.go",
+                              "backend/internal/service/auth.go",
+                              "backend/internal/handlers/group.go",
+                              "backend/internal/handlers/transaction.go",
+                              "backend/internal/handlers/category.go",
+                              "backend/internal/handlers/admin.go",
+                              "backend/internal/router/router.go",
+                              "backend/cmd/server/main.go",
+                              "frontend/src/types/transaction.ts",
+                              "frontend/src/api/group.ts",
+                              "frontend/src/contexts/AuthContext.tsx",
+                              "frontend/src/components/Sidebar.tsx",
+                              "frontend/src/components/TransactionList.tsx",
+                              "frontend/src/components/GroupPage.tsx",
+                              "frontend/src/components/Dashboard.tsx",
+                              "frontend/src/App.tsx",
+                              "frontend/src/App.css",
+                              "frontend/src/translations/index.ts"
+                          ],
+        "logic_changed":  "Added role column to group_members (OWNER/EDITOR/VIEWER, default EDITOR for new joins, first member auto-promoted to OWNER via MIN(rowid)). Activity log table gated by GroupHasMultipleMembers check — no overhead for single-member/personal groups. Invite codes are UUID, single-use, 24h expiry, auto-cleaned on validation. JWT carries groupRole as snapshot at login time — users must re-login after join/leave/role-change. createdByUsername populated via SQL CASE WHEN gm.cnt > 1 subquery (CROSS JOIN counting group members) — only visible in multi-member groups. GroupRoleMiddleware applied via chi r.With() to individual write routes (EDITOR+), read routes remain open to all members. Frontend Dashboard polls every 30s when memberCount > 1 for real-time sync. GroupPage has invite generation (copy-to-clipboard), join form, leave with confirmation modal (sole-owner guard), member table with role-colored tags, and activity feed.",
+        "ai_warning":  "groupRole in JWT is a snapshot — any role change or join/leave requires re-login. Activity logging silently fails (log warning only) to avoid breaking user operations. The CROSS JOIN in transaction queries binds groupID as first param — reordering params breaks createdByUsername. LeaveGroup handler checks sole OWNER guard BEFORE logging activity. RemoveMember INSERT restores user to personal group as OWNER — changing this role breaks the ownership model. GroupPage join also triggers page reload after 1.5s delay. The .tx-author-badge CSS uses fixed 18px circle — longer usernames will be truncated to first character only."
     }
 ]

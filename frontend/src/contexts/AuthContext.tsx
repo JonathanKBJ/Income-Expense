@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { getMyGroup, type GroupInfo } from "../api/group";
 
 interface User {
   id: string;
@@ -14,6 +15,8 @@ interface AuthContextType {
   logout: () => void;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  groupInfo: GroupInfo | null;
+  refreshGroupInfo: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -21,6 +24,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [groupInfo, setGroupInfo] = useState<GroupInfo | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -35,6 +39,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLoading(false);
   }, []);
 
+  // Fetch group info when token changes (i.e., after login or restore)
+  useEffect(() => {
+    if (token) {
+      getMyGroup()
+        .then(setGroupInfo)
+        .catch(() => setGroupInfo(null));
+    } else {
+      setGroupInfo(null);
+    }
+  }, [token]);
+
   const login = (newToken: string, newUser: User) => {
     setToken(newToken);
     setUser(newUser);
@@ -45,9 +60,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = () => {
     setToken(null);
     setUser(null);
+    setGroupInfo(null);
     localStorage.removeItem("auth_token");
     localStorage.removeItem("auth_user");
   };
+
+  const refreshGroupInfo = useCallback(async () => {
+    try {
+      const info = await getMyGroup();
+      setGroupInfo(info);
+    } catch {
+      // Silently fail — user may not be in a group
+    }
+  }, []);
 
   const isAuthenticated = !!token;
   const isAdmin = user?.role === "ADMIN";
@@ -57,7 +82,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, isAuthenticated, isAdmin }}>
+    <AuthContext.Provider value={{ user, token, login, logout, isAuthenticated, isAdmin, groupInfo, refreshGroupInfo }}>
       {children}
     </AuthContext.Provider>
   );

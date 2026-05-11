@@ -22,37 +22,39 @@ const (
 // For INCOME transactions: Status and PaidAmount are always nil/null.
 // For EXPENSE transactions: Status is required (PENDING/PAID), PaidAmount >= 0.
 type Transaction struct {
-	ID          string          `json:"id"`
-	Type        TransactionType `json:"type"`
-	Category    string          `json:"category"`
-	Description string          `json:"description"`
-	Amount      float64         `json:"amount"`
-	Date        string          `json:"date"`       // YYYY-MM-DD
-	Status      *ExpenseStatus  `json:"status"`      // nil for INCOME
-	PaidAmount  *float64        `json:"paidAmount"`  // nil for INCOME
-	GroupID     *string         `json:"groupId"`     // Owner group
-	UserID       *string         `json:"userId"`      // Creator user
-	ReceiptImage *string         `json:"receiptImage"`
-	CreatedAt    string          `json:"createdAt"`
-	UpdatedAt    string          `json:"updatedAt"`
+	ID                string          `json:"id"`
+	Type              TransactionType `json:"type"`
+	Category          string          `json:"category"`
+	Description       string          `json:"description"`
+	Amount            float64         `json:"amount"`
+	Date              string          `json:"date"`      // YYYY-MM-DD
+	Status            *ExpenseStatus  `json:"status"`     // nil for INCOME
+	PaidAmount        *float64        `json:"paidAmount"` // nil for INCOME
+	GroupID           *string         `json:"groupId"`    // Owner group
+	UserID            *string         `json:"userId"`     // Creator user
+	ReceiptImage      *string         `json:"receiptImage"`
+	CreatedByUsername *string         `json:"createdByUsername,omitempty"`
+	CreatedAt         string          `json:"createdAt"`
+	UpdatedAt         string          `json:"updatedAt"`
 }
 
 // TransactionRow is used for scanning database rows where nullable fields
 // are represented as sql.Null* types.
 type TransactionRow struct {
-	ID          string
-	Type        string
-	Category    string
-	Description string
-	Amount      float64
-	Date        string
-	Status      sql.NullString
-	PaidAmount  sql.NullFloat64
-	GroupID     sql.NullString
-	UserID       sql.NullString
-	ReceiptImage sql.NullString
-	CreatedAt    string
-	UpdatedAt    string
+	ID                string
+	Type              string
+	Category          string
+	Description       string
+	Amount            float64
+	Date              string
+	Status            sql.NullString
+	PaidAmount        sql.NullFloat64
+	GroupID           sql.NullString
+	UserID            sql.NullString
+	ReceiptImage      sql.NullString
+	CreatedByUsername sql.NullString
+	CreatedAt         string
+	UpdatedAt         string
 }
 
 // ToTransaction converts a database row representation to the domain model.
@@ -87,10 +89,15 @@ func (r *TransactionRow) ToTransaction() Transaction {
 		val := r.UserID.String
 		t.UserID = &val
 	}
-	
+
 	if r.ReceiptImage.Valid {
 		val := r.ReceiptImage.String
 		t.ReceiptImage = &val
+	}
+
+	if r.CreatedByUsername.Valid {
+		val := r.CreatedByUsername.String
+		t.CreatedByUsername = &val
 	}
 
 	return t
@@ -105,17 +112,17 @@ type CreateTransactionRequest struct {
 	Description string          `json:"description"`
 	Amount      float64         `json:"amount"`
 	Date        string          `json:"date"`
-	Status       *ExpenseStatus  `json:"status,omitempty"`
-	PaidAmount   *float64        `json:"paidAmount,omitempty"`
-	ReceiptImage *string         `json:"receiptImage,omitempty"`
+	Status      *ExpenseStatus  `json:"status,omitempty"`
+	PaidAmount  *float64        `json:"paidAmount,omitempty"`
+	ReceiptImage *string        `json:"receiptImage,omitempty"`
 }
 
 // UpdateTransactionRequest is the payload for PATCH /api/transactions/{id}.
 type UpdateTransactionRequest struct {
-	Amount     *float64       `json:"amount,omitempty"`
-	Status       *ExpenseStatus `json:"status,omitempty"`
-	PaidAmount   *float64       `json:"paidAmount,omitempty"`
-	ReceiptImage *string        `json:"receiptImage,omitempty"`
+	Amount      *float64       `json:"amount,omitempty"`
+	Status      *ExpenseStatus `json:"status,omitempty"`
+	PaidAmount  *float64       `json:"paidAmount,omitempty"`
+	ReceiptImage *string       `json:"receiptImage,omitempty"`
 }
 
 // TransactionSummary holds aggregated dashboard metrics for a given month.

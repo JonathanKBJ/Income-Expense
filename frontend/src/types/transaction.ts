@@ -21,6 +21,7 @@ interface BaseTransaction {
   date: string; // YYYY-MM-DD
   userId?: string;
   receiptImage?: string;
+  createdByUsername?: string; // only populated in multi-member groups
   createdAt: string;
   updatedAt: string;
 }

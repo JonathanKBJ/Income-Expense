@@ -13,6 +13,7 @@ export interface TranslationKeys {
     logout: string;
     login: string;
     register: string;
+    myGroup: string;
     copyright: string;
   };
   dashboard: {
@@ -43,6 +44,7 @@ export const translations: Record<Language, TranslationKeys> = {
       logout: "Logout",
       login: "Login",
       register: "Register",
+      myGroup: "My Group",
       copyright: "Monthly Expense Tracker",
     },
     dashboard: {
@@ -74,6 +76,7 @@ export const translations: Record<Language, TranslationKeys> = {
       logout: "ออกจากระบบ",
       login: "เข้าสู่ระบบ",
       register: "ลงชื่อเข้าใช้",
+      myGroup: "กลุ่มของฉัน",
       copyright: "ระบบบันทึกรายรับ-รายจ่ายรายเดือน",
     },
     dashboard: {

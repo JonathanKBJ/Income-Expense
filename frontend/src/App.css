@@ -1110,6 +1110,22 @@
   color: var(--text-secondary);
 }
 
+.tx-author-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--blue-600, #2563eb);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: 6px;
+  vertical-align: middle;
+  cursor: default;
+}
+
 /* =============================================================================
    FOOTER
    ============================================================================= */
@@ -1871,5 +1887,127 @@
   .copy-modal-picker-row .ant-btn {
     width: 100%;
     margin-top: 4px;
+  }
+}
+
+/* ─── Group Page ─────────────────────────────────────────────────────── */
+.group-page {
+  padding: 24px;
+}
+.group-page h2 {
+  color: var(--text-primary);
+  margin: 0 0 16px;
+}
+.group-header {
+  background: var(--bg-card, #1e1e2d);
+  border-radius: 12px;
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.group-header h3 {
+  margin: 0;
+  color: var(--text-primary);
+}
+.group-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 24px;
+}
+.group-section {
+  background: var(--bg-card, #1e1e2d);
+  border-radius: 12px;
+  padding: 24px;
+}
+.group-section h3 {
+  color: var(--text-primary);
+  margin-top: 0;
+}
+.group-section h4 {
+  color: var(--text-primary);
+  margin: 0 0 8px;
+}
+.group-rename-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.group-name-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.group-invite-area {
+  margin-bottom: 16px;
+}
+.group-join-area {
+  margin-bottom: 16px;
+}
+.group-join-row {
+  display: flex;
+  gap: 8px;
+}
+.group-join-row .ant-input {
+  flex: 1;
+}
+.group-leave-area {
+  margin-top: auto;
+}
+.group-activity-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+.group-activity-row {
+  display: flex;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* Group Page — Mobile */
+@media (max-width: 768px) {
+  .group-page {
+    padding: 12px;
+  }
+  .group-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin-top: 16px;
+  }
+  .group-header {
+    padding: 16px;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .group-section {
+    padding: 16px;
+  }
+  .group-rename-row {
+    flex-wrap: wrap;
+  }
+  .group-rename-row .ant-input {
+    width: 100% !important;
+    min-width: 0;
+  }
+  .group-name-row {
+    flex-wrap: wrap;
+  }
+  .group-join-row {
+    flex-direction: column;
+  }
+}
+
+/* Category Manager — Mobile */
+@media (max-width: 600px) {
+  .category-manager-section {
+    padding: 16px;
+    margin: 0 8px;
+    border-radius: 8px;
   }
 }

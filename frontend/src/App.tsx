@@ -12,6 +12,7 @@ import TransactionForm from "./components/TransactionForm";
 import TransactionList from "./components/TransactionList";
 import Sidebar from "./components/Sidebar";
 import CategoryManager from "./components/CategoryManager";
+import GroupPage from "./components/GroupPage";
 import Login from "./components/Login";
 import Register from "./components/Register";
 import AdminPanel from "./components/AdminPanel";
@@ -20,7 +21,7 @@ import { Analytics } from "@vercel/analytics/react";
 import { AUTH_EXPIRED_EVENT } from "./api/client";
 import "./App.css";
 
-type Page = "dashboard" | "annual" | "categories" | "admin";
+type Page = "dashboard" | "annual" | "categories" | "admin" | "group";
 
 const getAntdTheme = (isDark: boolean) => ({
   algorithm: isDark ? theme.darkAlgorithm : theme.defaultAlgorithm,
@@ -39,6 +40,7 @@ const getAntdTheme = (isDark: boolean) => ({
 function AuthenticatedApp() {
   const { t, language, setLanguage } = useLanguage();
   const { toggleTheme, isDark } = useTheme();
+  const { groupInfo } = useAuth();
 
   const [activePage, setActivePage] = useState<Page>(() => {
     return (localStorage.getItem("active_page") as Page) || "dashboard";
@@ -62,6 +64,7 @@ function AuthenticatedApp() {
     update,
     remove,
     removeBatch,
+    refresh,
   } = useTransactions();
 
   useEffect(() => {
@@ -71,6 +74,14 @@ function AuthenticatedApp() {
   useEffect(() => {
     localStorage.setItem("annual_year", annualYear.toString());
   }, [annualYear]);
+
+  // Poll for new data every 30s when in a multi-member group
+  const isMultiMember = groupInfo && groupInfo.memberCount > 1;
+  useEffect(() => {
+    if (!isMultiMember) return;
+    const id = setInterval(() => refresh(), 30_000);
+    return () => clearInterval(id);
+  }, [isMultiMember, refresh]);
 
   return (
     <div className="app" id="app">
@@ -146,6 +157,15 @@ function AuthenticatedApp() {
               <span className="breadcrumb-current">Admin Panel</span>
             </div>
           )}
+          {activePage === "group" && (
+            <div className="page-breadcrumb">
+              <span className="breadcrumb-parent">Settings</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+              <span className="breadcrumb-current">My Group</span>
+            </div>
+          )}
         </div>
       </header>
 
@@ -183,6 +203,7 @@ function AuthenticatedApp() {
         {activePage === "annual" && <AnnualDashboard year={annualYear} />}
         {activePage === "categories" && <CategoryManager />}
         {activePage === "admin" && <AdminPanel />}
+        {activePage === "group" && <GroupPage />}
       </main>
 
       <footer className="app-footer">

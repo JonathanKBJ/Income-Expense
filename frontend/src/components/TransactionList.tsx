@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Modal, Select, InputNumber, Upload, Button, message } from "antd";
+import { Modal, Select, InputNumber, Upload, Button, Tooltip, message } from "antd";
 import { FileImageOutlined, DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import type {
   Transaction,
@@ -309,7 +309,14 @@ export default function TransactionList({
                   </td>
                 )}
                 <td className="col-date">{formatDate(t.date)}</td>
-                <td className="col-category">{t.category}</td>
+                <td className="col-category">
+                  {t.category}
+                  {t.createdByUsername && (
+                    <Tooltip title={`Created by ${t.createdByUsername}`}>
+                      <span className="tx-author-badge">{t.createdByUsername.charAt(0).toUpperCase()}</span>
+                    </Tooltip>
+                  )}
+                </td>
                 <td className="col-description">{t.description || "—"}</td>
                 <td className="col-type">
                   <span className={`type-badge ${t.type.toLowerCase()}`}>

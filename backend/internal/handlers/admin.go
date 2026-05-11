@@ -1,23 +1,34 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"log"
+	"net/http"
+	"time"
+
 	"expense-tracker/internal/models"
 	"expense-tracker/internal/repository"
-	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 type AdminHandler struct {
-	userRepo  *repository.UserRepository
-	groupRepo *repository.GroupRepository
+	userRepo     *repository.UserRepository
+	groupRepo    *repository.GroupRepository
+	activityRepo *repository.ActivityLogRepository
 }
 
-func NewAdminHandler(userRepo *repository.UserRepository, groupRepo *repository.GroupRepository) *AdminHandler {
+func NewAdminHandler(
+	userRepo *repository.UserRepository,
+	groupRepo *repository.GroupRepository,
+	activityRepo *repository.ActivityLogRepository,
+) *AdminHandler {
 	return &AdminHandler{
-		userRepo:  userRepo,
-		groupRepo: groupRepo,
+		userRepo:     userRepo,
+		groupRepo:    groupRepo,
+		activityRepo: activityRepo,
 	}
 }
 
@@ -73,10 +84,13 @@ func (h *AdminHandler) AddMemberToGroup(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if err := h.groupRepo.AddMember(r.Context(), groupID, req.UserID); err != nil {
+	if err := h.groupRepo.AddMember(r.Context(), groupID, req.UserID, models.RoleEditor); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to add member to group")
 		return
 	}
+
+	// Log MEMBER_JOINED activity
+	h.logActivity(r.Context(), groupID, req.UserID, "MEMBER_JOINED", "group", groupID, "")
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "member added to group"})
 }
@@ -97,10 +111,35 @@ func (h *AdminHandler) RemoveMemberFromGroup(w http.ResponseWriter, r *http.Requ
 	groupID := chi.URLParam(r, "id")
 	userID := chi.URLParam(r, "userID")
 
+	// Log MEMBER_LEFT before removal
+	h.logActivity(r.Context(), groupID, userID, "MEMBER_LEFT", "group", groupID, "")
+
 	if err := h.groupRepo.RemoveMember(r.Context(), groupID, userID); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to remove member from group")
 		return
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "member removed from group"})
+}
+
+// logActivity creates an activity log entry only for multi-member groups.
+func (h *AdminHandler) logActivity(ctx context.Context, groupID, userID, action, entityType, entityID, details string) {
+	isMulti, err := h.groupRepo.GroupHasMultipleMembers(ctx, groupID)
+	if err != nil || !isMulti {
+		return
+	}
+
+	entry := &models.ActivityLogEntry{
+		ID:         uuid.New().String(),
+		GroupID:    groupID,
+		UserID:     userID,
+		Action:     action,
+		EntityType: entityType,
+		EntityID:   entityID,
+		Details:    details,
+		CreatedAt:  time.Now().UTC().Format(time.RFC3339),
+	}
+	if err := h.activityRepo.CreateEntry(ctx, entry); err != nil {
+		log.Printf("WARN: failed to log activity: %v", err)
+	}
 }

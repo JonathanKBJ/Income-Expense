@@ -25,6 +25,7 @@ func NewTransactionRepository(db *database.DB) *TransactionRepository {
 }
 
 // GetByMonthYear retrieves all transactions for a given month/year and group.
+// Includes createdByUsername only when the group has more than 1 member.
 func (r *TransactionRepository) GetByMonthYear(ctx context.Context, month, year int, groupID string) (*models.TransactionsResponse, error) {
 	// Build date range: first day of month to last day of month
 	startDate := fmt.Sprintf("%04d-%02d-01", year, month)
@@ -38,14 +39,18 @@ func (r *TransactionRepository) GetByMonthYear(ctx context.Context, month, year 
 	endDate := fmt.Sprintf("%04d-%02d-01", nextYear, nextMonth)
 
 	query := `
-		SELECT id, type, category, description, amount, date,
-		       status, paid_amount, group_id, user_id, receipt_image, created_at, updated_at
-		FROM transactions
-		WHERE date >= ? AND date < ? AND group_id = ?
-		ORDER BY date DESC, created_at DESC
+		SELECT t.id, t.type, t.category, t.description, t.amount, t.date,
+		       t.status, t.paid_amount, t.group_id, t.user_id, t.receipt_image,
+		       CASE WHEN gm.cnt > 1 THEN u.username ELSE NULL END as created_by_username,
+		       t.created_at, t.updated_at
+		FROM transactions t
+		LEFT JOIN users u ON t.user_id = u.id
+		CROSS JOIN (SELECT COUNT(*) as cnt FROM group_members WHERE group_id = ?) gm
+		WHERE t.date >= ? AND t.date < ? AND t.group_id = ?
+		ORDER BY t.date DESC, t.created_at DESC
 	`
 
-	rows, err := r.db.QueryContext(ctx, query, startDate, endDate, groupID)
+	rows, err := r.db.QueryContext(ctx, query, groupID, startDate, endDate, groupID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query transactions: %w", err)
 	}
@@ -68,6 +73,7 @@ func (r *TransactionRepository) GetByMonthYear(ctx context.Context, month, year 
 			&row.GroupID,
 			&row.UserID,
 			&row.ReceiptImage,
+			&row.CreatedByUsername,
 			&row.CreatedAt,
 			&row.UpdatedAt,
 		)
@@ -114,14 +120,18 @@ func (r *TransactionRepository) GetByMonthYear(ctx context.Context, month, year 
 // GetByID retrieves a single transaction by its ID and group ID.
 func (r *TransactionRepository) GetByID(ctx context.Context, id, groupID string) (*models.Transaction, error) {
 	query := `
-		SELECT id, type, category, description, amount, date,
-		       status, paid_amount, group_id, user_id, receipt_image, created_at, updated_at
-		FROM transactions
-		WHERE id = ? AND group_id = ?
+		SELECT t.id, t.type, t.category, t.description, t.amount, t.date,
+		       t.status, t.paid_amount, t.group_id, t.user_id, t.receipt_image,
+		       CASE WHEN gm.cnt > 1 THEN u.username ELSE NULL END as created_by_username,
+		       t.created_at, t.updated_at
+		FROM transactions t
+		LEFT JOIN users u ON t.user_id = u.id
+		CROSS JOIN (SELECT COUNT(*) as cnt FROM group_members WHERE group_id = ?) gm
+		WHERE t.id = ? AND t.group_id = ?
 	`
 
 	var row models.TransactionRow
-	err := r.db.QueryRowContext(ctx, query, id, groupID).Scan(
+	err := r.db.QueryRowContext(ctx, query, groupID, id, groupID).Scan(
 		&row.ID,
 		&row.Type,
 		&row.Category,
@@ -133,6 +143,7 @@ func (r *TransactionRepository) GetByID(ctx context.Context, id, groupID string)
 		&row.GroupID,
 		&row.UserID,
 		&row.ReceiptImage,
+		&row.CreatedByUsername,
 		&row.CreatedAt,
 		&row.UpdatedAt,
 	)
@@ -182,7 +193,7 @@ func (r *TransactionRepository) Create(ctx context.Context, req models.CreateTra
 		}
 	}
 	// For INCOME: status and paidAmount remain nil
-	
+
 	query := `
 		INSERT INTO transactions (id, type, category, description, amount, date, status, paid_amount, group_id, user_id, receipt_image, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -326,25 +337,25 @@ func (r *TransactionRepository) Update(ctx context.Context, id, groupID string, 
 	if req.Status != nil && *req.Status == models.StatusPaid && existing.Type == models.TypeExpense {
 		hasNewReceipt := req.ReceiptImage != nil && *req.ReceiptImage != ""
 		hasExistingReceipt := existing.ReceiptImage != nil && *existing.ReceiptImage != ""
-		
+
 		if !hasNewReceipt && !hasExistingReceipt {
 			return nil, fmt.Errorf("receipt image is required to set expense status to PAID")
 		}
-		
+
 		// If no paid amount provided, default to full amount when marking as PAID
 		if req.PaidAmount == nil && (existing.PaidAmount == nil || *existing.PaidAmount == 0) {
 			setClauses = append(setClauses, "paid_amount = ?")
 			args = append(args, existing.Amount)
 		}
 	}
-	
+
 	// If a receipt is being added to an expense, automatically set status to PAID
 	// Guard: only append status if it wasn't already appended above (req.Status == nil)
 	// to prevent duplicate SET clauses in the SQL query.
 	if existing.Type == models.TypeExpense && req.ReceiptImage != nil && *req.ReceiptImage != "" && req.Status == nil {
 		setClauses = append(setClauses, "status = ?")
 		args = append(args, string(models.StatusPaid))
-		
+
 		if req.PaidAmount == nil && (existing.PaidAmount == nil || *existing.PaidAmount == 0) {
 			setClauses = append(setClauses, "paid_amount = ?")
 			args = append(args, existing.Amount)
@@ -409,7 +420,7 @@ func (r *TransactionRepository) DeleteBatch(ctx context.Context, ids []string, g
 	}
 	args[len(ids)] = groupID
 
-	query := fmt.Sprintf("DELETE FROM transactions WHERE id IN (%s) AND group_id = ?", 
+	query := fmt.Sprintf("DELETE FROM transactions WHERE id IN (%s) AND group_id = ?",
 		strings.Join(placeholders, ", "))
 
 	result, err := r.db.ExecContext(ctx, query, args...)
@@ -454,7 +465,7 @@ func (r *TransactionRepository) GetAnnualSummary(ctx context.Context, year int, 
 	for i := 1; i <= 12; i++ {
 		monthlyMap[i] = &models.MonthlySummary{Month: i}
 	}
-	
+
 	categoryMap := make(map[string]*models.CategorySummary)
 
 	for rows.Next() {
@@ -474,7 +485,7 @@ func (r *TransactionRepository) GetAnnualSummary(ctx context.Context, year int, 
 		fmt.Sscanf(dateStr, "%04d-%02d-%02d", &tYear, &tMonth, &tDay)
 
 		tType := models.TransactionType(txType)
-		
+
 		// calculate active amount for expenses (pending + paid)
 		if tType == models.TypeExpense {
 			// For expenses, we just use the full amount for trend and category summaries.

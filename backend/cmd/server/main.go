@@ -46,18 +46,23 @@ func main() {
 	// Initialize layers: Repository → Service → Handler → Router
 	userRepo := repository.NewUserRepository(db.DB) // Access underlying *sql.DB
 	groupRepo := repository.NewGroupRepository(db.DB)
+	activityRepo := repository.NewActivityLogRepository(db.DB)
+	inviteRepo := repository.NewGroupInviteRepository(db.DB)
+
 	authService := service.NewAuthService(userRepo, groupRepo)
 
 	authHandler := handlers.NewAuthHandler(authService)
-	adminHandler := handlers.NewAdminHandler(userRepo, groupRepo)
+	adminHandler := handlers.NewAdminHandler(userRepo, groupRepo, activityRepo)
 
 	txRepo := repository.NewTransactionRepository(db)
-	txHandler := handlers.NewTransactionHandler(txRepo)
+	txHandler := handlers.NewTransactionHandler(txRepo, groupRepo, activityRepo)
 
 	catRepo := repository.NewCategoryRepository(db)
-	catHandler := handlers.NewCategoryHandler(catRepo)
+	catHandler := handlers.NewCategoryHandler(catRepo, groupRepo, activityRepo)
 
-	httpRouter := router.New(authService, authHandler, adminHandler, txHandler, catHandler)
+	groupHandler := handlers.NewGroupHandler(groupRepo, activityRepo, inviteRepo)
+
+	httpRouter := router.New(authService, authHandler, adminHandler, txHandler, catHandler, groupHandler)
 
 	// Configure HTTP server
 	srv := &http.Server{
@@ -76,6 +81,8 @@ func main() {
 		log.Printf("  POST   /auth/register")
 		log.Printf("  GET    /api/transactions")
 		log.Printf("  GET    /api/categories")
+		log.Printf("  GET    /api/me/group")
+		log.Printf("  GET    /api/me/activity")
 		log.Printf("  GET    /api/admin/users")
 		log.Printf("  GET    /health")
 

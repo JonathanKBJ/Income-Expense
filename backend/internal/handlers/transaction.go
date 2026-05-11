@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -12,16 +14,27 @@ import (
 	"expense-tracker/internal/repository"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 // TransactionHandler handles HTTP requests for transaction operations.
 type TransactionHandler struct {
-	repo *repository.TransactionRepository
+	repo         *repository.TransactionRepository
+	groupRepo    *repository.GroupRepository
+	activityRepo *repository.ActivityLogRepository
 }
 
-// NewTransactionHandler creates a new handler with the given repository.
-func NewTransactionHandler(repo *repository.TransactionRepository) *TransactionHandler {
-	return &TransactionHandler{repo: repo}
+// NewTransactionHandler creates a new handler with the given repositories.
+func NewTransactionHandler(
+	repo *repository.TransactionRepository,
+	groupRepo *repository.GroupRepository,
+	activityRepo *repository.ActivityLogRepository,
+) *TransactionHandler {
+	return &TransactionHandler{
+		repo:         repo,
+		groupRepo:    groupRepo,
+		activityRepo: activityRepo,
+	}
 }
 
 // GetTransactions handles GET /api/transactions?month={M}&year={Y}
@@ -141,6 +154,10 @@ func (h *TransactionHandler) CreateTransaction(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// Log activity for multi-member groups
+	h.logActivity(r.Context(), groupID, userID, "CREATE_TRANSACTION", "transaction", transaction.ID,
+		fmt.Sprintf(`{"amount":%.2f,"type":"%s","category":"%s"}`, transaction.Amount, transaction.Type, transaction.Category))
+
 	writeJSON(w, http.StatusCreated, transaction)
 }
 
@@ -189,6 +206,7 @@ func (h *TransactionHandler) UpdateTransaction(w http.ResponseWriter, r *http.Re
 	}
 
 	// Injected by AuthMiddleware
+	userID := middleware.GetUserID(r.Context())
 	groupID := middleware.GetGroupID(r.Context())
 	if groupID == "" {
 		writeError(w, http.StatusForbidden, "group identification required for this operation")
@@ -230,6 +248,10 @@ func (h *TransactionHandler) UpdateTransaction(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// Log activity for multi-member groups
+	h.logActivity(r.Context(), groupID, userID, "UPDATE_TRANSACTION", "transaction", id,
+		fmt.Sprintf(`{"amount":%.2f,"type":"%s","category":"%s"}`, updated.Amount, updated.Type, updated.Category))
+
 	writeJSON(w, http.StatusOK, updated)
 }
 
@@ -242,6 +264,7 @@ func (h *TransactionHandler) DeleteTransaction(w http.ResponseWriter, r *http.Re
 	}
 
 	// Injected by AuthMiddleware
+	userID := middleware.GetUserID(r.Context())
 	groupID := middleware.GetGroupID(r.Context())
 	if groupID == "" {
 		writeError(w, http.StatusForbidden, "group identification required for this operation")
@@ -253,6 +276,9 @@ func (h *TransactionHandler) DeleteTransaction(w http.ResponseWriter, r *http.Re
 		writeError(w, http.StatusNotFound, "transaction not found")
 		return
 	}
+
+	// Log activity for multi-member groups
+	h.logActivity(r.Context(), groupID, userID, "DELETE_TRANSACTION", "transaction", id, "")
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "transaction deleted"})
 }
@@ -286,6 +312,28 @@ func (h *TransactionHandler) DeleteTransactionsBatch(w http.ResponseWriter, r *h
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "transactions deleted successfully"})
+}
+
+// logActivity creates an activity log entry only for multi-member groups.
+func (h *TransactionHandler) logActivity(ctx context.Context, groupID, userID, action, entityType, entityID, details string) {
+	isMulti, err := h.groupRepo.GroupHasMultipleMembers(ctx, groupID)
+	if err != nil || !isMulti {
+		return
+	}
+
+	entry := &models.ActivityLogEntry{
+		ID:         uuid.New().String(),
+		GroupID:    groupID,
+		UserID:     userID,
+		Action:     action,
+		EntityType: entityType,
+		EntityID:   entityID,
+		Details:    details,
+		CreatedAt:  time.Now().UTC().Format(time.RFC3339),
+	}
+	if err := h.activityRepo.CreateEntry(ctx, entry); err != nil {
+		log.Printf("WARN: failed to log activity: %v", err)
+	}
 }
 
 // --- Response helpers ---
