@@ -1,256 +1,268 @@
 [
-  {
-    "date": "2026-04-02",
-    "scope": "[Full-Stack]",
-    "task": "Initial project scaffold: Full-stack expense tracker with Go backend, React frontend, Turso DB",
-    "files_touched": [
-      "backend/cmd/server/main.go",
-      "backend/internal/config/config.go",
-      "backend/internal/database/db.go",
-      "backend/internal/database/schema.go",
-      "backend/internal/handlers/auth.go",
-      "backend/internal/handlers/transaction.go",
-      "backend/internal/middleware/auth.go",
-      "backend/internal/models/transaction.go",
-      "backend/internal/models/user.go",
-      "backend/internal/repository/transaction.go",
-      "backend/internal/repository/user.go",
-      "backend/internal/router/router.go",
-      "backend/internal/service/auth.go",
-      "backend/go.mod",
-      "backend/.air.toml",
-      "backend/.env.example",
-      "frontend/src/App.tsx",
-      "frontend/src/main.tsx",
-      "frontend/src/api/client.ts",
-      "frontend/src/components/Dashboard.tsx",
-      "frontend/src/components/Login.tsx",
-      "frontend/src/components/Register.tsx",
-      "frontend/package.json",
-      "frontend/vite.config.ts"
-    ],
-    "logic_changed": "Established the entire layered architecture: config (custom .env parser, not godotenv) -> database (Turso/libsql with connection pool: 25 open, 5 idle, 5min lifetime) -> repository (SQL via libsql) -> service (business logic) -> handler (HTTP parsing) -> router (Chi). Frontend is a state-based SPA (no React Router) with App.tsx as the top-level state machine. Auth middleware injects userID/role/groupID into request context via custom contextKey types. Database uses UUIDs as TEXT primary keys. Server has graceful shutdown on SIGINT/SIGTERM with 30s timeout. Currency is Thai Baht.",
-    "ai_warning": "The custom .env parser in config.go only sets env vars if NOT already defined (env vars take precedence). PORT env var takes precedence over SERVER_PORT which defaults to 10000. The database schema uses migrations that ignore errors on ALTER TABLE ADD COLUMN (columns may already exist). Nullable fields (status, paidAmount, receiptImage) use sql.Null* types -- never assume they are non-null without checking .Valid."
-  },
-  {
-    "date": "2026-04-02",
-    "scope": "[Database]",
-    "task": "Category management system: DB schema with seed data, CRUD repository, and handler layers",
-    "files_touched": [
-      "backend/internal/database/schema.go",
-      "backend/internal/models/category.go",
-      "backend/internal/repository/category.go",
-      "backend/internal/handlers/category.go"
-    ],
-    "logic_changed": "Added categories table with UNIQUE(name, type, group_id, user_id) constraint. Seeded default categories: INCOME (7: Salary, Freelance, Investment, Rental, Gift, Refund, Other) and EXPENSE (11: Food & Dining through Other) using INSERT OR IGNORE for idempotency. Categories can be global (group_id IS NULL AND user_id IS NULL) or group/user-specific. GetAll query uses UNION to merge group-specific + global categories. Created partial unique index for global categories: WHERE group_id IS NULL AND user_id IS NULL. Category migration uses rename-recreate-copy-drop pattern for adding user_id column to existing tables.",
-    "ai_warning": "The UNIQUE constraint includes group_id and user_id -- different groups can have categories with the same name+type. When deleting a category, always check IsCategoryInUse() first to avoid breaking FK references. The seed runs on every migration but is idempotent. The migration for adding user_id column is complex (rename old table, create new, copy data, drop old) -- do not modify without understanding the full flow."
-  },
-  {
-    "date": "2026-04-03",
-    "scope": "[Backend]",
-    "task": "Transaction management: Full CRUD with income/expense type discrimination, batch operations, annual summaries",
-    "files_touched": [
-      "backend/internal/database/schema.go",
-      "backend/internal/models/transaction.go",
-      "backend/internal/repository/transaction.go",
-      "backend/internal/handlers/transaction.go",
-      "backend/internal/middleware/validation.go"
-    ],
-    "logic_changed": "Type-discriminated transaction system: INCOME transactions have NULL status and paidAmount (strictly enforced in validation); EXPENSE transactions default to PENDING and 0 paidAmount. Business rules: (1) Attaching receipt auto-sets status to PAID and paidAmount to full amount; (2) Setting status to PAID requires a receipt image; (3) When marking PAID without specifying paidAmount, repository defaults to full transaction amount. Batch create/delete use database transactions. Annual summary pre-initializes all 12 months to zero and aggregates by category using 'type|category' composite key. Date range queries use exclusive upper bound (date < nextMonth) to avoid off-by-one.",
-    "ai_warning": "Critical bug fixed later: Update had duplicate SET clause when status=PAID and receipt were both provided. The guard 'req.Status == nil' before receipt-auto-PAID block prevents this (see BUG_FIXES.md FIX-02). Transaction dates use string format YYYY-MM-DD with regex + time.Parse validation. Month boundary calculation: month 12 wraps to year+1 month 1. Do NOT change the date format without updating both frontend and backend."
-  },
-  {
-    "date": "2026-04-03",
-    "scope": "[Backend]",
-    "task": "Authentication system: JWT with password peppering, bcrypt hashing, admin role from env config",
-    "files_touched": [
-      "backend/internal/service/auth.go",
-      "backend/internal/handlers/auth.go",
-      "backend/internal/middleware/auth.go",
-      "backend/internal/models/user.go",
-      "backend/internal/repository/user.go",
-      "backend/internal/repository/group.go"
-    ],
-    "logic_changed": "Three-layer password security: (1) Client sends plaintext password; (2) Server peppers with SHA256(password:username:pepperSecret) where pepperSecret comes from PEPPER_SECRET env var; (3) Peppered hash is bcrypt'd with DefaultCost. Admin role determined by checking username against comma-separated ADMIN_USERNAMES env var (was hardcoded, fixed in BUG_FIXES.md FIX-04). On registration, a personal group is auto-created ('{username}'s Group') and user added as member. JWT tokens embed sub, username, role, groupId with 7-day expiry. AuthMiddleware extracts claims via comma-ok pattern to prevent panic (fixed from direct type assertion, FIX-01).",
-    "ai_warning": "JWT_SECRET, PEPPER_SECRET, and ADMIN_USERNAMES are all required -- app calls log.Fatal if missing. The peppering scheme means changing PEPPER_SECRET or a username invalidates ALL existing passwords. GroupRepository.AddMember() enforces 1-user-1-group by DELETing existing memberships first in a transaction. GenerateToken uses context.Background() instead of propagating caller context -- a known code smell. Auth middleware returns plain-text errors while handlers return JSON -- inconsistency noted in AUDIT_REPORT.md."
-  },
-  {
-    "date": "2026-04-03",
-    "scope": "[Frontend]",
-    "task": "Transaction form: Income/expense toggle, receipt image compression, batch copy from another month",
-    "files_touched": [
-      "frontend/src/components/TransactionForm.tsx",
-      "frontend/src/components/CopyTransactionsModal.tsx",
-      "frontend/src/types/transaction.ts"
-    ],
-    "logic_changed": "Type-aware form toggling between INCOME and EXPENSE modes, resetting category on switch. INCOME submissions omit status/paidAmount; EXPENSE includes both. Receipt images are client-side compressed via Canvas: max 1000x1000px, JPEG quality 0.7, converted to Base64 data URL. Adding receipt to EXPENSE auto-sets status to PAID and paidAmount to amount. Paid Amount input disabled when status is PENDING. Batch copy via CopyTransactionsModal copies transactions from another month. Form collapses by default on mobile (viewport <= 768px). Error/success states are inline with auto-dismiss.",
-    "ai_warning": "TransactionFormState is a flat object that doesn't leverage TypeScript discriminated unions -- status and paidAmount exist as strings even for INCOME mode. The compressImage function is a Promise wrapper around FileReader+Image+Canvas; errors in image loading may be hard to debug. Categories come from API but types/transaction.ts also has hardcoded INCOME_CATEGORIES/EXPENSE_CATEGORIES const arrays -- potential drift from DB-seeded defaults."
-  },
-  {
-    "date": "2026-04-03",
-    "scope": "[Backend]",
-    "task": "Admin panel and group management: User/group CRUD APIs with multi-user isolation and member operations",
-    "files_touched": [
-      "backend/internal/handlers/admin.go",
-      "backend/internal/repository/group.go",
-      "backend/internal/repository/user.go",
-      "backend/internal/middleware/auth.go",
-      "backend/internal/router/router.go",
-      "frontend/src/components/AdminPanel.tsx"
-    ],
-    "logic_changed": "Admin routes under /api/admin/* with double middleware: AuthMiddleware (JWT) + AdminOnly (role check). Endpoints: ListUsers, UpdateUserStatus (ACTIVE/INACTIVE toggle), ListGroups, GetGroupMembers, AddMemberToGroup, RemoveMemberFromGroup. RemoveMember implements 4-step transactional flow: Look up username -> DELETE from group_members -> Find personal group by name pattern '{username}'s Group' -> INSERT OR IGNORE back to personal group (ensures user always has one group). UpdateStatus checks RowsAffected and returns error on zero rows (fixed from silent 200, FIX-07).",
-    "ai_warning": "AdminOnly middleware compares role as string(enum) -- if role values change in models, comparison breaks silently. RemoveMember personal group lookup by name pattern is fragile: group renames break it. User listing for admin excludes password_hash column, which is correct. The 1-user-1-group invariant is enforced at the DB+repo level but UI should also prevent adding a user to multiple groups."
-  },
-  {
-    "date": "2026-04-21",
-    "scope": "[Frontend]",
-    "task": "Annual dashboard: Year-level summary with recharts-powered monthly and category visualizations",
-    "files_touched": [
-      "frontend/src/components/AnnualDashboard.tsx",
-      "frontend/src/components/charts/MonthlyMixedChart.tsx",
-      "frontend/src/components/charts/CategoryDonutChart.tsx",
-      "frontend/src/components/YearPicker.tsx",
-      "frontend/src/hooks/useAnnualSummary.ts"
-    ],
-    "logic_changed": "Annual analytics page fetches year-level data via GET /api/transactions/annual?year=Y. Three KPI cards: Total Income, Total Expense, Net Balance. MonthlyMixedChart: recharts BarChart with dual bars (income green, expense red) and line overlay for net balance. CategoryDonutChart: donut chart splitting expense categories with percentage labels. YearPicker persists selected year to localStorage (key: annual_year). All charts use premium dark theme color palette with CSS variables. ResponsiveContainer handles sizing.",
-    "ai_warning": "Annual summary aggregates all transactions for a year in-memory -- for large datasets this could be a memory concern. CategoryMap uses 'type|category' pipe-delimited composite key -- if pipe appears in a category name, aggregation breaks. Monthly data pre-initializes all 12 months to zero. Charts need a parent with explicit height for ResponsiveContainer to work."
-  },
-  {
-    "date": "2026-04-24",
-    "scope": "[Frontend]",
-    "task": "Auth context, API client with JWT handling, and centralized transaction management hook",
-    "files_touched": [
-      "frontend/src/contexts/AuthContext.tsx",
-      "frontend/src/api/client.ts",
-      "frontend/src/api/transactions.ts",
-      "frontend/src/api/categories.ts",
-      "frontend/src/hooks/useTransactions.ts",
-      "frontend/src/hooks/useCategories.ts"
-    ],
-    "logic_changed": "AuthContext: login/logout/isAuthenticated/isAdmin with localStorage persistence (keys: auth_token, auth_user). apiFetch attaches Bearer token from localStorage. On 401 response, dispatches custom DOM event 'auth:expired' instead of calling logout() directly -- this prevents circular re-render loops when a hook fires before auth state is confirmed. App.tsx listens for 'auth:expired' and calls logout(), re-rendering to login without hard reload. useTransactions centralizes all state: month/year filters (persisted to localStorage), CRUD operations, auto-refresh after mutations. useCategories fetches and splits into income/expense lists.",
-    "ai_warning": "The 401 handling via custom DOM event is deliberate to break circular dependency: apiFetch can't import AuthContext, and dispatching an event avoids hard reloads that cause fetch-on-login-page loops. localStorage for tokens is NOT HttpOnly -- vulnerable to XSS (mitigated by CORS config). useTransactions calls refresh() on every month/year change including initial mount. The auth:expired event is listened to in a useEffect that depends on logout function reference."
-  },
-  {
-    "date": "2026-05-05",
-    "scope": "[Backend]",
-    "task": "Chi router initialization: Complete middleware chain, CORS config, all API endpoint wiring",
-    "files_touched": [
-      "backend/internal/router/router.go",
-      "backend/internal/middleware/auth.go",
-      "backend/internal/middleware/validation.go"
-    ],
-    "logic_changed": "Middleware stack: Logger -> Recoverer -> RequestID -> RealIP -> Heartbeat(/health) -> CORS. CORS allows specific origins (Vercel production URL, localhost:3000, localhost:5173, 127.0.0.1:5173) with AllowCredentials:true -- NO wildcard (fixed from earlier '*'+credentials bug, FIX-03). API routes nested: /auth/* (public), /api/transactions/* (auth-required with all CRUD + batch + annual endpoints), /api/categories/* (auth-required), /api/admin/* (auth + admin). Chi Route() and Group() create scoped middleware. Validation enforces: INCOME must NOT have status/paidAmount; EXPENSE defaults missing status to PENDING; PAID requires paidAmount > 0 (relaxed in update path, FIX-06).",
-    "ai_warning": "CORS MaxAge is 300 seconds -- browsers cache preflight for 5 minutes, so origin changes may not take effect immediately. Heartbeat middleware hijacks /health at router level before any middleware including auth -- intentional for health checks but means /health bypasses all security. Validation error messages are user-facing: avoid leaking internal state. The writeJSON/writeError helpers are defined in handlers/transaction.go but used by all other handlers -- should be extracted to shared helpers.go."
-  },
-  {
-    "date": "2026-05-05",
-    "scope": "[Full-Stack]",
-    "task": "Critical bug fix batch: 10 issues across auth, CORS, validation, repository, and frontend (BUG_FIXES.md)",
-    "files_touched": [
-      "backend/internal/middleware/auth.go",
-      "backend/internal/repository/transaction.go",
-      "backend/internal/router/router.go",
-      "backend/internal/service/auth.go",
-      "frontend/src/api/client.ts",
-      "backend/internal/middleware/validation.go",
-      "backend/internal/repository/user.go",
-      "backend/internal/repository/category.go"
-    ],
-    "logic_changed": "FIX-01: AuthMiddleware JWT claims extraction switched to comma-ok pattern to prevent panic on malformed tokens. FIX-02: Transaction Update() added guard req.Status == nil before auto-appending status in receipt block to prevent duplicate SET clause. FIX-03: CORS switched from wildcard to explicit origin list with AllowCredentials. FIX-04: Admin role from hardcoded usernames to ADMIN_USERNAMES env var (comma-separated). FIX-05: 401 handling uncommented in apiFetch, dispatches auth:expired event for auto-logout. FIX-06: ValidateUpdateRequest relaxed to allow PAID without explicit paidAmount (repository defaults to full amount). FIX-07: UpdateStatus checks RowsAffected and returns error on zero rows. FIX-08: GetAll categories UNIONs global categories (group_id IS NULL AND user_id IS NULL). FIX-09: CreateUser timestamp unified to single now value. FIX-10: Replaced custom joinStrings with strings.Join.",
-    "ai_warning": "FIX-01 is critical: NEVER use bare type assertions on JWT claims -- panics kill the handler goroutine (Recoverer catches it but returns 500). FIX-02's guard pattern (checking req.Status == nil for duplicate prevention) is fragile -- if more fields are added to update flow, same class of bug could recur. FIX-06 creates a subtle contract: validation trusts repository to default paidAmount when marking PAID -- changing repository behavior breaks this contract. FIX-08's UNION query arg ordering is critical: groupID prepended via append([]interface{}{groupID}, args...)."
-  },
-  {
-    "date": "2026-05-05",
-    "scope": "[Frontend]",
-    "task": "Mobile UX fix: Add Transaction form responsive behavior on small screens",
-    "files_touched": [
-      "frontend/src/App.css"
-    ],
-    "logic_changed": "Transaction form defaults to collapsed state on mobile (viewport <= 768px). Added expand/collapse CSS styles. Form body uses CSS transition for smooth animation. Toggle button and title placed in section header for space efficiency.",
-    "ai_warning": "Mobile detection uses window.innerWidth in a useEffect that runs once on mount -- does NOT respond to window resize or device rotation. This is intentional to prevent jarring UX mid-interaction, but means initial state may be wrong after resize. The collapsed state hides all form fields; ensure keyboard users can still access the form when expanded."
-  },
-  {
-    "date": "2026-05-06",
-    "scope": "[Frontend]",
-    "task": "Multi-language (TH/EN i18n) and dark/light theme toggle with persisted user preferences",
-    "files_touched": [
-      "frontend/src/contexts/LanguageContext.tsx",
-      "frontend/src/contexts/ThemeContext.tsx",
-      "frontend/src/translations/index.ts",
-      "frontend/src/translations/types.ts",
-      "frontend/src/main.tsx",
-      "frontend/src/App.tsx",
-      "frontend/src/index.css",
-      "frontend/src/index.html",
-      "frontend/src/components/Sidebar.tsx"
-    ],
-    "logic_changed": "LanguageContext: stores 'th'|'en' in localStorage, exposes t via useMemo. ThemeContext: stores 'light'|'dark' in localStorage, falls back to prefers-color-scheme media query, toggles via useCallback, sets data-theme attribute on documentElement. Provider nesting: Theme > Language > Auth > AntApp. CSS uses [data-theme='dark'] and [data-theme='light'] selectors for color tokens. Ant Design ConfigProvider dynamically themed via useMemo with isDark. Kanit font applied globally. Sidebar nav uses translation keys (t.common.*). Language/theme selectors in header via Segmented and Switch components.",
-    "ai_warning": "Known issues from AUDIT_REPORT.md: (1) translations/types.ts is dead code with competing Language type definitions; (2) :root CSS duplicates all dark values also in [data-theme='dark']; (3) Breadcrumbs in App.tsx ('Performance', 'Annual Dashboard', 'Settings', 'System') are hardcoded English -- bypass i18n; (4) index.html meta color-scheme hardcoded to 'dark' -- should be 'light dark' for proper light mode; (5) Sidebar.tsx has embedded <style> block breaking CSS architecture rules."
-  },
-  {
-    "date": "2026-05-06",
-    "scope": "[Backend]",
-    "task": "Auth service hardening: Env-var-based secrets with fail-fast on missing config, no hardcoded defaults",
-    "files_touched": [
-      "backend/internal/service/auth.go",
-      "backend/.env.example"
-    ],
-    "logic_changed": "Removed all hardcoded fallback values for secrets. JWT_SECRET and PEPPER_SECRET are strictly required -- app calls log.Fatal() if missing (was 'default_jwt_secret'/'default_pepper_key'). ADMIN_USERNAMES is also strictly required. Password peppering: SHA256(password:username:pepperSecret) produces hex-encoded 64-char string, then bcrypt'd. This ensures same password across users produces different hashes (username in pepper mix), and breached bcrypt hashes are useless without the pepper secret. .env.example documents all required vars.",
-    "ai_warning": "Peppering means changing PEPPER_SECRET or a username invalidates ALL existing passwords. The sha256+bcrypt chain is computationally expensive but intentional. GenerateToken still uses context.Background() -- cannot be cancelled/timeout via context. JWT expiry hardcoded to 7 days (time.Hour * 24 * 7) -- requires code redeploy to change. If ADMIN_USERNAMES is empty/missing, app refuses to start even if no admin users are needed."
-  },
-  {
-    "date": "2026-05-06",
-    "scope": "[Frontend]",
-    "task": "Transaction list interface: Full table with inline editing, receipt preview, batch delete, responsive cards",
-    "files_touched": [
-      "frontend/src/components/TransactionList.tsx",
-      "frontend/src/components/StatusBadge.tsx",
-      "frontend/src/api/transactions.ts",
-      "frontend/src/App.css"
-    ],
-    "logic_changed": "TransactionList renders responsive table (desktop) or card grid (mobile, breakpoint 768px). Each row: type badge (INCOME/EXPENSE with color), category, description, amount, date, status (StatusBadge component), paid amount, receipt thumbnail. Inline editing: status dropdown (PENDING/PAID) triggers update(). Receipt images show as preview thumbnails. Batch selection: checkboxes for multi-select, batch delete via removeBatch(). Empty state shows illustration. Loading state via antd Spin. Desktop/mobile responsive with CSS media queries.",
-    "ai_warning": "Status dropdown for INCOME transactions should be hidden/inactive since INCOME can't have status. Batch delete sends all IDs in single DELETE /api/transactions/batch -- large selections could hit URL/body size limits. Receipt images are Base64 strings in <img> tags -- large receipts cause performance issues and DOM bloat. The StatusBadge component's color mapping should stay in sync with the ExpenseStatus type values."
-  },
-  {
-    "date": "2026-05-06",
-    "scope": "[Frontend]",
-    "task": "UI polish: Responsive header, better chart UX, and dynamic Ant Design theme colors",
-    "files_touched": [
-      "frontend/src/App.tsx",
-      "frontend/src/App.css",
-      "frontend/src/components/charts/MonthlyMixedChart.tsx",
-      "frontend/src/components/charts/CategoryDonutChart.tsx",
-      "frontend/src/components/Sidebar.tsx",
-      "frontend/src/components/Dashboard.tsx",
-      "frontend/src/components/MonthPicker.tsx"
-    ],
-    "logic_changed": "Header: logo + app name left, controls (language, theme, date pickers) right. MonthPicker/YearPicker with arrow navigation. Sidebar CSS custom properties adapt to current theme. Charts: custom tooltips with Thai Baht amounts, gradient fills for area charts, legend optimized for mobile, abbreviated month tick formatting. Ant Design ConfigProvider computes tokens dynamically: colorPrimary #3b82f6, borderRadius 12, custom bg colors per mode. Background decorative blobs (CSS pseudo-elements with blur) for premium dark aesthetic.",
-    "ai_warning": "Ant Design theme via useMemo with isDark -- all consuming components re-render on theme change. CSS .bg-blob elements use position:fixed + large blur filters that impact scroll performance on low-end devices. Chart tooltips hardcode Thai Baht symbol -- not wired to i18n. Sidebar active state relies on activePage prop string comparison -- if Page type values change, highlight silently breaks."
-  },
-  {
-    "date": "2026-05-07",
-    "scope": "[Frontend]",
-    "task": "Paid cell UX fix: Receipt buttons in edit mode redesigned to prevent layout overflow in desktop table and mobile card",
-    "files_touched": [
-      "frontend/src/components/TransactionList.tsx",
-      "frontend/src/App.css"
-    ],
-    "logic_changed": "Desktop Paid cell (.edit-paid-cell): switched from flex-direction:column to flex-direction:row so InputNumber and receipt buttons share one horizontal row. When receipt IS attached: replaced 'OK' text badge with FileImageOutlined 'View' button (opens viewer modal) + DeleteOutlined danger button (removes receipt) — both type='text' size='small'. When NO receipt: replaced wide 'Receipt' label button with compact PlusOutlined icon button. Mobile card-edit-grid: for EXPENSE, receipt controls now live inline inside the Paid Amount row (.paid-amount-row flex container) instead of a separate full-width block below. For INCOME, receipt section kept as compact form-group with same icon-only buttons. Removed PictureOutlined import (no longer used). Removed CSS: .add-receipt-inline-btn, .receipt-status-inline, .receipt-ok. Added CSS: .receipt-actions-inline (flex row gap:2px), .paid-amount-row, .edit-paid-cell.income-edit-receipt.",
-    "ai_warning": "The receipt-actions-inline pattern (View + Delete when attached, PlusOutlined Upload when empty) is duplicated 4 times in TransactionList.tsx (desktop EXPENSE, desktop INCOME, mobile EXPENSE, mobile INCOME). If receipt button behavior changes, update ALL four occurrences. The plus icon button uses type='text' which may be hard to discover for users expecting a visible upload button — monitor UX feedback. paid-amount-row uses flex:1 on InputNumber to fill available space alongside receipt buttons."
-  },
-  {
-    "date": "2026-05-07",
-    "scope": "[Documentation]",
-    "task": "Project configuration and AI guidance: CLAUDE.md architecture docs, AI history protocol, audit report",
-    "files_touched": [
-      "CLAUDE.md",
-      ".cursorrules",
-      "AI_DEVELOPMENT_GUIDE.md",
-      "BUG_FIXES.md",
-      "AUDIT_REPORT.md",
-      "backend/internal/handlers/transaction.go"
-    ],
-    "logic_changed": "CLAUDE.md documents complete architecture and dev workflow: layered backend, state-based frontend SPA, feature addition patterns (schema->models->repository->handler->router for backend; types->api->hook->component->App for frontend). Established AI_HISTORY.json protocol for compressed context tracking with targeted retrieval strategy (search by files_touched, not chronological scan). AUDIT_REPORT.md catalogued 10 code quality issues. BUG_FIXES.md documents 10 resolved bugs with fix descriptions.",
-    "ai_warning": "CLAUDE.md is authoritative over .cursorrules and AI_DEVELOPMENT_GUIDE.md. writeJSON/writeError helpers in handlers/transaction.go are used by all handlers -- extract to shared helpers.go. Auth middleware returns plain text errors while handlers return JSON -- resolve this inconsistency. Always check AUDIT_REPORT.md before major refactoring for catalogued issues."
-  }
+    {
+        "date":  "2026-04-02",
+        "scope":  "[Full-Stack]",
+        "task":  "Initial project scaffold: Full-stack expense tracker with Go backend, React frontend, Turso DB",
+        "files_touched":  [
+                              "backend/cmd/server/main.go",
+                              "backend/internal/config/config.go",
+                              "backend/internal/database/db.go",
+                              "backend/internal/database/schema.go",
+                              "backend/internal/handlers/auth.go",
+                              "backend/internal/handlers/transaction.go",
+                              "backend/internal/middleware/auth.go",
+                              "backend/internal/models/transaction.go",
+                              "backend/internal/models/user.go",
+                              "backend/internal/repository/transaction.go",
+                              "backend/internal/repository/user.go",
+                              "backend/internal/router/router.go",
+                              "backend/internal/service/auth.go",
+                              "backend/go.mod",
+                              "backend/.air.toml",
+                              "backend/.env.example",
+                              "frontend/src/App.tsx",
+                              "frontend/src/main.tsx",
+                              "frontend/src/api/client.ts",
+                              "frontend/src/components/Dashboard.tsx",
+                              "frontend/src/components/Login.tsx",
+                              "frontend/src/components/Register.tsx",
+                              "frontend/package.json",
+                              "frontend/vite.config.ts"
+                          ],
+        "logic_changed":  "Established the entire layered architecture: config (custom .env parser, not godotenv) -> database (Turso/libsql with connection pool: 25 open, 5 idle, 5min lifetime) -> repository (SQL via libsql) -> service (business logic) -> handler (HTTP parsing) -> router (Chi). Frontend is a state-based SPA (no React Router) with App.tsx as the top-level state machine. Auth middleware injects userID/role/groupID into request context via custom contextKey types. Database uses UUIDs as TEXT primary keys. Server has graceful shutdown on SIGINT/SIGTERM with 30s timeout. Currency is Thai Baht.",
+        "ai_warning":  "The custom .env parser in config.go only sets env vars if NOT already defined (env vars take precedence). PORT env var takes precedence over SERVER_PORT which defaults to 10000. The database schema uses migrations that ignore errors on ALTER TABLE ADD COLUMN (columns may already exist). Nullable fields (status, paidAmount, receiptImage) use sql.Null* types -- never assume they are non-null without checking .Valid."
+    },
+    {
+        "date":  "2026-04-02",
+        "scope":  "[Database]",
+        "task":  "Category management system: DB schema with seed data, CRUD repository, and handler layers",
+        "files_touched":  [
+                              "backend/internal/database/schema.go",
+                              "backend/internal/models/category.go",
+                              "backend/internal/repository/category.go",
+                              "backend/internal/handlers/category.go"
+                          ],
+        "logic_changed":  "Added categories table with UNIQUE(name, type, group_id, user_id) constraint. Seeded default categories: INCOME (7: Salary, Freelance, Investment, Rental, Gift, Refund, Other) and EXPENSE (11: Food \u0026 Dining through Other) using INSERT OR IGNORE for idempotency. Categories can be global (group_id IS NULL AND user_id IS NULL) or group/user-specific. GetAll query uses UNION to merge group-specific + global categories. Created partial unique index for global categories: WHERE group_id IS NULL AND user_id IS NULL. Category migration uses rename-recreate-copy-drop pattern for adding user_id column to existing tables.",
+        "ai_warning":  "The UNIQUE constraint includes group_id and user_id -- different groups can have categories with the same name+type. When deleting a category, always check IsCategoryInUse() first to avoid breaking FK references. The seed runs on every migration but is idempotent. The migration for adding user_id column is complex (rename old table, create new, copy data, drop old) -- do not modify without understanding the full flow."
+    },
+    {
+        "date":  "2026-04-03",
+        "scope":  "[Backend]",
+        "task":  "Transaction management: Full CRUD with income/expense type discrimination, batch operations, annual summaries",
+        "files_touched":  [
+                              "backend/internal/database/schema.go",
+                              "backend/internal/models/transaction.go",
+                              "backend/internal/repository/transaction.go",
+                              "backend/internal/handlers/transaction.go",
+                              "backend/internal/middleware/validation.go"
+                          ],
+        "logic_changed":  "Type-discriminated transaction system: INCOME transactions have NULL status and paidAmount (strictly enforced in validation); EXPENSE transactions default to PENDING and 0 paidAmount. Business rules: (1) Attaching receipt auto-sets status to PAID and paidAmount to full amount; (2) Setting status to PAID requires a receipt image; (3) When marking PAID without specifying paidAmount, repository defaults to full transaction amount. Batch create/delete use database transactions. Annual summary pre-initializes all 12 months to zero and aggregates by category using 'type|category' composite key. Date range queries use exclusive upper bound (date < nextMonth) to avoid off-by-one.",
+        "ai_warning":  "Critical bug fixed later: Update had duplicate SET clause when status=PAID and receipt were both provided. The guard 'req.Status == nil' before receipt-auto-PAID block prevents this (see BUG_FIXES.md FIX-02). Transaction dates use string format YYYY-MM-DD with regex + time.Parse validation. Month boundary calculation: month 12 wraps to year+1 month 1. Do NOT change the date format without updating both frontend and backend."
+    },
+    {
+        "date":  "2026-04-03",
+        "scope":  "[Backend]",
+        "task":  "Authentication system: JWT with password peppering, bcrypt hashing, admin role from env config",
+        "files_touched":  [
+                              "backend/internal/service/auth.go",
+                              "backend/internal/handlers/auth.go",
+                              "backend/internal/middleware/auth.go",
+                              "backend/internal/models/user.go",
+                              "backend/internal/repository/user.go",
+                              "backend/internal/repository/group.go"
+                          ],
+        "logic_changed":  "Three-layer password security: (1) Client sends plaintext password; (2) Server peppers with SHA256(password:username:pepperSecret) where pepperSecret comes from PEPPER_SECRET env var; (3) Peppered hash is bcrypt'd with DefaultCost. Admin role determined by checking username against comma-separated ADMIN_USERNAMES env var (was hardcoded, fixed in BUG_FIXES.md FIX-04). On registration, a personal group is auto-created ('{username}'s Group') and user added as member. JWT tokens embed sub, username, role, groupId with 7-day expiry. AuthMiddleware extracts claims via comma-ok pattern to prevent panic (fixed from direct type assertion, FIX-01).",
+        "ai_warning":  "JWT_SECRET, PEPPER_SECRET, and ADMIN_USERNAMES are all required -- app calls log.Fatal if missing. The peppering scheme means changing PEPPER_SECRET or a username invalidates ALL existing passwords. GroupRepository.AddMember() enforces 1-user-1-group by DELETing existing memberships first in a transaction. GenerateToken uses context.Background() instead of propagating caller context -- a known code smell. Auth middleware returns plain-text errors while handlers return JSON -- inconsistency noted in AUDIT_REPORT.md."
+    },
+    {
+        "date":  "2026-04-03",
+        "scope":  "[Frontend]",
+        "task":  "Transaction form: Income/expense toggle, receipt image compression, batch copy from another month",
+        "files_touched":  [
+                              "frontend/src/components/TransactionForm.tsx",
+                              "frontend/src/components/CopyTransactionsModal.tsx",
+                              "frontend/src/types/transaction.ts"
+                          ],
+        "logic_changed":  "Type-aware form toggling between INCOME and EXPENSE modes, resetting category on switch. INCOME submissions omit status/paidAmount; EXPENSE includes both. Receipt images are client-side compressed via Canvas: max 1000x1000px, JPEG quality 0.7, converted to Base64 data URL. Adding receipt to EXPENSE auto-sets status to PAID and paidAmount to amount. Paid Amount input disabled when status is PENDING. Batch copy via CopyTransactionsModal copies transactions from another month. Form collapses by default on mobile (viewport <= 768px). Error/success states are inline with auto-dismiss.",
+        "ai_warning":  "TransactionFormState is a flat object that doesn't leverage TypeScript discriminated unions -- status and paidAmount exist as strings even for INCOME mode. The compressImage function is a Promise wrapper around FileReader+Image+Canvas; errors in image loading may be hard to debug. Categories come from API but types/transaction.ts also has hardcoded INCOME_CATEGORIES/EXPENSE_CATEGORIES const arrays -- potential drift from DB-seeded defaults."
+    },
+    {
+        "date":  "2026-04-03",
+        "scope":  "[Backend]",
+        "task":  "Admin panel and group management: User/group CRUD APIs with multi-user isolation and member operations",
+        "files_touched":  [
+                              "backend/internal/handlers/admin.go",
+                              "backend/internal/repository/group.go",
+                              "backend/internal/repository/user.go",
+                              "backend/internal/middleware/auth.go",
+                              "backend/internal/router/router.go",
+                              "frontend/src/components/AdminPanel.tsx"
+                          ],
+        "logic_changed":  "Admin routes under /api/admin/* with double middleware: AuthMiddleware (JWT) + AdminOnly (role check). Endpoints: ListUsers, UpdateUserStatus (ACTIVE/INACTIVE toggle), ListGroups, GetGroupMembers, AddMemberToGroup, RemoveMemberFromGroup. RemoveMember implements 4-step transactional flow: Look up username -> DELETE from group_members -> Find personal group by name pattern '{username}'s Group' -> INSERT OR IGNORE back to personal group (ensures user always has one group). UpdateStatus checks RowsAffected and returns error on zero rows (fixed from silent 200, FIX-07).",
+        "ai_warning":  "AdminOnly middleware compares role as string(enum) -- if role values change in models, comparison breaks silently. RemoveMember personal group lookup by name pattern is fragile: group renames break it. User listing for admin excludes password_hash column, which is correct. The 1-user-1-group invariant is enforced at the DB+repo level but UI should also prevent adding a user to multiple groups."
+    },
+    {
+        "date":  "2026-04-21",
+        "scope":  "[Frontend]",
+        "task":  "Annual dashboard: Year-level summary with recharts-powered monthly and category visualizations",
+        "files_touched":  [
+                              "frontend/src/components/AnnualDashboard.tsx",
+                              "frontend/src/components/charts/MonthlyMixedChart.tsx",
+                              "frontend/src/components/charts/CategoryDonutChart.tsx",
+                              "frontend/src/components/YearPicker.tsx",
+                              "frontend/src/hooks/useAnnualSummary.ts"
+                          ],
+        "logic_changed":  "Annual analytics page fetches year-level data via GET /api/transactions/annual?year=Y. Three KPI cards: Total Income, Total Expense, Net Balance. MonthlyMixedChart: recharts BarChart with dual bars (income green, expense red) and line overlay for net balance. CategoryDonutChart: donut chart splitting expense categories with percentage labels. YearPicker persists selected year to localStorage (key: annual_year). All charts use premium dark theme color palette with CSS variables. ResponsiveContainer handles sizing.",
+        "ai_warning":  "Annual summary aggregates all transactions for a year in-memory -- for large datasets this could be a memory concern. CategoryMap uses 'type|category' pipe-delimited composite key -- if pipe appears in a category name, aggregation breaks. Monthly data pre-initializes all 12 months to zero. Charts need a parent with explicit height for ResponsiveContainer to work."
+    },
+    {
+        "date":  "2026-04-24",
+        "scope":  "[Frontend]",
+        "task":  "Auth context, API client with JWT handling, and centralized transaction management hook",
+        "files_touched":  [
+                              "frontend/src/contexts/AuthContext.tsx",
+                              "frontend/src/api/client.ts",
+                              "frontend/src/api/transactions.ts",
+                              "frontend/src/api/categories.ts",
+                              "frontend/src/hooks/useTransactions.ts",
+                              "frontend/src/hooks/useCategories.ts"
+                          ],
+        "logic_changed":  "AuthContext: login/logout/isAuthenticated/isAdmin with localStorage persistence (keys: auth_token, auth_user). apiFetch attaches Bearer token from localStorage. On 401 response, dispatches custom DOM event 'auth:expired' instead of calling logout() directly -- this prevents circular re-render loops when a hook fires before auth state is confirmed. App.tsx listens for 'auth:expired' and calls logout(), re-rendering to login without hard reload. useTransactions centralizes all state: month/year filters (persisted to localStorage), CRUD operations, auto-refresh after mutations. useCategories fetches and splits into income/expense lists.",
+        "ai_warning":  "The 401 handling via custom DOM event is deliberate to break circular dependency: apiFetch can't import AuthContext, and dispatching an event avoids hard reloads that cause fetch-on-login-page loops. localStorage for tokens is NOT HttpOnly -- vulnerable to XSS (mitigated by CORS config). useTransactions calls refresh() on every month/year change including initial mount. The auth:expired event is listened to in a useEffect that depends on logout function reference."
+    },
+    {
+        "date":  "2026-05-05",
+        "scope":  "[Backend]",
+        "task":  "Chi router initialization: Complete middleware chain, CORS config, all API endpoint wiring",
+        "files_touched":  [
+                              "backend/internal/router/router.go",
+                              "backend/internal/middleware/auth.go",
+                              "backend/internal/middleware/validation.go"
+                          ],
+        "logic_changed":  "Middleware stack: Logger -> Recoverer -> RequestID -> RealIP -> Heartbeat(/health) -> CORS. CORS allows specific origins (Vercel production URL, localhost:3000, localhost:5173, 127.0.0.1:5173) with AllowCredentials:true -- NO wildcard (fixed from earlier '*'+credentials bug, FIX-03). API routes nested: /auth/* (public), /api/transactions/* (auth-required with all CRUD + batch + annual endpoints), /api/categories/* (auth-required), /api/admin/* (auth + admin). Chi Route() and Group() create scoped middleware. Validation enforces: INCOME must NOT have status/paidAmount; EXPENSE defaults missing status to PENDING; PAID requires paidAmount > 0 (relaxed in update path, FIX-06).",
+        "ai_warning":  "CORS MaxAge is 300 seconds -- browsers cache preflight for 5 minutes, so origin changes may not take effect immediately. Heartbeat middleware hijacks /health at router level before any middleware including auth -- intentional for health checks but means /health bypasses all security. Validation error messages are user-facing: avoid leaking internal state. The writeJSON/writeError helpers are defined in handlers/transaction.go but used by all other handlers -- should be extracted to shared helpers.go."
+    },
+    {
+        "date":  "2026-05-05",
+        "scope":  "[Full-Stack]",
+        "task":  "Critical bug fix batch: 10 issues across auth, CORS, validation, repository, and frontend (BUG_FIXES.md)",
+        "files_touched":  [
+                              "backend/internal/middleware/auth.go",
+                              "backend/internal/repository/transaction.go",
+                              "backend/internal/router/router.go",
+                              "backend/internal/service/auth.go",
+                              "frontend/src/api/client.ts",
+                              "backend/internal/middleware/validation.go",
+                              "backend/internal/repository/user.go",
+                              "backend/internal/repository/category.go"
+                          ],
+        "logic_changed":  "FIX-01: AuthMiddleware JWT claims extraction switched to comma-ok pattern to prevent panic on malformed tokens. FIX-02: Transaction Update() added guard req.Status == nil before auto-appending status in receipt block to prevent duplicate SET clause. FIX-03: CORS switched from wildcard to explicit origin list with AllowCredentials. FIX-04: Admin role from hardcoded usernames to ADMIN_USERNAMES env var (comma-separated). FIX-05: 401 handling uncommented in apiFetch, dispatches auth:expired event for auto-logout. FIX-06: ValidateUpdateRequest relaxed to allow PAID without explicit paidAmount (repository defaults to full amount). FIX-07: UpdateStatus checks RowsAffected and returns error on zero rows. FIX-08: GetAll categories UNIONs global categories (group_id IS NULL AND user_id IS NULL). FIX-09: CreateUser timestamp unified to single now value. FIX-10: Replaced custom joinStrings with strings.Join.",
+        "ai_warning":  "FIX-01 is critical: NEVER use bare type assertions on JWT claims -- panics kill the handler goroutine (Recoverer catches it but returns 500). FIX-02's guard pattern (checking req.Status == nil for duplicate prevention) is fragile -- if more fields are added to update flow, same class of bug could recur. FIX-06 creates a subtle contract: validation trusts repository to default paidAmount when marking PAID -- changing repository behavior breaks this contract. FIX-08's UNION query arg ordering is critical: groupID prepended via append([]interface{}{groupID}, args...)."
+    },
+    {
+        "date":  "2026-05-05",
+        "scope":  "[Frontend]",
+        "task":  "Mobile UX fix: Add Transaction form responsive behavior on small screens",
+        "files_touched":  [
+                              "frontend/src/App.css"
+                          ],
+        "logic_changed":  "Transaction form defaults to collapsed state on mobile (viewport <= 768px). Added expand/collapse CSS styles. Form body uses CSS transition for smooth animation. Toggle button and title placed in section header for space efficiency.",
+        "ai_warning":  "Mobile detection uses window.innerWidth in a useEffect that runs once on mount -- does NOT respond to window resize or device rotation. This is intentional to prevent jarring UX mid-interaction, but means initial state may be wrong after resize. The collapsed state hides all form fields; ensure keyboard users can still access the form when expanded."
+    },
+    {
+        "date":  "2026-05-06",
+        "scope":  "[Frontend]",
+        "task":  "Multi-language (TH/EN i18n) and dark/light theme toggle with persisted user preferences",
+        "files_touched":  [
+                              "frontend/src/contexts/LanguageContext.tsx",
+                              "frontend/src/contexts/ThemeContext.tsx",
+                              "frontend/src/translations/index.ts",
+                              "frontend/src/translations/types.ts",
+                              "frontend/src/main.tsx",
+                              "frontend/src/App.tsx",
+                              "frontend/src/index.css",
+                              "frontend/src/index.html",
+                              "frontend/src/components/Sidebar.tsx"
+                          ],
+        "logic_changed":  "LanguageContext: stores 'th'|'en' in localStorage, exposes t via useMemo. ThemeContext: stores 'light'|'dark' in localStorage, falls back to prefers-color-scheme media query, toggles via useCallback, sets data-theme attribute on documentElement. Provider nesting: Theme > Language > Auth > AntApp. CSS uses [data-theme='dark'] and [data-theme='light'] selectors for color tokens. Ant Design ConfigProvider dynamically themed via useMemo with isDark. Kanit font applied globally. Sidebar nav uses translation keys (t.common.*). Language/theme selectors in header via Segmented and Switch components.",
+        "ai_warning":  "Known issues from AUDIT_REPORT.md: (1) translations/types.ts is dead code with competing Language type definitions; (2) :root CSS duplicates all dark values also in [data-theme='dark']; (3) Breadcrumbs in App.tsx ('Performance', 'Annual Dashboard', 'Settings', 'System') are hardcoded English -- bypass i18n; (4) index.html meta color-scheme hardcoded to 'dark' -- should be 'light dark' for proper light mode; (5) Sidebar.tsx has embedded <style> block breaking CSS architecture rules."
+    },
+    {
+        "date":  "2026-05-06",
+        "scope":  "[Backend]",
+        "task":  "Auth service hardening: Env-var-based secrets with fail-fast on missing config, no hardcoded defaults",
+        "files_touched":  [
+                              "backend/internal/service/auth.go",
+                              "backend/.env.example"
+                          ],
+        "logic_changed":  "Removed all hardcoded fallback values for secrets. JWT_SECRET and PEPPER_SECRET are strictly required -- app calls log.Fatal() if missing (was 'default_jwt_secret'/'default_pepper_key'). ADMIN_USERNAMES is also strictly required. Password peppering: SHA256(password:username:pepperSecret) produces hex-encoded 64-char string, then bcrypt'd. This ensures same password across users produces different hashes (username in pepper mix), and breached bcrypt hashes are useless without the pepper secret. .env.example documents all required vars.",
+        "ai_warning":  "Peppering means changing PEPPER_SECRET or a username invalidates ALL existing passwords. The sha256+bcrypt chain is computationally expensive but intentional. GenerateToken still uses context.Background() -- cannot be cancelled/timeout via context. JWT expiry hardcoded to 7 days (time.Hour * 24 * 7) -- requires code redeploy to change. If ADMIN_USERNAMES is empty/missing, app refuses to start even if no admin users are needed."
+    },
+    {
+        "date":  "2026-05-06",
+        "scope":  "[Frontend]",
+        "task":  "Transaction list interface: Full table with inline editing, receipt preview, batch delete, responsive cards",
+        "files_touched":  [
+                              "frontend/src/components/TransactionList.tsx",
+                              "frontend/src/components/StatusBadge.tsx",
+                              "frontend/src/api/transactions.ts",
+                              "frontend/src/App.css"
+                          ],
+        "logic_changed":  "TransactionList renders responsive table (desktop) or card grid (mobile, breakpoint 768px). Each row: type badge (INCOME/EXPENSE with color), category, description, amount, date, status (StatusBadge component), paid amount, receipt thumbnail. Inline editing: status dropdown (PENDING/PAID) triggers update(). Receipt images show as preview thumbnails. Batch selection: checkboxes for multi-select, batch delete via removeBatch(). Empty state shows illustration. Loading state via antd Spin. Desktop/mobile responsive with CSS media queries.",
+        "ai_warning":  "Status dropdown for INCOME transactions should be hidden/inactive since INCOME can't have status. Batch delete sends all IDs in single DELETE /api/transactions/batch -- large selections could hit URL/body size limits. Receipt images are Base64 strings in <img> tags -- large receipts cause performance issues and DOM bloat. The StatusBadge component's color mapping should stay in sync with the ExpenseStatus type values."
+    },
+    {
+        "date":  "2026-05-06",
+        "scope":  "[Frontend]",
+        "task":  "UI polish: Responsive header, better chart UX, and dynamic Ant Design theme colors",
+        "files_touched":  [
+                              "frontend/src/App.tsx",
+                              "frontend/src/App.css",
+                              "frontend/src/components/charts/MonthlyMixedChart.tsx",
+                              "frontend/src/components/charts/CategoryDonutChart.tsx",
+                              "frontend/src/components/Sidebar.tsx",
+                              "frontend/src/components/Dashboard.tsx",
+                              "frontend/src/components/MonthPicker.tsx"
+                          ],
+        "logic_changed":  "Header: logo + app name left, controls (language, theme, date pickers) right. MonthPicker/YearPicker with arrow navigation. Sidebar CSS custom properties adapt to current theme. Charts: custom tooltips with Thai Baht amounts, gradient fills for area charts, legend optimized for mobile, abbreviated month tick formatting. Ant Design ConfigProvider computes tokens dynamically: colorPrimary #3b82f6, borderRadius 12, custom bg colors per mode. Background decorative blobs (CSS pseudo-elements with blur) for premium dark aesthetic.",
+        "ai_warning":  "Ant Design theme via useMemo with isDark -- all consuming components re-render on theme change. CSS .bg-blob elements use position:fixed + large blur filters that impact scroll performance on low-end devices. Chart tooltips hardcode Thai Baht symbol -- not wired to i18n. Sidebar active state relies on activePage prop string comparison -- if Page type values change, highlight silently breaks."
+    },
+    {
+        "date":  "2026-05-07",
+        "scope":  "[Frontend]",
+        "task":  "Paid cell UX fix: Receipt buttons in edit mode redesigned to prevent layout overflow in desktop table and mobile card",
+        "files_touched":  [
+                              "frontend/src/components/TransactionList.tsx",
+                              "frontend/src/App.css"
+                          ],
+        "logic_changed":  "Desktop Paid cell (.edit-paid-cell): switched from flex-direction:column to flex-direction:row so InputNumber and receipt buttons share one horizontal row. When receipt IS attached: replaced 'OK' text badge with FileImageOutlined 'View' button (opens viewer modal) + DeleteOutlined danger button (removes receipt) — both type='text' size='small'. When NO receipt: replaced wide 'Receipt' label button with compact PlusOutlined icon button. Mobile card-edit-grid: for EXPENSE, receipt controls now live inline inside the Paid Amount row (.paid-amount-row flex container) instead of a separate full-width block below. For INCOME, receipt section kept as compact form-group with same icon-only buttons. Removed PictureOutlined import (no longer used). Removed CSS: .add-receipt-inline-btn, .receipt-status-inline, .receipt-ok. Added CSS: .receipt-actions-inline (flex row gap:2px), .paid-amount-row, .edit-paid-cell.income-edit-receipt.",
+        "ai_warning":  "The receipt-actions-inline pattern (View + Delete when attached, PlusOutlined Upload when empty) is duplicated 4 times in TransactionList.tsx (desktop EXPENSE, desktop INCOME, mobile EXPENSE, mobile INCOME). If receipt button behavior changes, update ALL four occurrences. The plus icon button uses type='text' which may be hard to discover for users expecting a visible upload button — monitor UX feedback. paid-amount-row uses flex:1 on InputNumber to fill available space alongside receipt buttons."
+    },
+    {
+        "date":  "2026-05-07",
+        "scope":  "[Documentation]",
+        "task":  "Project configuration and AI guidance: CLAUDE.md architecture docs, AI history protocol, audit report",
+        "files_touched":  [
+                              "CLAUDE.md",
+                              ".cursorrules",
+                              "AI_DEVELOPMENT_GUIDE.md",
+                              "BUG_FIXES.md",
+                              "AUDIT_REPORT.md",
+                              "backend/internal/handlers/transaction.go"
+                          ],
+        "logic_changed":  "CLAUDE.md documents complete architecture and dev workflow: layered backend, state-based frontend SPA, feature addition patterns (schema->models->repository->handler->router for backend; types->api->hook->component->App for frontend). Established AI_HISTORY.json protocol for compressed context tracking with targeted retrieval strategy (search by files_touched, not chronological scan). AUDIT_REPORT.md catalogued 10 code quality issues. BUG_FIXES.md documents 10 resolved bugs with fix descriptions.",
+        "ai_warning":  "CLAUDE.md is authoritative over .cursorrules and AI_DEVELOPMENT_GUIDE.md. writeJSON/writeError helpers in handlers/transaction.go are used by all handlers -- extract to shared helpers.go. Auth middleware returns plain text errors while handlers return JSON -- resolve this inconsistency. Always check AUDIT_REPORT.md before major refactoring for catalogued issues."
+    },
+    {
+        "files_touched":  [
+                              "frontend/src/App.css",
+                              "frontend/src/components/TransactionList.tsx",
+                              "frontend/src/components/charts/MonthlyMixedChart.tsx"
+                          ],
+        "scope":  "[Frontend]",
+        "logic_changed":  "TransactionList mobile: Added .card-selection-overlay (absolute positioned checkbox overlay with custom ✓ pseudo-element) and .selection-mode-active class (left padding 52px to accommodate checkbox). MonthlyMixedChart: Added mobileOffset state for paginated 3-month window navigation. Older button increments offset (scrolls back), Newer decrements (toward latest). Data slice uses endIndex = lastDataIndex - mobileOffset. mobileOffset resets via useEffect when data or isMobile changes. Additional mobile tweaks: compact margins, abbreviated Y-axis labels (฿Xk), smaller tick fonts, dashed Income/Expense Change lines, YAxis width fixed for mobile.",
+        "date":  "2026-05-08",
+        "ai_warning":  "mobileOffset useEffect depends on [data, isMobile] — removing either breaks reset-on-navigate behavior. The chart pagination slice logic (endIndex = lastDataIndex - offset) is order-sensitive — changing slice direction breaks Older/Newer semantics. .card-selection-overlay CSS checkbox uses appearance:none with custom :checked::after ✓ glyph — changing font or size may misalign the checkmark. The 4 receipt-action patterns from commit f57eacf (View+Delete when attached, PlusOutlined when empty) remain duplicated across desktop/mobile × EXPENSE/INCOME — changes to receipt UX must update ALL four.",
+        "task":  "Mobile UX: Selection mode checkboxes + MonthlyMixedChart pagination with Older/Newer buttons"
+    }
 ]

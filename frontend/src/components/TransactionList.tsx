@@ -498,7 +498,7 @@ export default function TransactionList({
       {/* Mobile Card View */}
       <div className="transaction-cards" id="transaction-cards-mobile">
         {filteredTransactions.map((t) => (
-          <div key={t.id} className={`transaction-card ${t.type.toLowerCase()} ${selectedIds.includes(t.id) ? 'selected' : ''}`}>
+          <div key={t.id} className={`transaction-card ${t.type.toLowerCase()} ${selectedIds.includes(t.id) ? 'selected' : ''} ${selectionMode ? 'selection-mode-active' : ''}`}>
             {selectionMode && (
               <div className="card-selection-overlay" onClick={() => toggleSelect(t.id)}>
                 <input 

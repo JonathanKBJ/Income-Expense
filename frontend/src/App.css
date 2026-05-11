@@ -1311,6 +1311,61 @@
   }
 }
 
+/* Mobile Selection Overlay & Custom Checkbox */
+.card-selection-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  cursor: pointer;
+  border-radius: var(--radius-lg);
+  border: 2px solid transparent;
+  transition: all var(--transition-fast);
+}
+
+.transaction-card.selected {
+  border-color: var(--blue-500);
+  background: var(--blue-glow);
+}
+
+.transaction-card.selection-mode-active {
+  padding-left: 52px;
+}
+
+.transaction-card.selected .card-selection-overlay {
+  border-color: var(--blue-500);
+}
+
+.card-selection-overlay input[type="checkbox"] {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  width: 24px;
+  height: 24px;
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: var(--bg-primary);
+  border: 2px solid var(--border-light);
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  margin: 0;
+}
+
+.card-selection-overlay input[type="checkbox"]:checked {
+  background-color: var(--blue-500);
+  border-color: var(--blue-500);
+}
+
+.card-selection-overlay input[type="checkbox"]:checked::after {
+  content: '✓';
+  color: white;
+  font-size: 16px;
+  font-weight: bold;
+}
+
 @media (max-width: 480px) {
   .metric-cards {
     grid-template-columns: 1fr;
@@ -1426,7 +1481,6 @@
   flex-direction: column;
   transform: translateX(-100%);
   transition: transform var(--transition-slow);
-  box-shadow: 4px 0 30px rgba(0, 0, 0, 0.5);
 }
 .sidebar.open {
   transform: translateX(0);
