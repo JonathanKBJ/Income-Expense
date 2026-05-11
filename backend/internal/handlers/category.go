@@ -1,26 +1,39 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"expense-tracker/internal/middleware"
 	"expense-tracker/internal/models"
 	"expense-tracker/internal/repository"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 // CategoryHandler handles HTTP requests for category operations.
 type CategoryHandler struct {
-	repo *repository.CategoryRepository
+	repo         *repository.CategoryRepository
+	groupRepo    *repository.GroupRepository
+	activityRepo *repository.ActivityLogRepository
 }
 
-// NewCategoryHandler creates a new handler with the given repository.
-func NewCategoryHandler(repo *repository.CategoryRepository) *CategoryHandler {
-	return &CategoryHandler{repo: repo}
+// NewCategoryHandler creates a new handler with the given repositories.
+func NewCategoryHandler(
+	repo *repository.CategoryRepository,
+	groupRepo *repository.GroupRepository,
+	activityRepo *repository.ActivityLogRepository,
+) *CategoryHandler {
+	return &CategoryHandler{
+		repo:         repo,
+		groupRepo:    groupRepo,
+		activityRepo: activityRepo,
+	}
 }
 
 // GetCategories handles GET /api/categories?type={INCOME|EXPENSE}
@@ -41,7 +54,7 @@ func (h *CategoryHandler) GetCategories(w http.ResponseWriter, r *http.Request) 
 	// Check if the user has any categories at all
 	allCats, err := h.repo.GetAll(r.Context(), userID, groupID, "")
 	if err == nil && len(allCats) == 0 {
-		// Auto-seed initial Thai categories 
+		// Auto-seed initial Thai categories
 		defaults := []models.CreateCategoryRequest{
 			{Name: "เงินเดือน", Type: models.TypeIncome},
 			{Name: "รายได้พิเศษ", Type: models.TypeIncome},
@@ -102,6 +115,10 @@ func (h *CategoryHandler) CreateCategory(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Log activity for multi-member groups
+	h.logActivity(r.Context(), groupID, userID, "CREATE_CATEGORY", "category", category.ID,
+		`{"name":"`+category.Name+`","type":"`+string(category.Type)+`"}`)
+
 	writeJSON(w, http.StatusCreated, category)
 }
 
@@ -157,6 +174,10 @@ func (h *CategoryHandler) UpdateCategory(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Log activity for multi-member groups
+	h.logActivity(r.Context(), groupID, userID, "UPDATE_CATEGORY", "category", id,
+		`{"name":"`+updated.Name+`","type":"`+string(updated.Type)+`"}`)
+
 	writeJSON(w, http.StatusOK, updated)
 }
 
@@ -203,5 +224,31 @@ func (h *CategoryHandler) DeleteCategory(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Log activity for multi-member groups
+	h.logActivity(r.Context(), groupID, userID, "DELETE_CATEGORY", "category", id,
+		`{"name":"`+existing.Name+`","type":"`+string(existing.Type)+`"}`)
+
 	writeJSON(w, http.StatusOK, map[string]string{"message": "category deleted"})
+}
+
+// logActivity creates an activity log entry only for multi-member groups.
+func (h *CategoryHandler) logActivity(ctx context.Context, groupID, userID, action, entityType, entityID, details string) {
+	isMulti, err := h.groupRepo.GroupHasMultipleMembers(ctx, groupID)
+	if err != nil || !isMulti {
+		return
+	}
+
+	entry := &models.ActivityLogEntry{
+		ID:         uuid.New().String(),
+		GroupID:    groupID,
+		UserID:     userID,
+		Action:     action,
+		EntityType: entityType,
+		EntityID:   entityID,
+		Details:    details,
+		CreatedAt:  time.Now().UTC().Format(time.RFC3339),
+	}
+	if err := h.activityRepo.CreateEntry(ctx, entry); err != nil {
+		log.Printf("WARN: failed to log activity: %v", err)
+	}
 }

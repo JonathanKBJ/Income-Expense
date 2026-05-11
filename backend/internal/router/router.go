@@ -5,6 +5,7 @@ import (
 
 	"expense-tracker/internal/handlers"
 	"expense-tracker/internal/middleware"
+	"expense-tracker/internal/models"
 	"expense-tracker/internal/service"
 
 	"github.com/go-chi/chi/v5"
@@ -19,14 +20,15 @@ func New(
 	adminHandler *handlers.AdminHandler,
 	txHandler *handlers.TransactionHandler,
 	catHandler *handlers.CategoryHandler,
+	groupHandler *handlers.GroupHandler,
 ) http.Handler {
 	r := chi.NewRouter()
 
 	// --- Global Middleware ---
-	r.Use(chimiddleware.Logger)      // Log every request
-	r.Use(chimiddleware.Recoverer)   // Recover from panics
-	r.Use(chimiddleware.RequestID)   // Inject request ID
-	r.Use(chimiddleware.RealIP)      // Get real client IP
+	r.Use(chimiddleware.Logger)       // Log every request
+	r.Use(chimiddleware.Recoverer)    // Recover from panics
+	r.Use(chimiddleware.RequestID)    // Inject request ID
+	r.Use(chimiddleware.RealIP)       // Get real client IP
 	r.Use(chimiddleware.Heartbeat("/health")) // Health check endpoint
 
 	// CORS configuration for React frontend
@@ -57,21 +59,35 @@ func New(
 		r.Route("/api", func(r chi.Router) {
 			// Transaction routes
 			r.Route("/transactions", func(r chi.Router) {
+				// Read: all group members
 				r.Get("/", txHandler.GetTransactions)
 				r.Get("/annual", txHandler.GetAnnualSummary)
-				r.Post("/", txHandler.CreateTransaction)
-				r.Post("/batch", txHandler.CreateTransactionsBatch)
-				r.Patch("/{id}", txHandler.UpdateTransaction)
-				r.Delete("/{id}", txHandler.DeleteTransaction)
-				r.Delete("/batch", txHandler.DeleteTransactionsBatch)
+				// Write: EDITOR+
+				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Post("/", txHandler.CreateTransaction)
+				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Post("/batch", txHandler.CreateTransactionsBatch)
+				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Patch("/{id}", txHandler.UpdateTransaction)
+				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Delete("/{id}", txHandler.DeleteTransaction)
+				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Delete("/batch", txHandler.DeleteTransactionsBatch)
 			})
 
 			// Category routes
 			r.Route("/categories", func(r chi.Router) {
+				// Read: all group members
 				r.Get("/", catHandler.GetCategories)
-				r.Post("/", catHandler.CreateCategory)
-				r.Patch("/{id}", catHandler.UpdateCategory)
-				r.Delete("/{id}", catHandler.DeleteCategory)
+				// Write: EDITOR+
+				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Post("/", catHandler.CreateCategory)
+				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Patch("/{id}", catHandler.UpdateCategory)
+				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Delete("/{id}", catHandler.DeleteCategory)
+			})
+
+			// Group & Activity routes (authenticated, all users)
+			r.Route("/me", func(r chi.Router) {
+				r.Get("/group", groupHandler.GetMyGroup)
+				r.Patch("/group", groupHandler.UpdateGroupName)
+				r.Get("/activity", groupHandler.GetActivityFeed)
+				r.Post("/group/invite", groupHandler.CreateInvite)
+				r.Post("/group/join", groupHandler.JoinGroup)
+				r.Post("/group/leave", groupHandler.LeaveGroup)
 			})
 
 			// Admin routes (Protected by Auth + AdminOnly)
@@ -89,4 +105,3 @@ func New(
 
 	return r
 }
-

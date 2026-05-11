@@ -1,7 +1,9 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Transaction, TransactionSummary, CategorySummary } from "../types/transaction";
 import CategoryDonutChart from "./charts/CategoryDonutChart";
+import { useAuth } from "../contexts/AuthContext";
 import { useLanguage } from "../contexts/LanguageContext";
+import { getActivityFeed, type ActivityLogEntry } from "../api/group";
 
 interface DashboardProps {
   summary: TransactionSummary;
@@ -18,9 +20,23 @@ function formatCurrency(value: number): string {
   }).format(value);
 }
 
+function formatTime(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleString();
+}
+
 export default function Dashboard({ summary, transactions, month, year }: DashboardProps) {
   const { t } = useLanguage();
+  const { groupInfo } = useAuth();
+  const [activity, setActivity] = useState<ActivityLogEntry[]>([]);
+  const isMultiMember = groupInfo && groupInfo.memberCount > 1;
   const netBalance = summary.totalIncome - summary.totalPaid - summary.totalPending;
+
+  useEffect(() => {
+    if (isMultiMember) {
+      getActivityFeed(10).then(setActivity).catch(() => {});
+    }
+  }, [isMultiMember, transactions]);
 
   const categoryData = useMemo(() => {
     const categories: Record<string, CategorySummary> = {};
@@ -127,6 +143,36 @@ export default function Dashboard({ summary, transactions, month, year }: Dashbo
           <CategoryDonutChart data={categoryData} type="EXPENSE" />
         </div>
       </div>
+
+      {isMultiMember && activity.length > 0 && (
+        <div style={{
+          backgroundColor: "var(--bg-card, #1e1e2d)",
+          borderRadius: "12px",
+          padding: "1.25rem 1.5rem",
+          marginTop: "1.5rem",
+          border: "1px solid rgba(255,255,255,0.05)"
+        }}>
+          <h3 style={{ color: "var(--text-primary)", margin: "0 0 0.75rem", fontSize: 14, fontWeight: 600 }}>
+            Recent Group Activity
+          </h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {activity.slice(0, 5).map((entry) => (
+              <div key={entry.id} style={{
+                display: "flex",
+                gap: 12,
+                fontSize: 12,
+                color: "var(--text-secondary)",
+              }}>
+                <span style={{ color: "var(--text-primary)", fontWeight: 500, minWidth: 90 }}>
+                  {entry.username}
+                </span>
+                <span>{entry.action.replace(/_/g, " ")}</span>
+                <span style={{ marginLeft: "auto", opacity: 0.6 }}>{formatTime(entry.createdAt)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </section>
   );
 }

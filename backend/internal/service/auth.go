@@ -115,7 +115,7 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 	}
 
 	// Add user to the group
-	if err := s.groupRepo.AddMember(ctx, groupID, userID); err != nil {
+	if err := s.groupRepo.AddMember(ctx, groupID, userID, models.RoleOwner); err != nil {
 		return nil, err
 	}
 
@@ -156,12 +156,22 @@ func (s *AuthService) GenerateToken(user *models.User) (string, error) {
 	// Alternatively, look it up in middleware. For performance, token is better.
 	groupID, _ := s.groupRepo.GetUserGroupID(context.Background(), user.ID)
 
+	// Look up group role for JWT claims
+	var groupRole string
+	if groupID != "" {
+		role, err := s.groupRepo.GetMemberRole(context.Background(), groupID, user.ID)
+		if err == nil {
+			groupRole = string(role)
+		}
+	}
+
 	claims := jwt.MapClaims{
-		"sub":      user.ID,
-		"username": user.Username,
-		"role":     user.Role,
-		"groupId":  groupID,
-		"exp":      time.Now().Add(time.Hour * 24 * 7).Unix(), // 7 days
+		"sub":       user.ID,
+		"username":  user.Username,
+		"role":      user.Role,
+		"groupId":   groupID,
+		"groupRole": groupRole,
+		"exp":       time.Now().Add(time.Hour * 24 * 7).Unix(), // 7 days
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

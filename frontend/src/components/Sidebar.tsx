@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useLanguage } from "../contexts/LanguageContext";
 
-type Page = "dashboard" | "annual" | "categories" | "admin";
+type Page = "dashboard" | "annual" | "categories" | "admin" | "group";
 
 interface SidebarProps {
   activePage: Page;
@@ -12,7 +12,7 @@ interface SidebarProps {
 export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(true);
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout, isAdmin, groupInfo } = useAuth();
   const { t } = useLanguage();
 
   function handleNavigate(page: Page) {
@@ -71,6 +71,17 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
           <div className="user-info">
             <span className="username">{user?.username}</span>
             <span className="user-role">{user?.role}</span>
+            {groupInfo && (
+              <span className="group-name">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
+                {groupInfo.name} ({groupInfo.memberCount})
+              </span>
+            )}
           </div>
         </div>
 
@@ -146,6 +157,21 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
               </svg>
               <span>{t.common.categories}</span>
             </button>
+            {groupInfo && (
+              <button
+                className={`sidebar-item sub-item ${activePage === "group" ? "active" : ""}`}
+                onClick={() => handleNavigate("group")}
+                id="nav-group"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
+                <span>{t.common.myGroup}</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -194,6 +220,14 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
         .user-role {
           font-size: 12px;
           color: var(--text-secondary);
+        }
+        .group-name {
+          font-size: 11px;
+          color: var(--blue-400, #60a5fa);
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          margin-top: 2px;
         }
         .logout-btn {
           color: #ef4444 !important;
