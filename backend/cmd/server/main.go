@@ -60,9 +60,12 @@ func main() {
 	catRepo := repository.NewCategoryRepository(db)
 	catHandler := handlers.NewCategoryHandler(catRepo, groupRepo, activityRepo)
 
-	groupHandler := handlers.NewGroupHandler(groupRepo, activityRepo, inviteRepo)
+	groupHandler := handlers.NewGroupHandler(groupRepo, activityRepo, inviteRepo, userRepo, authService)
 
-	httpRouter := router.New(authService, authHandler, adminHandler, txHandler, catHandler, groupHandler)
+	loanRepo := repository.NewLoanRepository(db.DB)
+	loanHandler := handlers.NewLoanHandler(loanRepo, groupRepo)
+
+	httpRouter := router.New(authService, authHandler, adminHandler, txHandler, catHandler, groupHandler, loanHandler)
 
 	// Configure HTTP server
 	srv := &http.Server{

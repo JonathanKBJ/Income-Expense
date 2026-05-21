@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { Select, message } from "antd";
+import { PlusOutlined } from "@ant-design/icons";
 import { useAuth } from "../contexts/AuthContext";
 import { useLanguage } from "../contexts/LanguageContext";
 
-type Page = "dashboard" | "annual" | "categories" | "admin" | "group";
+type Page = "dashboard" | "annual" | "categories" | "admin" | "group" | "loans";
 
 interface SidebarProps {
   activePage: Page;
@@ -12,8 +14,10 @@ interface SidebarProps {
 export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(true);
-  const { user, logout, isAdmin, groupInfo } = useAuth();
+  const { user, logout, isAdmin, groupInfo, myGroups, activeGroup, switchGroup, createGroup } = useAuth();
   const { t } = useLanguage();
+  const [creatingGroup, setCreatingGroup] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
 
   function handleNavigate(page: Page) {
     onNavigate(page);
@@ -84,6 +88,87 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
             )}
           </div>
         </div>
+
+        {/* Group / Wallet Selector */}
+        {myGroups.length > 0 && (
+          <div className="sidebar-group-selector">
+            <Select
+              value={activeGroup?.id}
+              onChange={async (id) => {
+                const group = myGroups.find(g => g.id === id);
+                if (group && group.id !== activeGroup?.id) {
+                  try {
+                    await switchGroup(group);
+                    message.success(t.group.switchedTo(group.name));
+                  } catch {
+                    message.error(t.group.switchFailed);
+                  }
+                }
+              }}
+              style={{ width: "100%" }}
+              options={myGroups.map(g => ({
+                value: g.id,
+                label: (
+                  <span>
+                    {g.name}
+                    <span style={{ fontSize: 11, opacity: 0.6, marginLeft: 6 }}>
+                      ({g.memberCount})
+                    </span>
+                  </span>
+                ),
+              }))}
+              popupRender={(menu) => (
+                <div>
+                  {menu}
+                  <div style={{ borderTop: "1px solid var(--border-color, #333)", padding: 8 }}>
+                    {creatingGroup ? (
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <input
+                          placeholder={t.group.walletName}
+                          value={newGroupName}
+                          onChange={(e) => setNewGroupName(e.target.value)}
+                          onKeyDown={async (e) => {
+                            if (e.key === "Enter" && newGroupName.trim()) {
+                              try {
+                                await createGroup(newGroupName.trim());
+                                message.success(t.group.walletCreated);
+                                setNewGroupName("");
+                                setCreatingGroup(false);
+                              } catch {
+                                message.error(t.group.walletCreateFailed);
+                              }
+                            }
+                          }}
+                          style={{ flex: 1, padding: "4px 8px", background: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: 4, color: "var(--text-primary)" }}
+                          autoFocus
+                        />
+                        <button
+                          onClick={() => { setCreatingGroup(false); setNewGroupName(""); }}
+                          style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer" }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setCreatingGroup(true)}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 6,
+                          background: "none", border: "none", color: "var(--blue-400)",
+                          cursor: "pointer", padding: "4px 8px", width: "100%",
+                        }}
+                      >
+                        <PlusOutlined /> {t.group.createWallet}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+              popupMatchSelectWidth={false}
+              variant="borderless"
+            />
+          </div>
+        )}
 
         <div className="sidebar-nav">
           {/* Dashboard */}
@@ -172,6 +257,17 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
                 <span>{t.common.myGroup}</span>
               </button>
             )}
+            <button
+              className={`sidebar-item sub-item ${activePage === "loans" ? "active" : ""}`}
+              onClick={() => handleNavigate("loans")}
+              id="nav-loans"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="1" x2="12" y2="23" />
+                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+              </svg>
+              <span>{t.common.loans}</span>
+            </button>
           </div>
         </div>
 
@@ -239,6 +335,22 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
         }
         .logout-btn:hover {
           background: rgba(239, 68, 68, 0.1) !important;
+        }
+        .sidebar-group-selector {
+          padding: 0 20px 12px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+          margin-bottom: 4px;
+        }
+        .sidebar-group-selector .ant-select {
+          color: var(--text-primary);
+        }
+        .sidebar-group-selector .ant-select-selector {
+          background: rgba(255, 255, 255, 0.05) !important;
+          border-color: rgba(255, 255, 255, 0.1) !important;
+          border-radius: 8px !important;
+        }
+        .sidebar-group-selector .ant-select-arrow {
+          color: var(--text-secondary);
         }
       `}</style>
     </>

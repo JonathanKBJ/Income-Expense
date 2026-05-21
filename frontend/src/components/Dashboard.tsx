@@ -153,7 +153,7 @@ export default function Dashboard({ summary, transactions, month, year }: Dashbo
           border: "1px solid rgba(255,255,255,0.05)"
         }}>
           <h3 style={{ color: "var(--text-primary)", margin: "0 0 0.75rem", fontSize: 14, fontWeight: 600 }}>
-            Recent Group Activity
+            {t.dashboard.recentGroupActivity}
           </h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {activity.slice(0, 5).map((entry) => (

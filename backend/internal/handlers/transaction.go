@@ -196,6 +196,54 @@ func (h *TransactionHandler) CreateTransactionsBatch(w http.ResponseWriter, r *h
 	writeJSON(w, http.StatusCreated, map[string]string{"message": "batch created successfully"})
 }
 
+// CreateTransactionsBatchToGroup handles POST /api/transactions/batch-to-group
+// Allows copying transactions to a different group (member must belong to both groups).
+func (h *TransactionHandler) CreateTransactionsBatchToGroup(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Transactions  []models.CreateTransactionRequest `json:"transactions"`
+		TargetGroupID string                            `json:"targetGroupId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON payload: "+err.Error())
+		return
+	}
+
+	if req.TargetGroupID == "" {
+		writeError(w, http.StatusBadRequest, "targetGroupId is required")
+		return
+	}
+
+	if len(req.Transactions) == 0 {
+		writeError(w, http.StatusBadRequest, "no transactions provided")
+		return
+	}
+
+	userID := middleware.GetUserID(r.Context())
+
+	// Verify user is member of target group
+	if _, err := h.groupRepo.GetMemberRole(r.Context(), req.TargetGroupID, userID); err != nil {
+		writeError(w, http.StatusForbidden, "you are not a member of the target group")
+		return
+	}
+
+	// Validate each request
+	for _, t := range req.Transactions {
+		if err := middleware.ValidateCreateRequest(&t); err != nil {
+			writeError(w, http.StatusBadRequest, "validation failed: "+err.Error())
+			return
+		}
+	}
+
+	err := h.repo.CreateBatch(r.Context(), req.Transactions, userID, req.TargetGroupID)
+	if err != nil {
+		log.Printf("ERROR: CreateTransactionsBatchToGroup: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to create transactions in target group")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]string{"message": "batch copied to target group successfully"})
+}
+
 // UpdateTransaction handles PATCH /api/transactions/{id}
 // Updates status and/or paidAmount for expense transactions only.
 func (h *TransactionHandler) UpdateTransaction(w http.ResponseWriter, r *http.Request) {

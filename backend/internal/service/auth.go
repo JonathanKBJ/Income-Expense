@@ -142,8 +142,8 @@ func (s *AuthService) Login(ctx context.Context, req models.LoginRequest) (strin
 		return "", nil, fmt.Errorf("invalid username or password")
 	}
 
-	// Generate JWT
-	tokenString, err := s.GenerateToken(user)
+	// Generate JWT — default to the personal group (first created group for this user)
+	tokenString, err := s.GenerateTokenForGroup(user, "")
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to generate token: %w", err)
 	}
@@ -151,18 +151,26 @@ func (s *AuthService) Login(ctx context.Context, req models.LoginRequest) (strin
 	return tokenString, user, nil
 }
 
+// GenerateToken generates a JWT for the user's first available group (backward compat).
 func (s *AuthService) GenerateToken(user *models.User) (string, error) {
-	// Get User GroupID to embed in token (for easier access)
-	// Alternatively, look it up in middleware. For performance, token is better.
-	groupID, _ := s.groupRepo.GetUserGroupID(context.Background(), user.ID)
+	return s.GenerateTokenForGroup(user, "")
+}
 
-	// Look up group role for JWT claims
-	var groupRole string
-	if groupID != "" {
-		role, err := s.groupRepo.GetMemberRole(context.Background(), groupID, user.ID)
-		if err == nil {
-			groupRole = string(role)
+// GenerateTokenForGroup generates a JWT embedding a specific group's ID and role.
+// If groupID is empty, defaults to the user's personal group (first created).
+func (s *AuthService) GenerateTokenForGroup(user *models.User, groupID string) (string, error) {
+	if groupID == "" {
+		var err error
+		groupID, err = s.groupRepo.GetUserGroupID(context.Background(), user.ID)
+		if err != nil || groupID == "" {
+			return "", fmt.Errorf("no group found for user")
 		}
+	}
+
+	var groupRole string
+	role, err := s.groupRepo.GetMemberRole(context.Background(), groupID, user.ID)
+	if err == nil {
+		groupRole = string(role)
 	}
 
 	claims := jwt.MapClaims{
@@ -171,7 +179,7 @@ func (s *AuthService) GenerateToken(user *models.User) (string, error) {
 		"role":      user.Role,
 		"groupId":   groupID,
 		"groupRole": groupRole,
-		"exp":       time.Now().Add(time.Hour * 24 * 7).Unix(), // 7 days
+		"exp":       time.Now().Add(time.Hour * 24 * 7).Unix(),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

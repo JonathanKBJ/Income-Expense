@@ -1,6 +1,7 @@
 import { useAnnualSummary } from "../hooks/useAnnualSummary";
 import MonthlyMixedChart from "./charts/MonthlyMixedChart";
 import CategoryDonutChart from "./charts/CategoryDonutChart";
+import { useLanguage } from "../contexts/LanguageContext";
 
 interface AnnualDashboardProps {
   year: number;
@@ -15,12 +16,13 @@ function formatCurrency(value: number): string {
 }
 
 export default function AnnualDashboard({ year }: AnnualDashboardProps) {
+  const { t } = useLanguage();
   const { summary, loading, error } = useAnnualSummary(year);
 
   if (loading && !summary) {
     return (
       <div className="flex items-center justify-center h-64 text-gray-400">
-        <div className="animate-pulse">Loading annual data...</div>
+        <div className="animate-pulse">{t.annual.loading}</div>
       </div>
     );
   }
@@ -46,7 +48,7 @@ export default function AnnualDashboard({ year }: AnnualDashboardProps) {
   return (
     <section className="dashboard" id="annual-dashboard">
       <h2 className="dashboard-title">
-        <span className="dashboard-year">Summary for {year}</span>
+        <span className="dashboard-year">{t.annual.summaryFor(year)}</span>
       </h2>
 
       {/* Key Metric Cards */}
@@ -59,7 +61,7 @@ export default function AnnualDashboard({ year }: AnnualDashboardProps) {
             </svg>
           </div>
           <div className="metric-content">
-            <span className="metric-label">Total Income</span>
+            <span className="metric-label">{t.dashboard.totalIncome}</span>
             <span className="metric-value">{formatCurrency(summary?.totalIncome || 0)}</span>
           </div>
         </div>
@@ -72,7 +74,7 @@ export default function AnnualDashboard({ year }: AnnualDashboardProps) {
             </svg>
           </div>
           <div className="metric-content">
-            <span className="metric-label">Total Expense</span>
+            <span className="metric-label">{t.annual.totalExpense}</span>
             <span className="metric-value">{formatCurrency(summary?.totalExpense || 0)}</span>
           </div>
         </div>
@@ -85,7 +87,7 @@ export default function AnnualDashboard({ year }: AnnualDashboardProps) {
             </svg>
           </div>
           <div className="metric-content">
-            <span className="metric-label">Net Balance</span>
+            <span className="metric-label">{t.dashboard.netBalance}</span>
             <span className="metric-value">{formatCurrency(netBalance)}</span>
           </div>
         </div>
@@ -107,7 +109,7 @@ export default function AnnualDashboard({ year }: AnnualDashboardProps) {
             padding: "1.5rem", 
             border: "1px solid rgba(255,255,255,0.05)"
           }}>
-            <h3 style={{ color: "var(--text-primary, #fff)", marginBottom: "1rem", fontWeight: 600 }}>Monthly Overview</h3>
+            <h3 style={{ color: "var(--text-primary, #fff)", marginBottom: "1rem", fontWeight: 600 }}>{t.annual.monthlyOverview}</h3>
             <MonthlyMixedChart data={summary.monthlyData} />
           </div>
 
@@ -119,7 +121,7 @@ export default function AnnualDashboard({ year }: AnnualDashboardProps) {
               padding: "1.5rem", 
               border: "1px solid rgba(255,255,255,0.05)"
             }}>
-              <h3 style={{ color: "var(--text-primary, #fff)", marginBottom: "0.5rem", textAlign: "center", fontWeight: 600 }}>Income by Category</h3>
+              <h3 style={{ color: "var(--text-primary, #fff)", marginBottom: "0.5rem", textAlign: "center", fontWeight: 600 }}>{t.dashboard.incomeByCategory}</h3>
               <CategoryDonutChart data={summary.categoryData} type="INCOME" />
             </div>
 
@@ -130,7 +132,7 @@ export default function AnnualDashboard({ year }: AnnualDashboardProps) {
               padding: "1.5rem", 
               border: "1px solid rgba(255,255,255,0.05)"
             }}>
-              <h3 style={{ color: "var(--text-primary, #fff)", marginBottom: "0.5rem", textAlign: "center", fontWeight: 600 }}>Expenses by Category</h3>
+              <h3 style={{ color: "var(--text-primary, #fff)", marginBottom: "0.5rem", textAlign: "center", fontWeight: 600 }}>{t.dashboard.expensesByCategory}</h3>
               <CategoryDonutChart data={summary.categoryData} type="EXPENSE" />
             </div>
           </div>
@@ -143,7 +145,7 @@ export default function AnnualDashboard({ year }: AnnualDashboardProps) {
             padding: "1.5rem", 
             border: "1px solid rgba(255,255,255,0.05)"
           }}>
-            <h3 style={{ color: "var(--text-primary, #fff)", marginBottom: "1rem", fontWeight: 600 }}>Top 5 Highest Expenses</h3>
+            <h3 style={{ color: "var(--text-primary, #fff)", marginBottom: "1rem", fontWeight: 600 }}>{t.annual.topExpenses}</h3>
             {topExpenses.length > 0 ? (
               <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                 {topExpenses.map((expense, idx) => (
@@ -171,7 +173,7 @@ export default function AnnualDashboard({ year }: AnnualDashboardProps) {
               </div>
             ) : (
               <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100px", color: "#6b7280" }}>
-                No expenses recorded.
+                {t.annual.noExpenses}
               </div>
             )}
           </div>

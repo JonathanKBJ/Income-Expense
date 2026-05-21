@@ -6,6 +6,8 @@ import (
 	"expense-tracker/internal/models"
 	"fmt"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type GroupRepository struct {
@@ -30,35 +32,86 @@ func (r *GroupRepository) CreateGroup(ctx context.Context, group *models.UserGro
 }
 
 // AddMember adds a user to a specific group with the given role.
+// A user can now belong to multiple groups simultaneously.
 func (r *GroupRepository) AddMember(ctx context.Context, groupID, userID string, role models.GroupRole) error {
-	// 1 User can only belong to 1 Group (as per requirement)
-	// We check and remove they from any existing group first for consistency
-	// but the UI/Logic should ideally prevent this too.
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	// Clear existing groups for this user
-	_, err = tx.ExecContext(ctx, `DELETE FROM group_members WHERE user_id = ?`, userID)
-	if err != nil {
-		return fmt.Errorf("failed to clear old membership: %w", err)
-	}
-
-	// Add new group membership with role
 	query := `INSERT INTO group_members (group_id, user_id, role) VALUES (?, ?, ?)`
-	_, err = tx.ExecContext(ctx, query, groupID, userID, string(role))
+	_, err := r.db.ExecContext(ctx, query, groupID, userID, string(role))
 	if err != nil {
 		return fmt.Errorf("failed to add group member: %w", err)
 	}
-
-	return tx.Commit()
+	return nil
 }
 
-// GetUserGroupID returns the group ID for a specific user.
+// CreateUserGroup creates a new group and adds the creator as OWNER.
+func (r *GroupRepository) CreateUserGroup(ctx context.Context, userID, name string) (*models.UserGroup, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	groupID := uuid.New().String()
+
+	group := &models.UserGroup{
+		ID:   groupID,
+		Name: name,
+	}
+
+	_, err = tx.ExecContext(ctx, `INSERT INTO groups (id, name, created_at) VALUES (?, ?, ?)`, groupID, name, now)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create group: %w", err)
+	}
+
+	_, err = tx.ExecContext(ctx, `INSERT INTO group_members (group_id, user_id, role) VALUES (?, ?, ?)`, groupID, userID, string(models.RoleOwner))
+	if err != nil {
+		return nil, fmt.Errorf("failed to add owner to group: %w", err)
+	}
+
+	group.CreatedAt, _ = time.Parse(time.RFC3339, now)
+	return group, tx.Commit()
+}
+
+// ListUserGroups returns all groups the user belongs to with member counts and roles.
+func (r *GroupRepository) ListUserGroups(ctx context.Context, userID string) ([]models.GroupInfo, error) {
+	query := `
+		SELECT g.id, g.name, gm.role,
+			(SELECT COUNT(*) FROM group_members WHERE group_id = g.id) as member_count
+		FROM groups g
+		JOIN group_members gm ON g.id = gm.group_id
+		WHERE gm.user_id = ?
+		ORDER BY g.created_at ASC
+	`
+	rows, err := r.db.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list user groups: %w", err)
+	}
+	defer rows.Close()
+
+	var groups []models.GroupInfo
+	for rows.Next() {
+		var g models.GroupInfo
+		var role string
+		if err := rows.Scan(&g.ID, &g.Name, &role, &g.MemberCount); err != nil {
+			return nil, fmt.Errorf("failed to scan user group: %w", err)
+		}
+		g.MyRole = models.GroupRole(role)
+		g.Members = []models.GroupMember{} // empty, detailed members not needed for list
+		groups = append(groups, g)
+	}
+
+	if groups == nil {
+		groups = []models.GroupInfo{}
+	}
+	return groups, nil
+}
+
+// GetUserGroupID returns the first group ID for a specific user (backward compat).
 func (r *GroupRepository) GetUserGroupID(ctx context.Context, userID string) (string, error) {
-	query := `SELECT group_id FROM group_members WHERE user_id = ? LIMIT 1`
+	query := `SELECT gm.group_id FROM group_members gm
+		JOIN groups g ON g.id = gm.group_id
+		WHERE gm.user_id = ?
+		ORDER BY g.created_at ASC LIMIT 1`
 	var groupID string
 	err := r.db.QueryRowContext(ctx, query, userID).Scan(&groupID)
 	if err != nil {
@@ -68,6 +121,25 @@ func (r *GroupRepository) GetUserGroupID(ctx context.Context, userID string) (st
 		return "", fmt.Errorf("failed to get user group: %w", err)
 	}
 	return groupID, nil
+}
+
+// DeleteGroup deletes a group and all associated data (CASCADE via FK).
+// Only the group owner should call this.
+func (r *GroupRepository) DeleteGroup(ctx context.Context, groupID, userID string) error {
+	// Verify user is OWNER of the group
+	role, err := r.GetMemberRole(ctx, groupID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to verify ownership: %w", err)
+	}
+	if role != models.RoleOwner {
+		return fmt.Errorf("only the group owner can delete the group")
+	}
+
+	_, err = r.db.ExecContext(ctx, `DELETE FROM groups WHERE id = ?`, groupID)
+	if err != nil {
+		return fmt.Errorf("failed to delete group: %w", err)
+	}
+	return nil
 }
 
 // ListGroups returns all groups (for Admin).
@@ -115,6 +187,16 @@ func (r *GroupRepository) GetGroupMembers(ctx context.Context, groupID string) (
 		users = append(users, u)
 	}
 	return users, nil
+}
+
+// DeleteMember removes a single membership without restoring to personal group.
+// Used when a user leaves a group but keeps other groups.
+func (r *GroupRepository) DeleteMember(ctx context.Context, groupID, userID string) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM group_members WHERE group_id = ? AND user_id = ?`, groupID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to delete member: %w", err)
+	}
+	return nil
 }
 
 // RemoveMember removes a specific user from a group and returns them to their personal group.

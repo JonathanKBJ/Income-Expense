@@ -8,6 +8,7 @@ import type {
 } from "../types/transaction";
 import { isExpense } from "../types/transaction";
 import StatusBadge from "./StatusBadge";
+import { useLanguage } from "../contexts/LanguageContext";
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -41,6 +42,7 @@ export default function TransactionList({
   onDelete,
   onRemoveBatch,
 }: TransactionListProps) {
+  const { t: tr } = useLanguage();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState<number>(0);
   const [editStatus, setEditStatus] = useState<ExpenseStatus>("PENDING");
@@ -55,15 +57,15 @@ export default function TransactionList({
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  function startEdit(t: Transaction) {
-    setEditingId(t.id);
-    setEditAmount(t.amount);
-    if (isExpense(t)) {
-      setEditStatus(t.status);
-      setEditPaidAmount(t.paidAmount);
-      setEditReceiptImage(t.receiptImage);
+  function startEdit(tx: Transaction) {
+    setEditingId(tx.id);
+    setEditAmount(tx.amount);
+    if (isExpense(tx)) {
+      setEditStatus(tx.status);
+      setEditPaidAmount(tx.paidAmount);
+      setEditReceiptImage(tx.receiptImage);
     } else {
-      setEditReceiptImage(t.receiptImage);
+      setEditReceiptImage(tx.receiptImage);
     }
   }
 
@@ -106,18 +108,18 @@ export default function TransactionList({
       setEditPaidAmount(editAmount);
       return false;
     } catch {
-      message.error("Failed to process image");
+      message.error(tr.transactions.attachReceipt);
       return false;
     }
   };
 
-  async function handleSave(t: Transaction) {
-    setActionLoading(t.id);
+  async function handleSave(tx: Transaction) {
+    setActionLoading(tx.id);
     try {
       const req: UpdateTransactionRequest = { amount: editAmount };
-      if (isExpense(t)) {
-        if (editStatus === "PAID" && !editReceiptImage && !t.receiptImage) {
-          message.error("Receipt image is required to mark as PAID");
+      if (isExpense(tx)) {
+        if (editStatus === "PAID" && !editReceiptImage && !tx.receiptImage) {
+          message.error(tr.transactions.receiptRequiredPaid);
           setActionLoading(null);
           return;
         }
@@ -125,7 +127,7 @@ export default function TransactionList({
         req.paidAmount = editPaidAmount;
       }
       req.receiptImage = editReceiptImage;
-      await onUpdate(t.id, req);
+      await onUpdate(tx.id, req);
       setEditingId(null);
       setEditReceiptImage(undefined);
     } catch {
@@ -136,7 +138,7 @@ export default function TransactionList({
   }
 
   async function handleDelete(id: string) {
-    if (!window.confirm("Delete this transaction?")) return;
+    if (!window.confirm(tr.transactions.deleteTransactionConfirm)) return;
     setActionLoading(id);
     try {
       await onDelete(id);
@@ -147,16 +149,16 @@ export default function TransactionList({
 
   async function handleBulkDelete() {
     if (selectedIds.length === 0) return;
-    if (!window.confirm(`Delete ${selectedIds.length} selected transactions?`)) return;
+    if (!window.confirm(tr.transactions.deleteSelectedConfirm(selectedIds.length))) return;
     
     setActionLoading("bulk");
     try {
       await onRemoveBatch(selectedIds);
       setSelectedIds([]);
       setSelectionMode(false);
-      message.success("Deleted successfully");
+      message.success(tr.transactions.deletedSuccessfully);
     } catch {
-      message.error("Failed to delete items");
+      message.error(tr.transactions.failedDeleteItems);
     } finally {
       setActionLoading(null);
     }
@@ -188,10 +190,10 @@ export default function TransactionList({
   if (loading) {
     return (
       <section className="transaction-list-section" id="transaction-list">
-        <h2 className="section-title">Transactions</h2>
+        <h2 className="section-title">{tr.dashboard.transactionList}</h2>
         <div className="loading-state">
           <div className="spinner large" />
-          <p>Loading transactions...</p>
+          <p>{tr.transactions.loadingTransactions}</p>
         </div>
       </section>
     );
@@ -200,14 +202,14 @@ export default function TransactionList({
   if (transactions.length === 0) {
     return (
       <section className="transaction-list-section" id="transaction-list">
-        <h2 className="section-title">Transactions</h2>
+        <h2 className="section-title">{tr.dashboard.transactionList}</h2>
         <div className="empty-state">
           <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
             <rect x="2" y="5" width="20" height="14" rx="2" />
             <line x1="2" y1="10" x2="22" y2="10" />
           </svg>
-          <p>No transactions for this month</p>
-          <span className="empty-hint">Add your first transaction above</span>
+          <p>{tr.transactions.noTransactions}</p>
+          <span className="empty-hint">{tr.transactions.addFirstTransaction}</span>
         </div>
       </section>
     );
@@ -217,7 +219,7 @@ export default function TransactionList({
     <section className="transaction-list-section" id="transaction-list">
       <div className="list-header-flex">
         <h2 className="section-title">
-          Transactions
+          {tr.dashboard.transactionList}
           <span className="transaction-count">{filteredTransactions.length}</span>
         </h2>
         
@@ -228,10 +230,10 @@ export default function TransactionList({
             style={{ width: 120 }}
             className="status-filter-select"
             options={[
-              { label: "All Status", value: "ALL" },
-              { label: "Pending", value: "PENDING" },
-              { label: "Paid", value: "PAID" },
-              { label: "Income", value: "INCOME" },
+              { label: tr.transactions.allStatus, value: "ALL" },
+              { label: tr.common.pending, value: "PENDING" },
+              { label: tr.common.paid, value: "PAID" },
+              { label: tr.common.income, value: "INCOME" },
             ]}
           />
           
@@ -242,7 +244,7 @@ export default function TransactionList({
               if (selectionMode) setSelectedIds([]);
             }}
           >
-            {selectionMode ? "Cancel Select" : "Select"}
+            {selectionMode ? tr.transactions.cancelSelect : tr.common.select}
           </Button>
 
           {selectionMode && selectedIds.length > 0 && (
@@ -254,7 +256,7 @@ export default function TransactionList({
               loading={actionLoading === "bulk"}
               className="bulk-delete-btn"
             >
-              <span className="btn-text">Delete ({selectedIds.length})</span>
+              <span className="btn-text">{tr.transactions.deleteSelected} ({selectedIds.length})</span>
               <span className="btn-text-mobile">({selectedIds.length})</span>
             </Button>
           )}
@@ -267,7 +269,7 @@ export default function TransactionList({
                 checked={selectedIds.length === filteredTransactions.length && filteredTransactions.length > 0}
                 onChange={() => toggleSelectAll(filteredTransactions)}
               />
-              <label htmlFor="mobile-select-all-checkbox">All</label>
+              <label htmlFor="mobile-select-all-checkbox">{tr.common.all}</label>
             </div>
           )}
         </div>
@@ -286,14 +288,14 @@ export default function TransactionList({
                   />
                 </th>
               )}
-              <th>Date</th>
-              <th>Category</th>
-              <th>Description</th>
-              <th>Type</th>
-              <th className="text-right">Amount</th>
-              <th>Status</th>
-              <th className="text-right">Paid</th>
-              <th>Actions</th>
+              <th>{tr.common.date}</th>
+              <th>{tr.transactions.category}</th>
+              <th>{tr.common.description}</th>
+              <th>{tr.common.type}</th>
+              <th className="text-right">{tr.common.amount}</th>
+              <th>{tr.common.status}</th>
+              <th className="text-right">{tr.common.paid}</th>
+              <th>{tr.common.actions}</th>
             </tr>
           </thead>
           <tbody>
@@ -312,7 +314,7 @@ export default function TransactionList({
                 <td className="col-category">
                   {t.category}
                   {t.createdByUsername && (
-                    <Tooltip title={`Created by ${t.createdByUsername}`}>
+                    <Tooltip title={`${tr.transactions.createdBy} ${t.createdByUsername}`}>
                       <span className="tx-author-badge">{t.createdByUsername.charAt(0).toUpperCase()}</span>
                     </Tooltip>
                   )}
@@ -361,8 +363,8 @@ export default function TransactionList({
                         }}
                         style={{ width: 100 }}
                         options={[
-                          { label: "Pending", value: "PENDING" },
-                          { label: "Paid", value: "PAID" },
+                          { label: tr.common.pending, value: "PENDING" },
+                          { label: tr.common.paid, value: "PAID" },
                         ]}
                       />
                     ) : (
@@ -405,7 +407,7 @@ export default function TransactionList({
                               setViewerImage(editReceiptImage);
                               setViewerOpen(true);
                             }}
-                            title="View Receipt"
+                            title={tr.transactions.viewReceipt}
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                               <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
@@ -415,7 +417,7 @@ export default function TransactionList({
                           <button
                             className="action-btn delete"
                             onClick={() => setEditReceiptImage(undefined)}
-                            title="Remove Receipt"
+                            title={tr.transactions.removeReceipt}
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                               <polyline points="3 6 5 6 21 6" />
@@ -427,7 +429,7 @@ export default function TransactionList({
                         <Upload accept="image/*" showUploadList={false} beforeUpload={handleEditImageUpload}>
                           <button
                             className="action-btn view-receipt"
-                            title="Attach Receipt"
+                            title={tr.transactions.attachReceipt}
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                               <line x1="12" y1="5" x2="12" y2="19" />
@@ -440,14 +442,14 @@ export default function TransactionList({
                         className="action-btn save"
                         onClick={() => handleSave(t)}
                         disabled={actionLoading === t.id}
-                        title="Save"
+                        title={tr.common.save}
                       >
                         ✓
                       </button>
                       <button
                         className="action-btn cancel"
                         onClick={() => setEditingId(null)}
-                        title="Cancel"
+                        title={tr.common.cancel}
                       >
                         ✕
                       </button>
@@ -462,7 +464,7 @@ export default function TransactionList({
                             setViewerImage(t.receiptImage!);
                             setViewerOpen(true);
                           }}
-                          title="View Receipt"
+                          title={tr.transactions.viewReceipt}
                           style={{ marginRight: '4px' }}
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -475,7 +477,7 @@ export default function TransactionList({
                         className="action-btn edit"
                         onClick={() => startEdit(t)}
                         disabled={actionLoading === t.id}
-                        title="Edit"
+                        title={tr.common.edit}
                       >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -486,7 +488,7 @@ export default function TransactionList({
                         className="action-btn delete"
                         onClick={() => handleDelete(t.id)}
                         disabled={actionLoading === t.id}
-                        title="Delete"
+                        title={tr.common.delete}
                       >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <polyline points="3 6 5 6 21 6" />
@@ -518,7 +520,7 @@ export default function TransactionList({
             {editingId === t.id ? (
               <div className="card-edit-grid">
                 <div className="form-group">
-                  <label>Amount</label>
+                  <label>{tr.common.amount}</label>
                   <InputNumber
                     className="antd-input-number-full"
                     value={editAmount}
@@ -535,7 +537,7 @@ export default function TransactionList({
                 {isExpense(t) && (
                   <>
                     <div className="form-group">
-                      <label>Status</label>
+                      <label>{tr.common.status}</label>
                       <Select
                         className="antd-select-full"
                         value={editStatus}
@@ -544,13 +546,13 @@ export default function TransactionList({
                           if (val === "PAID") setEditPaidAmount(editAmount);
                         }}
                         options={[
-                          { label: "Pending", value: "PENDING" },
-                          { label: "Paid", value: "PAID" },
+                          { label: tr.common.pending, value: "PENDING" },
+                          { label: tr.common.paid, value: "PAID" },
                         ]}
                       />
                     </div>
                     <div className="form-group">
-                      <label>Paid Amount</label>
+                      <label>{tr.transactions.paidAmount}</label>
                       <div className="paid-amount-row">
                         <InputNumber
                           className="antd-input-number-full"
@@ -564,14 +566,14 @@ export default function TransactionList({
                             <>
                               <Button size="small" type="text" icon={<FileImageOutlined />}
                                 onClick={() => { setViewerImage(editReceiptImage); setViewerOpen(true); }}
-                                title="View Receipt" />
+                                title={tr.transactions.viewReceipt} />
                               <Button size="small" type="text" danger icon={<DeleteOutlined />}
                                 onClick={() => setEditReceiptImage(undefined)}
-                                title="Remove Receipt" />
+                                title={tr.transactions.removeReceipt} />
                             </>
                           ) : (
                             <Upload accept="image/*" showUploadList={false} beforeUpload={handleEditImageUpload}>
-                              <Button size="small" type="text" icon={<PlusOutlined />} title="Attach Receipt" />
+                              <Button size="small" type="text" icon={<PlusOutlined />} title={tr.transactions.attachReceipt} />
                             </Upload>
                           )}
                         </div>
@@ -581,28 +583,28 @@ export default function TransactionList({
                 )}
                 {!isExpense(t) && (
                   <div className="form-group">
-                    <label>Receipt</label>
+                    <label>{tr.loansPage.receipt}</label>
                     <div className="receipt-actions-inline">
                       {editReceiptImage ? (
                         <>
                           <Button size="small" type="text" icon={<FileImageOutlined />}
                             onClick={() => { setViewerImage(editReceiptImage); setViewerOpen(true); }}
-                            title="View Receipt" />
+                            title={tr.transactions.viewReceipt} />
                           <Button size="small" type="text" danger icon={<DeleteOutlined />}
                             onClick={() => setEditReceiptImage(undefined)}
-                            title="Remove Receipt" />
+                            title={tr.transactions.removeReceipt} />
                         </>
                       ) : (
                         <Upload accept="image/*" showUploadList={false} beforeUpload={handleEditImageUpload}>
-                          <Button size="small" type="text" icon={<PlusOutlined />} title="Attach Receipt" />
+                          <Button size="small" type="text" icon={<PlusOutlined />} title={tr.transactions.attachReceipt} />
                         </Upload>
                       )}
                     </div>
                   </div>
                 )}
                 <div className="card-actions" style={{ justifyContent: 'flex-end', marginTop: '8px' }}>
-                  <button className="action-btn save" onClick={() => handleSave(t)} disabled={actionLoading === t.id}>Save</button>
-                  <button className="action-btn cancel" onClick={() => setEditingId(null)}>Cancel</button>
+                  <button className="action-btn save" onClick={() => handleSave(t)} disabled={actionLoading === t.id}>{tr.common.save}</button>
+                  <button className="action-btn cancel" onClick={() => setEditingId(null)}>{tr.common.cancel}</button>
                 </div>
               </div>
             ) : (
@@ -674,7 +676,7 @@ export default function TransactionList({
                   </div>
                   {isExpense(t) && (
                     <div className="card-paid-info">
-                      <span className="card-paid-label">Paid: </span>
+                      <span className="card-paid-label">{tr.common.paid}: </span>
                       <span className="card-paid-value">{formatCurrency(t.paidAmount)}</span>
                     </div>
                   )}

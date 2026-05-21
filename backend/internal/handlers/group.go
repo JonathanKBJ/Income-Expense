@@ -11,7 +11,9 @@ import (
 	"expense-tracker/internal/middleware"
 	"expense-tracker/internal/models"
 	"expense-tracker/internal/repository"
+	"expense-tracker/internal/service"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
@@ -20,6 +22,8 @@ type GroupHandler struct {
 	groupRepo    *repository.GroupRepository
 	activityRepo *repository.ActivityLogRepository
 	inviteRepo   *repository.GroupInviteRepository
+	userRepo     *repository.UserRepository
+	authService  *service.AuthService
 }
 
 // NewGroupHandler creates a new handler with the given repositories.
@@ -27,11 +31,15 @@ func NewGroupHandler(
 	groupRepo *repository.GroupRepository,
 	activityRepo *repository.ActivityLogRepository,
 	inviteRepo *repository.GroupInviteRepository,
+	userRepo *repository.UserRepository,
+	authService *service.AuthService,
 ) *GroupHandler {
 	return &GroupHandler{
 		groupRepo:    groupRepo,
 		activityRepo: activityRepo,
 		inviteRepo:   inviteRepo,
+		userRepo:     userRepo,
+		authService:  authService,
 	}
 }
 
@@ -53,6 +61,120 @@ func (h *GroupHandler) GetMyGroup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, info)
+}
+
+// ListMyGroups handles GET /api/me/groups
+func (h *GroupHandler) ListMyGroups(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+
+	groups, err := h.groupRepo.ListUserGroups(r.Context(), userID)
+	if err != nil {
+		log.Printf("ERROR: ListMyGroups: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to fetch user groups")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, groups)
+}
+
+// CreateMyGroup handles POST /api/me/groups
+func (h *GroupHandler) CreateMyGroup(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+
+	var req models.CreateUserGroupRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON payload: "+err.Error())
+		return
+	}
+
+	if req.Name == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+
+	group, err := h.groupRepo.CreateUserGroup(r.Context(), userID, req.Name)
+	if err != nil {
+		log.Printf("ERROR: CreateMyGroup: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to create group")
+		return
+	}
+
+	// Log GROUP_CREATED activity
+	h.logActivity(r.Context(), group.ID, userID, "GROUP_CREATED", "group", group.ID, "")
+
+	writeJSON(w, http.StatusCreated, group)
+}
+
+// SwitchGroup handles POST /api/me/switch-group
+func (h *GroupHandler) SwitchGroup(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+
+	var req models.SwitchGroupRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON payload: "+err.Error())
+		return
+	}
+
+	if req.GroupID == "" {
+		writeError(w, http.StatusBadRequest, "groupId is required")
+		return
+	}
+
+	// Verify user is a member of the target group
+	role, err := h.groupRepo.GetMemberRole(r.Context(), req.GroupID, userID)
+	if err != nil {
+		writeError(w, http.StatusForbidden, "you are not a member of this group")
+		return
+	}
+
+	// Look up full user and group info
+	user, err := h.userRepo.GetByID(r.Context(), userID)
+	if err != nil || user == nil {
+		log.Printf("ERROR: SwitchGroup: user not found: %v", err)
+		writeError(w, http.StatusInternalServerError, "user not found")
+		return
+	}
+
+	groupInfo, err := h.groupRepo.GetGroupInfo(r.Context(), req.GroupID, userID)
+	if err != nil {
+		log.Printf("ERROR: SwitchGroup: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to fetch group info")
+		return
+	}
+
+	// Generate new JWT with the target group
+	token, err := h.authService.GenerateTokenForGroup(user, req.GroupID)
+	if err != nil {
+		log.Printf("ERROR: SwitchGroup: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to generate token")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, models.SwitchGroupResponse{
+		Token:     token,
+		GroupID:   req.GroupID,
+		GroupName: groupInfo.Name,
+		GroupRole: string(role),
+	})
+}
+
+// DeleteMyGroup handles DELETE /api/me/groups/{id}
+func (h *GroupHandler) DeleteMyGroup(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	groupID := chi.URLParam(r, "id")
+
+	if groupID == "" {
+		writeError(w, http.StatusBadRequest, "group id is required")
+		return
+	}
+
+	if err := h.groupRepo.DeleteGroup(r.Context(), groupID, userID); err != nil {
+		log.Printf("ERROR: DeleteMyGroup: %v", err)
+		writeError(w, http.StatusForbidden, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "group deleted"})
 }
 
 // UpdateGroupName handles PATCH /api/me/group (OWNER only).
@@ -171,9 +293,39 @@ func (h *GroupHandler) JoinGroup(w http.ResponseWriter, r *http.Request) {
 	// Log MEMBER_JOINED activity
 	h.logActivity(r.Context(), targetGroupID, userID, "MEMBER_JOINED", "group", targetGroupID, "")
 
-	// User must re-login to get new JWT with updated groupId + groupRole
-	writeJSON(w, http.StatusOK, map[string]string{
-		"message": "joined group successfully. please re-login to update your session.",
+	// Auto-switch to the new group: return a fresh JWT
+	user, err := h.userRepo.GetByID(r.Context(), userID)
+	if err != nil || user == nil {
+		log.Printf("ERROR: JoinGroup: user not found: %v", err)
+		writeJSON(w, http.StatusOK, map[string]string{
+			"message": "joined group successfully. please re-login to update your session.",
+		})
+		return
+	}
+
+	groupInfo, err := h.groupRepo.GetGroupInfo(r.Context(), targetGroupID, userID)
+	if err != nil {
+		log.Printf("ERROR: JoinGroup: %v", err)
+		writeJSON(w, http.StatusOK, map[string]string{
+			"message": "joined group successfully. please re-login to update your session.",
+		})
+		return
+	}
+
+	token, err := h.authService.GenerateTokenForGroup(user, targetGroupID)
+	if err != nil {
+		log.Printf("ERROR: JoinGroup token generation: %v", err)
+		writeJSON(w, http.StatusOK, map[string]string{
+			"message": "joined group successfully. please re-login to update your session.",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, models.SwitchGroupResponse{
+		Token:     token,
+		GroupID:   targetGroupID,
+		GroupName: groupInfo.Name,
+		GroupRole: string(models.RoleEditor),
 	})
 }
 
@@ -213,15 +365,46 @@ func (h *GroupHandler) LeaveGroup(w http.ResponseWriter, r *http.Request) {
 	// Log before removal (groupID still valid)
 	h.logActivity(r.Context(), groupID, userID, "MEMBER_LEFT", "group", groupID, "")
 
-	// Remove member (returns to personal group)
-	if err := h.groupRepo.RemoveMember(r.Context(), groupID, userID); err != nil {
+	// Remove the user from this group (no personal group restoration — user keeps other groups)
+	ctx := r.Context()
+		if err := h.groupRepo.DeleteMember(ctx, groupID, userID); err != nil {
 		log.Printf("ERROR: LeaveGroup: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to leave group")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{
-		"message": "left group successfully. please re-login to update your session.",
+	// Auto-switch to the first remaining group and return new JWT
+	groups, err := h.groupRepo.ListUserGroups(ctx, userID)
+	if err != nil || len(groups) == 0 {
+		writeJSON(w, http.StatusOK, map[string]string{
+			"message": "left group successfully. no remaining groups. please re-login.",
+		})
+		return
+	}
+
+	nextGroup := groups[0]
+	user, userErr := h.userRepo.GetByID(ctx, userID)
+	if userErr != nil || user == nil {
+		log.Printf("ERROR: LeaveGroup: user not found: %v", userErr)
+		writeJSON(w, http.StatusOK, map[string]string{
+			"message": "left group successfully. please re-login to update your session.",
+		})
+		return
+	}
+	token, tokenErr := h.authService.GenerateTokenForGroup(user, nextGroup.ID)
+	if tokenErr != nil {
+		log.Printf("ERROR: LeaveGroup token: %v", tokenErr)
+		writeJSON(w, http.StatusOK, map[string]string{
+			"message": "left group successfully. please re-login to update your session.",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, models.SwitchGroupResponse{
+		Token:     token,
+		GroupID:   nextGroup.ID,
+		GroupName: nextGroup.Name,
+		GroupRole: string(nextGroup.MyRole),
 	})
 }
 

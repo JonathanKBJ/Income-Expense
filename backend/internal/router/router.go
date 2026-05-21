@@ -21,6 +21,7 @@ func New(
 	txHandler *handlers.TransactionHandler,
 	catHandler *handlers.CategoryHandler,
 	groupHandler *handlers.GroupHandler,
+	loanHandler *handlers.LoanHandler,
 ) http.Handler {
 	r := chi.NewRouter()
 
@@ -65,6 +66,7 @@ func New(
 				// Write: EDITOR+
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Post("/", txHandler.CreateTransaction)
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Post("/batch", txHandler.CreateTransactionsBatch)
+					r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Post("/batch-to-group", txHandler.CreateTransactionsBatchToGroup)
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Patch("/{id}", txHandler.UpdateTransaction)
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Delete("/{id}", txHandler.DeleteTransaction)
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Delete("/batch", txHandler.DeleteTransactionsBatch)
@@ -84,10 +86,26 @@ func New(
 			r.Route("/me", func(r chi.Router) {
 				r.Get("/group", groupHandler.GetMyGroup)
 				r.Patch("/group", groupHandler.UpdateGroupName)
+				r.Get("/groups", groupHandler.ListMyGroups)
+				r.Post("/groups", groupHandler.CreateMyGroup)
+				r.Delete("/groups/{id}", groupHandler.DeleteMyGroup)
+				r.Post("/switch-group", groupHandler.SwitchGroup)
 				r.Get("/activity", groupHandler.GetActivityFeed)
 				r.Post("/group/invite", groupHandler.CreateInvite)
 				r.Post("/group/join", groupHandler.JoinGroup)
 				r.Post("/group/leave", groupHandler.LeaveGroup)
+			})
+
+			// Loan routes (EDITOR+)
+			r.Route("/loans", func(r chi.Router) {
+				r.Get("/", loanHandler.ListLoans)
+				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Post("/", loanHandler.CreateLoan)
+				r.Get("/{id}", loanHandler.GetLoanDetail)
+				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Patch("/{id}", loanHandler.UpdateLoan)
+				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Delete("/{id}", loanHandler.DeleteLoan)
+				r.Get("/{id}/entries", loanHandler.ListEntries)
+				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Post("/{id}/entries", loanHandler.AddEntry)
+				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Delete("/{id}/entries/{eid}", loanHandler.DeleteEntry)
 			})
 
 			// Admin routes (Protected by Auth + AdminOnly)
