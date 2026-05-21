@@ -435,21 +435,28 @@ export default function LoanTracker() {
           </Col>
           <Col span={cardSpan}>
             <Card size="small">
-              <Statistic title={t.loansPage.paid} value={loan.totalDeposited + loan.totalInstallments} prefix="฿" precision={2} styles={{ content: { fontSize: isMobile ? 16 : 18 } }} />
+              <Statistic title={t.loansPage.paid}
+                value={loan.type === "BORROW" ? loan.totalInstallments : loan.totalDeposited}
+                prefix="฿" precision={2}
+                styles={{ content: { color: "#4ade80", fontSize: isMobile ? 16 : 18 }}} />
             </Card>
           </Col>
-          <Col span={cardSpan}>
-            <Card size="small">
-              <Statistic title={t.loansPage.owed} value={loan.outstanding} prefix="฿" precision={2} valueStyle={{ color: loan.outstanding > 0 ? "#f59e0b" : "#4ade80" }} styles={{ content: { fontSize: isMobile ? 16 : 18 } }} />
-            </Card>
-          </Col>
-          {loan.type === "LEND" && (
+          {loan.type === "BORROW" && (
             <Col span={cardSpan}>
               <Card size="small">
-                <Statistic title={t.loansPage.withdrawn} value={loan.totalWithdrawn} prefix="฿" precision={2} styles={{ content: { fontSize: isMobile ? 16 : 18 } }} />
+                <Statistic title={t.loansPage.pool}
+                  value={loan.principal - loan.totalWithdrawn + loan.totalDeposited}
+                  prefix="฿" precision={2}
+                  styles={{ content: { fontSize: isMobile ? 16 : 18 }}} />
               </Card>
             </Col>
           )}
+          <Col span={cardSpan}>
+            <Card size="small">
+              <Statistic title={t.loansPage.owed} value={loan.outstanding} prefix="฿" precision={2}
+                styles={{ content: { color: loan.outstanding > 0 ? "#f59e0b" : "#4ade80", fontSize: isMobile ? 16 : 18 }}} />
+            </Card>
+          </Col>
         </Row>
 
         <Card size="small" style={{ marginBottom: 12 }}>
@@ -484,18 +491,21 @@ export default function LoanTracker() {
           <Progress percent={Math.round(loan.progressPercent)} style={{ marginTop: 12 }} />
         </Card>
 
-        {isMobile ? (
-          <div>{loan.entries.length ? loan.entries.map(renderEntryCard) : <Empty description={t.loansPage.noEntries} />}</div>
-        ) : (
-          <Table
-            rowKey="id"
-            size="small"
-            dataSource={loan.entries}
-            columns={entryColumns}
+        {(() => {
+          const sorted = [...loan.entries].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
+          return isMobile ? (
+            <div>{sorted.length ? sorted.map(renderEntryCard) : <Empty description={t.loansPage.noEntries} />}</div>
+          ) : (
+            <Table
+              rowKey="id"
+              size="small"
+              dataSource={sorted}
+              columns={entryColumns}
             pagination={{ pageSize: 8 }}
             scroll={{ x: 650 }}
           />
-        )}
+          );
+        })()}
       </div>
     );
   }

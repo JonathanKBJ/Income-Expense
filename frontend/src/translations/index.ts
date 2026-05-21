@@ -152,6 +152,7 @@ export interface TranslationKeys {
     counterparty: string;
     principal: string;
     owed: string;
+    pool: string;
     progress: string;
     paid: string;
     withdrawn: string;
@@ -374,6 +375,7 @@ export const translations: Record<Language, TranslationKeys> = {
       counterparty: "Counterparty",
       principal: "Principal",
       owed: "Owed",
+      pool: "Pool",
       progress: "Progress",
       paid: "Paid",
       withdrawn: "Withdrawn",
@@ -597,6 +599,7 @@ export const translations: Record<Language, TranslationKeys> = {
       counterparty: "คู่สัญญา",
       principal: "เงินต้น",
       owed: "คงค้าง",
+      pool: "กองกลาง",
       progress: "ความคืบหน้า",
       paid: "จ่ายแล้ว",
       withdrawn: "ถอนแล้ว",
