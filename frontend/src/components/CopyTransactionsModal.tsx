@@ -1,18 +1,22 @@
 import { useState, useEffect, useCallback } from "react";
-import { Modal, DatePicker, Table, Button, Alert, Space, Typography, Tag, Tooltip } from "antd";
+import { Modal, DatePicker, Table, Button, Alert, Space, Typography, Tag, Tooltip, Select } from "antd";
 import { InfoCircleOutlined, WarningOutlined, CopyOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import type { Transaction, CreateTransactionRequest } from "../types/transaction";
 import * as api from "../api/transactions";
+import type { GroupSummary } from "../api/group";
+import { useLanguage } from "../contexts/LanguageContext";
 
 const { Text, Title } = Typography;
 
 interface CopyTransactionsModalProps {
   open: boolean;
   onCancel: () => void;
-  onSuccess: (reqs: CreateTransactionRequest[]) => Promise<void>;
+  onSuccess: (reqs: CreateTransactionRequest[], targetGroupId?: string) => Promise<void>;
   currentMonth: number;
   currentYear: number;
+  myGroups: GroupSummary[];
+  activeGroupId: string;
 }
 
 export default function CopyTransactionsModal({
@@ -21,11 +25,15 @@ export default function CopyTransactionsModal({
   onSuccess,
   currentMonth,
   currentYear,
+  myGroups,
+  activeGroupId,
 }: CopyTransactionsModalProps) {
+  const { t } = useLanguage();
   // Selection State
   const [sourceDate, setSourceDate] = useState(dayjs().subtract(1, "month"));
   const [destDate, setDestDate] = useState(dayjs().year(currentYear).month(currentMonth - 1));
-  
+  const [targetGroupId, setTargetGroupId] = useState(activeGroupId);
+
   // Data State
   const [sourceTransactions, setSourceTransactions] = useState<Transaction[]>([]);
   const [destTransactions, setDestTransactions] = useState<Transaction[]>([]);
@@ -93,7 +101,7 @@ export default function CopyTransactionsModal({
 
     setSubmitting(true);
     try {
-      await onSuccess(requests);
+      await onSuccess(requests, targetGroupId !== activeGroupId ? targetGroupId : undefined);
       onCancel();
     } catch (error) {
       console.error("Copy failed", error);
@@ -104,32 +112,32 @@ export default function CopyTransactionsModal({
 
   const columns = [
     {
-      title: "Type",
+      title: t.common.type,
       dataIndex: "type",
       key: "type",
       width: 80,
       render: (type: string) => (
-        <Tag color={type === "INCOME" ? "green" : "volcano"}>{type}</Tag>
+        <Tag color={type === "INCOME" ? "green" : "volcano"}>{type === "INCOME" ? t.common.income : t.common.expense}</Tag>
       ),
     },
     {
-      title: "Category",
+      title: t.transactions.category,
       dataIndex: "category",
       key: "category",
     },
     {
-      title: "Description",
+      title: t.common.description,
       dataIndex: "description",
       key: "description",
     },
     {
-      title: "Amount",
+      title: t.common.amount,
       dataIndex: "amount",
       key: "amount",
       render: (val: number) => val.toLocaleString(undefined, { minimumFractionDigits: 2 }),
     },
     {
-      title: "Status",
+      title: t.common.status,
       key: "status",
       width: 100,
       render: (_: any, record: Transaction) => {
@@ -141,12 +149,12 @@ export default function CopyTransactionsModal({
         
         if (duplicate) {
           return (
-            <Tooltip title="Match found in destination month">
-              <Tag icon={<WarningOutlined />} color="warning">Duplicate</Tag>
+            <Tooltip title={t.copy.duplicateTooltip}>
+              <Tag icon={<WarningOutlined />} color="warning">{t.copy.duplicate}</Tag>
             </Tooltip>
           );
         }
-        return <Tag color="default">New</Tag>;
+        return <Tag color="default">{t.copy.newItem}</Tag>;
       }
     }
   ];
@@ -161,7 +169,7 @@ export default function CopyTransactionsModal({
       title={
         <Space>
           <CopyOutlined />
-          <span>Copy Transactions from Other Month</span>
+          <span>{t.copy.title}</span>
         </Space>
       }
       open={open}
@@ -169,7 +177,7 @@ export default function CopyTransactionsModal({
       width={800}
       style={{ maxWidth: '95vw', top: 20 }}
       footer={[
-        <Button key="cancel" onClick={onCancel}>Cancel</Button>,
+        <Button key="cancel" onClick={onCancel}>{t.common.cancel}</Button>,
         <Button 
           key="submit" 
           type="primary" 
@@ -177,22 +185,38 @@ export default function CopyTransactionsModal({
           loading={submitting}
           disabled={selectedRowKeys.length === 0}
         >
-          Copy {selectedRowKeys.length} Item(s)
+          {t.copy.copyItems(selectedRowKeys.length)}
         </Button>
       ]}
     >
       <div className="copy-modal-content">
         <Space direction="vertical" size="large" style={{ width: '100%' }}>
           <Alert
-            message="Compare and Clone"
-            description="Select a source month to pull transactions from. We'll automatically identify matches in the destination month to help you avoid duplicates."
+            message={t.copy.compareTitle}
+            description={t.copy.compareDescription}
             type="info"
             showIcon
           />
 
+          {/* Target Group Selector (only when user has multiple groups) */}
+          {myGroups.length > 1 && (
+            <div className="copy-modal-group-selector">
+              <Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>{t.copy.targetGroup}</Text>
+              <Select
+                value={targetGroupId}
+                onChange={setTargetGroupId}
+                style={{ width: '100%', maxWidth: 400 }}
+                options={myGroups.map(g => ({
+                  value: g.id,
+                  label: `${g.name} (${g.memberCount} ${t.copy.members})`,
+                }))}
+              />
+            </div>
+          )}
+
           <div className="copy-modal-picker-row">
             <div className="picker-item">
-              <Text type="secondary" style={{ display: 'block' }}>Source Month</Text>
+              <Text type="secondary" style={{ display: 'block' }}>{t.copy.sourceMonth}</Text>
               <DatePicker 
                 picker="month" 
                 value={sourceDate} 
@@ -206,7 +230,7 @@ export default function CopyTransactionsModal({
             <div className="picker-arrow">→</div>
 
             <div className="picker-item">
-              <Text type="secondary" style={{ display: 'block' }}>Destination Month</Text>
+              <Text type="secondary" style={{ display: 'block' }}>{t.copy.destinationMonth}</Text>
               <DatePicker 
                 picker="month" 
                 value={destDate} 
@@ -217,10 +241,10 @@ export default function CopyTransactionsModal({
               />
             </div>
 
-            <Button onClick={fetchTransactions} icon={<InfoCircleOutlined />}>Refresh List</Button>
+            <Button onClick={fetchTransactions} icon={<InfoCircleOutlined />}>{t.copy.refreshList}</Button>
           </div>
 
-          <Title level={5}>Available Transactions ({sourceTransactions.length})</Title>
+          <Title level={5}>{t.copy.availableTransactions} ({sourceTransactions.length})</Title>
           
           <Table
             rowSelection={rowSelection}
@@ -230,7 +254,7 @@ export default function CopyTransactionsModal({
             loading={loading}
             pagination={{ pageSize: 5 }}
             size="middle"
-            scroll={{ x: 'max-content' }}
+            scroll={{ x: 'max-content', y: 280 }}
           />
         </Space>
       </div>

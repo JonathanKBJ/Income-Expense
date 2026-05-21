@@ -12,6 +12,7 @@ import {
   type ActivityLogEntry,
   type CreateInviteResponse,
 } from "../api/group";
+import { useLanguage } from "../contexts/LanguageContext";
 
 function formatTime(iso: string): string {
   const d = new Date(iso);
@@ -19,6 +20,7 @@ function formatTime(iso: string): string {
 }
 
 export default function GroupPage() {
+  const { t } = useLanguage();
   const { groupInfo, refreshGroupInfo } = useAuth();
   const [members, setMembers] = useState<GroupMember[]>([]);
   const [myRole, setMyRole] = useState<string>("");
@@ -47,11 +49,11 @@ export default function GroupPage() {
   async function handleRename() {
     try {
       await updateGroupName(groupName);
-      message.success("Group name updated");
+      message.success(t.group.groupNameUpdated);
       setEditingName(false);
       refreshGroupInfo();
     } catch (e: any) {
-      message.error(e.message || "Failed to rename group");
+      message.error(e.message || t.group.renameFailed);
     }
   }
 
@@ -60,14 +62,14 @@ export default function GroupPage() {
       const resp = await createInvite();
       setInvite(resp);
     } catch (e: any) {
-      message.error(e.message || "Failed to create invite");
+      message.error(e.message || t.group.inviteFailed);
     }
   }
 
   function copyInviteCode() {
     if (invite) {
       navigator.clipboard.writeText(invite.code);
-      message.success("Invite code copied!");
+      message.success(t.group.inviteCopied);
     }
   }
 
@@ -76,13 +78,13 @@ export default function GroupPage() {
     setJoining(true);
     try {
       await joinGroup(joinCode.trim());
-      message.success("Joined group! Please re-login.");
+      message.success(t.group.joined);
       setJoinCode("");
       setTimeout(() => {
         window.location.reload();
       }, 1500);
     } catch (e: any) {
-      message.error(e.message || "Failed to join group");
+      message.error(e.message || t.group.joinFailed);
     } finally {
       setJoining(false);
     }
@@ -91,13 +93,13 @@ export default function GroupPage() {
   async function handleLeaveGroup() {
     try {
       await leaveGroup();
-      message.success("Left group! Re-logging in...");
+      message.success(t.group.left);
       setShowLeaveConfirm(false);
       setTimeout(() => {
         window.location.reload();
       }, 1500);
     } catch (e: any) {
-      message.error(e.message || "Failed to leave group");
+      message.error(e.message || t.group.leaveFailed);
     }
   }
 
@@ -111,9 +113,9 @@ export default function GroupPage() {
   }
 
   const memberColumns = [
-    { title: "User", dataIndex: "username", key: "username" },
+    { title: t.group.user, dataIndex: "username", key: "username" },
     {
-      title: "Role",
+      title: t.group.role,
       dataIndex: "role",
       key: "role",
       render: (role: string) => <Tag color={getRoleColor(role)}>{role}</Tag>,
@@ -125,7 +127,7 @@ export default function GroupPage() {
 
   return (
     <section className="group-page">
-      <h2>My Group</h2>
+      <h2>{t.common.myGroup}</h2>
 
       {/* Group Header */}
       <div className="group-header">
@@ -136,15 +138,15 @@ export default function GroupPage() {
               onChange={(e) => setGroupName(e.target.value)}
               style={{ width: 300 }}
             />
-            <Button type="primary" onClick={handleRename}>Save</Button>
-            <Button onClick={() => { setEditingName(false); setGroupName(groupInfo?.name || ""); }}>Cancel</Button>
+            <Button type="primary" onClick={handleRename}>{t.common.save}</Button>
+            <Button onClick={() => { setEditingName(false); setGroupName(groupInfo?.name || ""); }}>{t.common.cancel}</Button>
           </div>
         ) : (
           <div className="group-name-row">
             <h3>{groupName}</h3>
-            <Tag>{groupInfo?.memberCount || 0} members</Tag>
+            <Tag>{t.group.memberCount(groupInfo?.memberCount || 0)}</Tag>
             {isOwner && (
-              <Button size="small" onClick={() => setEditingName(true)}>Rename</Button>
+              <Button size="small" onClick={() => setEditingName(true)}>{t.group.rename}</Button>
             )}
           </div>
         )}
@@ -153,13 +155,14 @@ export default function GroupPage() {
       <div className="group-grid">
         {/* Member List */}
         <div className="group-section">
-          <h3>Members</h3>
+          <h3>{t.group.members}</h3>
           <Table
             dataSource={members}
             columns={memberColumns}
             rowKey="userId"
             pagination={false}
             size="small"
+            scroll={{ x: "max-content" }}
             style={{ marginTop: 12 }}
           />
         </div>
@@ -169,25 +172,25 @@ export default function GroupPage() {
           {/* Invite Section */}
           {isOwner && (
             <div className="group-invite-area">
-              <h4>Invite Members</h4>
+              <h4>{t.group.inviteMembers}</h4>
               {invite ? (
                 <div>
                   <Input
                     value={invite.code}
                     readOnly
                     suffix={
-                      <Tooltip title="Copy code">
+                      <Tooltip title={t.group.copyCode}>
                         <Button type="text" icon={<CopyOutlined />} onClick={copyInviteCode} size="small" />
                       </Tooltip>
                     }
                   />
                   <div style={{ color: "var(--text-secondary)", fontSize: 12, marginTop: 4 }}>
-                    Expires: {formatTime(invite.expiresAt)}
+                    {t.group.expires}: {formatTime(invite.expiresAt)}
                   </div>
                 </div>
               ) : (
                 <Button icon={<UserAddOutlined />} onClick={handleCreateInvite}>
-                  Generate Invite Link
+                  {t.group.generateInvite}
                 </Button>
               )}
             </div>
@@ -196,15 +199,15 @@ export default function GroupPage() {
           {/* Join Another Group */}
           {!isMultiMember && (
             <div className="group-join-area">
-              <h4>Join a Group</h4>
+              <h4>{t.group.joinGroup}</h4>
               <div className="group-join-row">
                 <Input
-                  placeholder="Paste invite code"
+                  placeholder={t.group.pasteInviteCode}
                   value={joinCode}
                   onChange={(e) => setJoinCode(e.target.value)}
                 />
                 <Button type="primary" onClick={handleJoinGroup} loading={joining}>
-                  Join
+                  {t.group.join}
                 </Button>
               </div>
             </div>
@@ -218,19 +221,21 @@ export default function GroupPage() {
                 icon={<LogoutOutlined />}
                 onClick={() => setShowLeaveConfirm(true)}
               >
-                Leave Group
+                {t.group.leaveGroup}
               </Button>
               <Modal
-                title="Leave Group"
+                title={t.group.leaveGroup}
                 open={showLeaveConfirm}
                 onOk={handleLeaveGroup}
                 onCancel={() => setShowLeaveConfirm(false)}
-                okText="Leave"
+                okText={t.group.leaveGroup}
                 okButtonProps={{ danger: true }}
+                width="95vw"
+                style={{ maxWidth: 420, top: 20 }}
               >
-                <p>Are you sure you want to leave this group?</p>
-                {isOwner && <p style={{ color: "#f59e0b" }}>If you are the only owner, you must promote another member first.</p>}
-                <p style={{ color: "var(--text-secondary)", fontSize: 13 }}>You will need to re-login after leaving.</p>
+                <p>{t.group.leaveConfirm}</p>
+                {isOwner && <p style={{ color: "#f59e0b" }}>{t.group.onlyOwnerWarning}</p>}
+                <p style={{ color: "var(--text-secondary)", fontSize: 13 }}>{t.group.reloginNote}</p>
               </Modal>
             </div>
           )}
@@ -240,7 +245,7 @@ export default function GroupPage() {
       {/* Activity Feed */}
       {isMultiMember && activity.length > 0 && (
         <div className="group-section" style={{ marginTop: 24 }}>
-          <h3>Recent Activity</h3>
+          <h3>{t.group.recentActivity}</h3>
           <div className="group-activity-list">
             {activity.map((entry) => (
               <div key={entry.id} className="group-activity-row">

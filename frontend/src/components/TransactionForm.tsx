@@ -10,12 +10,16 @@ import type {
 } from "../types/transaction";
 import { useCategories } from "../hooks/useCategories";
 import CopyTransactionsModal from "./CopyTransactionsModal";
+import type { GroupSummary } from "../api/group";
+import { useLanguage } from "../contexts/LanguageContext";
 
 interface TransactionFormProps {
   onSubmit: (req: CreateTransactionRequest) => Promise<void>;
-  onCopyBatch: (reqs: CreateTransactionRequest[]) => Promise<void>;
+  onCopyBatch: (reqs: CreateTransactionRequest[], targetGroupId?: string) => Promise<void>;
   currentMonth: number;
   currentYear: number;
+  myGroups: GroupSummary[];
+  activeGroupId: string;
 }
 
 const initialState: TransactionFormState = {
@@ -29,11 +33,14 @@ const initialState: TransactionFormState = {
 };
 
 export default function TransactionForm({ 
-  onSubmit, 
-  onCopyBatch, 
-  currentMonth, 
-  currentYear 
+  onSubmit,
+  onCopyBatch,
+  currentMonth,
+  currentYear,
+  myGroups,
+  activeGroupId,
 }: TransactionFormProps) {
+  const { t } = useLanguage();
   const [form, setForm] = useState<TransactionFormState>(initialState);
   const [isExpanded, setIsExpanded] = useState(true);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -96,7 +103,7 @@ export default function TransactionForm({
       }
       return false; // Prevent default upload
     } catch (err) {
-      message.error("Failed to process image");
+      message.error(t.transactions.attachReceipt);
       return false;
     }
   };
@@ -154,12 +161,12 @@ export default function TransactionForm({
 
     // Validation
     if (!form.category) {
-      setError("Please select a category");
+      setError(t.transactions.selectCategory);
       return;
     }
     const amount = parseFloat(form.amount);
     if (isNaN(amount) || amount <= 0) {
-      setError("Amount must be greater than 0");
+      setError(`${t.common.amount} must be greater than 0`);
       return;
     }
 
@@ -178,7 +185,7 @@ export default function TransactionForm({
     } else {
       const paidAmount = form.paidAmount ? parseFloat(form.paidAmount) : 0;
       if (form.status === "PAID" && (isNaN(paidAmount) || paidAmount <= 0)) {
-        setError("Paid amount must be greater than 0 when status is PAID");
+        setError(`${t.transactions.paidAmount} must be greater than 0 when status is ${t.common.paid}`);
         return;
       }
 
@@ -206,7 +213,7 @@ export default function TransactionForm({
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create");
+      setError(err instanceof Error ? err.message : t.loansPage.createFailed);
     } finally {
       setSubmitting(false);
     }
@@ -215,20 +222,20 @@ export default function TransactionForm({
   return (
     <section className="transaction-form-section" id="transaction-form">
       <div className="section-header">
-        <h2 className="section-title" style={{ margin: 0 }}>Add Transaction</h2>
+        <h2 className="section-title" style={{ margin: 0 }}>{t.dashboard.addTransaction}</h2>
         <div className="header-actions">
           <Button 
             icon={<CopyOutlined />} 
             onClick={() => setCopyModalOpen(true)}
             className="copy-btn"
           >
-            <span className="btn-text">Copy from Month</span>
+            <span className="btn-text">{t.transactions.copyFromMonth}</span>
           </Button>
           <Button
             className="expand-toggle-btn"
             icon={isExpanded ? <UpOutlined /> : <DownOutlined />}
             onClick={() => setIsExpanded(!isExpanded)}
-            title={isExpanded ? "Collapse form" : "Expand form"}
+            title={isExpanded ? t.transactions.collapseForm : t.transactions.expandForm}
           />
         </div>
       </div>
@@ -246,7 +253,7 @@ export default function TransactionForm({
               <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
               <polyline points="17 6 23 6 23 12" />
             </svg>
-            Income
+            {t.common.income}
           </button>
           <button
             type="button"
@@ -257,18 +264,18 @@ export default function TransactionForm({
               <polyline points="23 18 13.5 8.5 8.5 13.5 1 6" />
               <polyline points="17 18 23 18 23 12" />
             </svg>
-            Expense
+            {t.common.expense}
           </button>
         </div>
 
         {/* Form Fields */}
         <div className="form-grid">
           <div className="form-group">
-            <label>Category</label>
+            <label>{t.transactions.category}</label>
             <Select
               id="form-category"
               className="antd-select-full"
-              placeholder="Select category..."
+              placeholder={t.transactions.selectCategory}
               value={form.category || undefined}
               onChange={(val) => updateField("category", val)}
               options={categories.map(cat => ({ label: cat.name, value: cat.name }))}
@@ -280,7 +287,7 @@ export default function TransactionForm({
           </div>
 
           <div className="form-group">
-            <label>Amount</label>
+            <label>{t.common.amount}</label>
             <InputNumber
               id="form-amount"
               className="antd-input-number-full"
@@ -294,7 +301,7 @@ export default function TransactionForm({
           </div>
 
           <div className="form-group">
-            <label>Date</label>
+            <label>{t.common.date}</label>
             <DatePicker
               id="form-date"
               className="antd-datepicker-full"
@@ -306,10 +313,10 @@ export default function TransactionForm({
           </div>
 
           <div className="form-group full-width">
-            <label>Description</label>
+            <label>{t.common.description}</label>
             <Input.TextArea
               id="form-description"
-              placeholder="Optional description..."
+              placeholder={t.transactions.optionalDescription}
               rows={2}
               value={form.description}
               onChange={(e) => updateField("description", e.target.value)}
@@ -320,21 +327,21 @@ export default function TransactionForm({
           {form.type === "EXPENSE" && (
             <>
               <div className="form-group expense-field" id="status-field">
-                <label>Status</label>
+                <label>{t.common.status}</label>
                 <Select
                   id="form-status"
                   className="antd-select-full"
                   value={form.status}
                   onChange={(val) => updateField("status", val)}
                   options={[
-                    { label: "Pending", value: "PENDING" },
-                    { label: "Paid", value: "PAID" },
+                    { label: t.common.pending, value: "PENDING" },
+                    { label: t.common.paid, value: "PAID" },
                   ]}
                 />
               </div>
 
               <div className="form-group expense-field" id="paid-amount-field">
-                <label>Paid Amount</label>
+                <label>{t.transactions.paidAmount}</label>
                 <InputNumber
                   id="form-paid-amount"
                   className="antd-input-number-full"
@@ -352,7 +359,7 @@ export default function TransactionForm({
 
           {/* Receipt Image Upload */}
           <div className="form-group full-width receipt-upload-group">
-            <label>Receipt Attachment</label>
+            <label>{t.transactions.receiptAttachment}</label>
             <div className="receipt-upload-container">
               {!previewImage ? (
                 <Upload
@@ -362,7 +369,7 @@ export default function TransactionForm({
                   className="receipt-uploader"
                 >
                   <Button icon={<PictureOutlined />} className="antd-btn-full">
-                    Upload Receipt
+                    {t.transactions.uploadReceipt}
                   </Button>
                 </Upload>
               ) : (
@@ -381,7 +388,7 @@ export default function TransactionForm({
             </div>
             {form.type === "EXPENSE" && form.status === "PAID" && !previewImage && (
               <span style={{ fontSize: "12px", color: "#f97316", marginTop: "4px", display: "block" }}>
-                * Receipt is required to mark as PAID
+                {t.transactions.receiptRequired}
               </span>
             )}
           </div>
@@ -389,7 +396,7 @@ export default function TransactionForm({
 
         {/* Error / Success Messages */}
         {error && <div className="form-error" id="form-error">{error}</div>}
-        {success && <div className="form-success" id="form-success">Transaction added successfully!</div>}
+        {success && <div className="form-success" id="form-success">{t.transactions.successAdded}</div>}
 
         {/* Submit Button */}
         <button
@@ -406,7 +413,7 @@ export default function TransactionForm({
                 <line x1="12" y1="5" x2="12" y2="19" />
                 <line x1="5" y1="12" x2="19" y2="12" />
               </svg>
-              Add {form.type === "INCOME" ? "Income" : "Expense"}
+              {form.type === "INCOME" ? t.transactions.addIncome : t.transactions.addExpense}
             </>
           )}
         </button>
@@ -419,6 +426,8 @@ export default function TransactionForm({
         onSuccess={onCopyBatch}
         currentMonth={currentMonth}
         currentYear={currentYear}
+        myGroups={myGroups}
+        activeGroupId={activeGroupId}
       />
     </section>
   );

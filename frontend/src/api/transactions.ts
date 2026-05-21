@@ -45,6 +45,20 @@ export async function createTransactionsBatch(
 }
 
 /**
+ * Copy transactions to a different group.
+ * POST /api/transactions/batch-to-group
+ */
+export async function createTransactionsBatchToGroup(
+  reqs: CreateTransactionRequest[],
+  targetGroupId: string
+): Promise<{ message: string }> {
+  return apiFetch("/api/transactions/batch-to-group", {
+    method: "POST",
+    body: JSON.stringify({ transactions: reqs, targetGroupId }),
+  });
+}
+
+/**
  * Update an existing transaction's status and/or paidAmount.
  * PATCH /api/transactions/{id}
  */

@@ -3,6 +3,7 @@ import { Form, Input, Button, Card, Typography, Divider, App as AntApp } from "a
 import { UserOutlined, LockOutlined } from "@ant-design/icons";
 import { useAuth } from "../contexts/AuthContext";
 import { hashPassword } from "../api/security";
+import { useLanguage } from "../contexts/LanguageContext";
 
 const { Title, Text } = Typography;
 
@@ -12,6 +13,7 @@ interface LoginProps {
 
 const Login: React.FC<LoginProps> = ({ onRegisterClick }) => {
   const { login } = useAuth();
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(false);
   const { message } = AntApp.useApp();
 
@@ -34,12 +36,12 @@ const Login: React.FC<LoginProps> = ({ onRegisterClick }) => {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Login failed");
+        throw new Error(errorData.error || t.auth.loginFailed);
       }
 
       const data = await response.json();
       login(data.token, data.user);
-      message.success("Logged in successfully!");
+      message.success(t.auth.loggedIn);
     } catch (error: any) {
       message.error(error.message);
     } finally {
@@ -57,8 +59,8 @@ const Login: React.FC<LoginProps> = ({ onRegisterClick }) => {
               <line x1="2" y1="10" x2="22" y2="10" />
             </svg>
           </div>
-          <Title level={2}>Welcome Back</Title>
-          <Text type="secondary">Manage your expenses with ease</Text>
+          <Title level={2}>{t.auth.welcomeBack}</Title>
+          <Text type="secondary">{t.auth.loginSubtitle}</Text>
         </div>
 
         <Divider />
@@ -72,28 +74,28 @@ const Login: React.FC<LoginProps> = ({ onRegisterClick }) => {
         >
           <Form.Item
             name="username"
-            rules={[{ required: true, message: "Please input your username!" }]}
+            rules={[{ required: true, message: t.auth.usernameRequired }]}
           >
-            <Input prefix={<UserOutlined />} placeholder="Username" />
+            <Input prefix={<UserOutlined />} placeholder={t.auth.username} />
           </Form.Item>
 
           <Form.Item
             name="password"
-            rules={[{ required: true, message: "Please input your password!" }]}
+            rules={[{ required: true, message: t.auth.passwordRequired }]}
           >
-            <Input.Password prefix={<LockOutlined />} placeholder="Password" />
+            <Input.Password prefix={<LockOutlined />} placeholder={t.auth.password} />
           </Form.Item>
 
           <Form.Item>
             <Button type="primary" htmlType="submit" block loading={loading}>
-              Sign In
+              {t.auth.signIn}
             </Button>
           </Form.Item>
         </Form>
 
         <div className="auth-footer">
-          <Text>Don't have an account? </Text>
-          <Button type="link" onClick={onRegisterClick}>Register now</Button>
+          <Text>{t.auth.noAccount} </Text>
+          <Button type="link" onClick={onRegisterClick}>{t.auth.registerNow}</Button>
         </div>
       </Card>
       

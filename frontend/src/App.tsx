@@ -1,5 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { ConfigProvider, theme, Switch, Segmented, Space, Tooltip } from "antd";
+import enUS from "antd/locale/en_US";
+import thTH from "antd/locale/th_TH";
 import { MoonOutlined, SunOutlined } from "@ant-design/icons";
 import { useAuth } from "./contexts/AuthContext";
 import { useLanguage } from "./contexts/LanguageContext";
@@ -13,15 +15,17 @@ import TransactionList from "./components/TransactionList";
 import Sidebar from "./components/Sidebar";
 import CategoryManager from "./components/CategoryManager";
 import GroupPage from "./components/GroupPage";
+import LoanTracker from "./components/LoanTracker";
 import Login from "./components/Login";
 import Register from "./components/Register";
 import AdminPanel from "./components/AdminPanel";
 import AnnualDashboard from "./components/AnnualDashboard";
 import { Analytics } from "@vercel/analytics/react";
 import { AUTH_EXPIRED_EVENT } from "./api/client";
+import * as api from "./api/transactions";
 import "./App.css";
 
-type Page = "dashboard" | "annual" | "categories" | "admin" | "group";
+type Page = "dashboard" | "annual" | "categories" | "admin" | "group" | "loans";
 
 const getAntdTheme = (isDark: boolean) => ({
   algorithm: isDark ? theme.darkAlgorithm : theme.defaultAlgorithm,
@@ -40,7 +44,7 @@ const getAntdTheme = (isDark: boolean) => ({
 function AuthenticatedApp() {
   const { t, language, setLanguage } = useLanguage();
   const { toggleTheme, isDark } = useTheme();
-  const { groupInfo } = useAuth();
+  const { groupInfo, activeGroup, myGroups } = useAuth();
 
   const [activePage, setActivePage] = useState<Page>(() => {
     return (localStorage.getItem("active_page") as Page) || "dashboard";
@@ -74,6 +78,13 @@ function AuthenticatedApp() {
   useEffect(() => {
     localStorage.setItem("annual_year", annualYear.toString());
   }, [annualYear]);
+
+  // Refresh transactions when switching groups
+  useEffect(() => {
+    if (activeGroup?.id) {
+      refresh();
+    }
+  }, [activeGroup?.id]);
 
   // Poll for new data every 30s when in a multi-member group
   const isMultiMember = groupInfo && groupInfo.memberCount > 1;
@@ -112,7 +123,7 @@ function AuthenticatedApp() {
                 onChange={(value) => setLanguage(value as "th" | "en")}
                 className="language-selector"
               />
-              <Tooltip title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}>
+              <Tooltip title={isDark ? t.theme.light : t.theme.dark}>
                 <Switch
                   checkedChildren={<MoonOutlined />}
                   unCheckedChildren={<SunOutlined />}
@@ -132,38 +143,47 @@ function AuthenticatedApp() {
           )}
           {activePage === "annual" && (
             <div className="page-breadcrumb">
-              <span className="breadcrumb-parent">Performance</span>
+              <span className="breadcrumb-parent">{t.common.performance}</span>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <polyline points="9 18 15 12 9 6" />
               </svg>
-              <span className="breadcrumb-current">Annual Dashboard</span>
+              <span className="breadcrumb-current">{t.common.annual}</span>
             </div>
           )}
           {activePage === "categories" && (
             <div className="page-breadcrumb">
-              <span className="breadcrumb-parent">Settings</span>
+              <span className="breadcrumb-parent">{t.common.settings}</span>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <polyline points="9 18 15 12 9 6" />
               </svg>
-              <span className="breadcrumb-current">Categories</span>
+              <span className="breadcrumb-current">{t.common.categories}</span>
             </div>
           )}
           {activePage === "admin" && (
             <div className="page-breadcrumb">
-              <span className="breadcrumb-parent">System</span>
+              <span className="breadcrumb-parent">{t.common.system}</span>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <polyline points="9 18 15 12 9 6" />
               </svg>
-              <span className="breadcrumb-current">Admin Panel</span>
+              <span className="breadcrumb-current">{t.common.admin}</span>
             </div>
           )}
           {activePage === "group" && (
             <div className="page-breadcrumb">
-              <span className="breadcrumb-parent">Settings</span>
+              <span className="breadcrumb-parent">{t.common.settings}</span>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <polyline points="9 18 15 12 9 6" />
               </svg>
-              <span className="breadcrumb-current">My Group</span>
+              <span className="breadcrumb-current">{t.common.myGroup}</span>
+            </div>
+          )}
+          {activePage === "loans" && (
+            <div className="page-breadcrumb">
+              <span className="breadcrumb-parent">{t.common.finance}</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+              <span className="breadcrumb-current">{t.common.loans}</span>
             </div>
           )}
         </div>
@@ -186,9 +206,17 @@ function AuthenticatedApp() {
             <div className="content-grid">
               <TransactionForm
                 onSubmit={create}
-                onCopyBatch={createBatch}
+                onCopyBatch={async (reqs, targetGroupId) => {
+                  if (targetGroupId) {
+                    await api.createTransactionsBatchToGroup(reqs, targetGroupId);
+                  } else {
+                    await createBatch(reqs);
+                  }
+                }}
                 currentMonth={month}
                 currentYear={year}
+                myGroups={myGroups}
+                activeGroupId={activeGroup?.id || ""}
               />
               <TransactionList
                 transactions={transactions}
@@ -204,6 +232,7 @@ function AuthenticatedApp() {
         {activePage === "categories" && <CategoryManager />}
         {activePage === "admin" && <AdminPanel />}
         {activePage === "group" && <GroupPage />}
+        {activePage === "loans" && <LoanTracker />}
       </main>
 
       <footer className="app-footer">
@@ -216,6 +245,7 @@ function AuthenticatedApp() {
 // ─── Root ─────────────────────────────────────────────────────────────────────
 export default function App() {
   const { isAuthenticated, logout } = useAuth();
+  const { language } = useLanguage();
   const { isDark } = useTheme();
   const [authView, setAuthView] = useState<"login" | "register">("login");
 
@@ -232,7 +262,7 @@ export default function App() {
 
   if (!isAuthenticated) {
     return (
-      <ConfigProvider theme={antdThemeConfig}>
+      <ConfigProvider theme={antdThemeConfig} locale={language === "th" ? thTH : enUS}>
         <div className="app guest">
           <div className="bg-blob blob-1" />
           <div className="bg-blob blob-2" />
@@ -251,7 +281,7 @@ export default function App() {
   }
 
   return (
-    <ConfigProvider theme={antdThemeConfig}>
+    <ConfigProvider theme={antdThemeConfig} locale={language === "th" ? thTH : enUS}>
       <AuthenticatedApp />
       <Analytics />
     </ConfigProvider>

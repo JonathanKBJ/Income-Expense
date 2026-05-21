@@ -122,6 +122,55 @@ const createGroupInvitesIndex = `
 CREATE INDEX IF NOT EXISTS idx_group_invites_code ON group_invites(code);
 `
 
+// createLoansTable is the DDL for the loans (debt tracking) table.
+const createLoansTable = `
+CREATE TABLE IF NOT EXISTS loans (
+    id                TEXT PRIMARY KEY,
+    type              TEXT NOT NULL CHECK (type IN ('BORROW', 'LEND')),
+    name              TEXT NOT NULL,
+    counterparty      TEXT NOT NULL,
+    principal         REAL NOT NULL CHECK (principal > 0),
+    term_months       INTEGER,
+    installment_amount REAL,
+    payment_day       INTEGER CHECK (payment_day IS NULL OR (payment_day >= 1 AND payment_day <= 31)),
+    interest_rate     REAL,
+    start_date        TEXT NOT NULL,
+    end_date          TEXT,
+    status            TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'CLOSED')),
+    notes             TEXT DEFAULT '',
+    group_id          TEXT NOT NULL,
+    user_id           TEXT NOT NULL,
+    created_at        TEXT NOT NULL,
+    updated_at        TEXT NOT NULL,
+    FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+`
+
+const createLoansIndex = `
+CREATE INDEX IF NOT EXISTS idx_loans_group ON loans(group_id);
+CREATE INDEX IF NOT EXISTS idx_loans_user ON loans(user_id);
+`
+
+const createLoanEntriesTable = `
+CREATE TABLE IF NOT EXISTS loan_entries (
+    id             TEXT PRIMARY KEY,
+    loan_id        TEXT NOT NULL,
+    entry_type     TEXT NOT NULL CHECK (entry_type IN ('WITHDRAWAL', 'DEPOSIT', 'INSTALLMENT')),
+    amount         REAL NOT NULL CHECK (amount > 0),
+    date           TEXT NOT NULL,
+    description    TEXT DEFAULT '',
+    receipt_image  TEXT,
+    created_at     TEXT NOT NULL,
+    updated_at     TEXT NOT NULL,
+    FOREIGN KEY (loan_id) REFERENCES loans(id) ON DELETE CASCADE
+);
+`
+
+const createLoanEntriesIndex = `
+CREATE INDEX IF NOT EXISTS idx_loan_entries_loan ON loan_entries(loan_id, date);
+`
+
 // defaultCategories are seeded on first migration using INSERT OR IGNORE.
 var defaultCategories = map[string][]string{
 	"INCOME": {
@@ -165,6 +214,8 @@ func (d *DB) Migrate() error {
 		{"categories", createCategoriesTable},
 		{"activity_log", createActivityLogTable},
 		{"group_invites", createGroupInvitesTable},
+		{"loans", createLoansTable},
+		{"loan_entries", createLoanEntriesTable},
 	}
 
 	for _, t := range tables {
@@ -263,8 +314,14 @@ func (d *DB) Migrate() error {
 		return fmt.Errorf("failed to create activity_log index: %w", err)
 	}
 	if _, err := d.ExecContext(ctx, createGroupInvitesIndex); err != nil {
-		return fmt.Errorf("failed to create group_invites index: %w", err)
-	}
+			return fmt.Errorf("failed to create group_invites index: %w", err)
+		}
+		if _, err := d.ExecContext(ctx, createLoansIndex); err != nil {
+			return fmt.Errorf("failed to create loans index: %w", err)
+		}
+		if _, err := d.ExecContext(ctx, createLoanEntriesIndex); err != nil {
+			return fmt.Errorf("failed to create loan_entries index: %w", err)
+		}
 
 	// Fix orphaned transactions and categories by assigning them to their user's primary group
 	migrationSQL := []string{

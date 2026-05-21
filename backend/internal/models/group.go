@@ -81,3 +81,26 @@ type JoinGroupRequest struct {
 type UpdateGroupNameRequest struct {
 	Name string `json:"name"`
 }
+
+// CreateUserGroupRequest is the payload for POST /api/me/groups.
+type CreateUserGroupRequest struct {
+	Name string `json:"name"`
+}
+
+// SwitchGroupRequest is the payload for POST /api/me/switch-group.
+type SwitchGroupRequest struct {
+	GroupID string `json:"groupId"`
+}
+
+// SwitchGroupResponse is the response after switching active group.
+type SwitchGroupResponse struct {
+	Token     string `json:"token"`
+	GroupID   string `json:"groupId"`
+	GroupName string `json:"groupName"`
+	GroupRole string `json:"groupRole"`
+}
+
+// DeleteGroupRequest is the payload for DELETE /api/me/groups/{id}.
+type DeleteGroupRequest struct {
+	GroupID string `json:"groupId"`
+}

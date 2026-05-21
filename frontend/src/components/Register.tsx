@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Form, Input, Button, Card, Typography, Divider, App as AntApp } from "antd";
 import { UserOutlined, LockOutlined, ArrowLeftOutlined } from "@ant-design/icons";
 import { hashPassword } from "../api/security";
+import { useLanguage } from "../contexts/LanguageContext";
 
 const { Title, Text } = Typography;
 
@@ -11,6 +12,7 @@ interface RegisterProps {
 }
 
 const Register: React.FC<RegisterProps> = ({ onBackToLogin, onSuccess }) => {
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(false);
   const { message } = AntApp.useApp();
 
@@ -33,10 +35,10 @@ const Register: React.FC<RegisterProps> = ({ onBackToLogin, onSuccess }) => {
   
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Registration failed");
+        throw new Error(errorData.error || t.auth.registrationFailed);
       }
 
-      message.success("Account created successfully! Please sign in.");
+      message.success(t.auth.accountCreated);
       onSuccess();
     } catch (error: any) {
       message.error(error.message);
@@ -63,8 +65,8 @@ const Register: React.FC<RegisterProps> = ({ onBackToLogin, onSuccess }) => {
               <line x1="23" y1="11" x2="17" y2="11" />
             </svg>
           </div>
-          <Title level={2}>Create Account</Title>
-          <Text type="secondary">Start tracking your finances today</Text>
+          <Title level={2}>{t.auth.createAccount}</Title>
+          <Text type="secondary">{t.auth.registerSubtitle}</Text>
         </div>
 
         <Divider />
@@ -78,42 +80,42 @@ const Register: React.FC<RegisterProps> = ({ onBackToLogin, onSuccess }) => {
         >
           <Form.Item
             name="username"
-            rules={[{ required: true, message: "Please input your username!" }]}
+            rules={[{ required: true, message: t.auth.usernameRequired }]}
           >
-            <Input prefix={<UserOutlined />} placeholder="Username" />
+            <Input prefix={<UserOutlined />} placeholder={t.auth.username} />
           </Form.Item>
 
           <Form.Item
             name="password"
             rules={[
-              { required: true, message: "Please input your password!" },
-              { min: 6, message: "Password must be at least 6 characters!" }
+              { required: true, message: t.auth.passwordRequired },
+              { min: 6, message: t.auth.passwordMin }
             ]}
           >
-            <Input.Password prefix={<LockOutlined />} placeholder="Password" />
+            <Input.Password prefix={<LockOutlined />} placeholder={t.auth.password} />
           </Form.Item>
 
           <Form.Item
             name="confirm"
             dependencies={['password']}
             rules={[
-              { required: true, message: 'Please confirm your password!' },
+              { required: true, message: t.auth.confirmRequired },
               ({ getFieldValue }) => ({
                 validator(_, value) {
                   if (!value || getFieldValue('password') === value) {
                     return Promise.resolve();
                   }
-                  return Promise.reject(new Error('The two passwords do not match!'));
+                  return Promise.reject(new Error(t.auth.passwordMismatch));
                 },
               }),
             ]}
           >
-            <Input.Password prefix={<LockOutlined />} placeholder="Confirm Password" />
+            <Input.Password prefix={<LockOutlined />} placeholder={t.auth.confirmPassword} />
           </Form.Item>
 
           <Form.Item>
             <Button type="primary" htmlType="submit" block loading={loading} style={{ background: '#10b981', border: 'none' }}>
-              Create Account
+              {t.auth.createAccount}
             </Button>
           </Form.Item>
         </Form>

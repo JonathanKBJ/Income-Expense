@@ -1,4 +1,5 @@
 import type { ExpenseStatus } from "../types/transaction";
+import { useLanguage } from "../contexts/LanguageContext";
 
 interface StatusBadgeProps {
   status: ExpenseStatus;
@@ -10,8 +11,8 @@ interface StatusBadgeProps {
  * Styles are defined in App.css under the .status-badge class.
  */
 export default function StatusBadge({ status }: StatusBadgeProps) {
-  // Normalize the label: PENDING -> Pending, PAID -> Paid
-  const label = status.charAt(0) + status.slice(1).toLowerCase();
+  const { t } = useLanguage();
+  const label = status === "PAID" ? t.common.paid : t.common.pending;
   const statusClass = status.toLowerCase();
 
   return (

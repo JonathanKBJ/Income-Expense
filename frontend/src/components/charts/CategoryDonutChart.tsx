@@ -1,5 +1,6 @@
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend, Label } from "recharts";
+﻿import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend, Label } from "recharts";
 import type { CategorySummary } from "../../types/transaction";
+import { useLanguage } from "../../contexts/LanguageContext";
 
 interface Props {
   data: CategorySummary[];
@@ -10,12 +11,13 @@ const COLORS_EXPENSE = ["#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16", "
 const COLORS_INCOME = ["#3b82f6", "#6366f1", "#8b5cf6", "#a855f7", "#d946ef", "#ec4899", "#f43f5e", "#737373"];
 
 function formatCompactCurrency(value: number) {
-  if (value >= 1000000) return `฿${(value / 1000000).toFixed(1)}M`;
-  if (value >= 1000) return `฿${(value / 1000).toFixed(1)}K`;
-  return `฿${value.toFixed(0)}`;
+  if (value >= 1000000) return `\u0e3f${(value / 1000000).toFixed(1)}M`;
+  if (value >= 1000) return `\u0e3f${(value / 1000).toFixed(1)}K`;
+  return `\u0e3f${value.toFixed(0)}`;
 }
 
 export default function CategoryDonutChart({ data, type }: Props) {
+  const { language, t } = useLanguage();
   const filteredData = data.filter((item) => item.type === type && item.amount > 0);
   const colors = type === "EXPENSE" ? COLORS_EXPENSE : COLORS_INCOME;
   const total = filteredData.reduce((acc, curr) => acc + curr.amount, 0);
@@ -23,7 +25,7 @@ export default function CategoryDonutChart({ data, type }: Props) {
   if (filteredData.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-gray-500" style={{ minHeight: "150px" }}>
-        No {type.toLowerCase()}s recorded for this period.
+        {language === "th" ? `ยังไม่มี${type === "INCOME" ? t.common.income : t.common.expense}ในช่วงเวลานี้` : `No ${type.toLowerCase()}s recorded for this period.`}
       </div>
     );
   }
@@ -55,7 +57,7 @@ export default function CategoryDonutChart({ data, type }: Props) {
           />
         </Pie>
         <Tooltip
-          formatter={(value: any, name: any) => [`฿${Number(value).toLocaleString()}`, name]}
+          formatter={(value: any, name: any) => [`\u0e3f${Number(value).toLocaleString()}`, name]}
           contentStyle={{ 
             backgroundColor: "var(--bg-secondary)", 
             border: "1px solid var(--border-subtle)", 

@@ -65,3 +65,43 @@ export async function leaveGroup() {
     method: "POST",
   });
 }
+
+// --- Multi-Group Support ---
+
+export interface GroupSummary {
+  id: string;
+  name: string;
+  memberCount: number;
+  myRole: "OWNER" | "EDITOR" | "VIEWER";
+}
+
+export interface SwitchGroupResponse {
+  token: string;
+  groupId: string;
+  groupName: string;
+  groupRole: string;
+}
+
+export async function listMyGroups(): Promise<GroupSummary[]> {
+  return apiFetch("/api/me/groups");
+}
+
+export async function createMyGroup(name: string): Promise<GroupSummary> {
+  return apiFetch("/api/me/groups", {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function switchGroup(groupId: string): Promise<SwitchGroupResponse> {
+  return apiFetch("/api/me/switch-group", {
+    method: "POST",
+    body: JSON.stringify({ groupId }),
+  });
+}
+
+export async function deleteMyGroup(groupId: string): Promise<void> {
+  return apiFetch(`/api/me/groups/${groupId}`, {
+    method: "DELETE",
+  });
+}
