@@ -124,6 +124,7 @@
 
 body {
   background: var(--bg-primary);
+  color: var(--text-primary) !important;
   font-family: 'Kanit', 'Inter', sans-serif !important;
   min-height: 100vh;
   overflow-x: hidden;

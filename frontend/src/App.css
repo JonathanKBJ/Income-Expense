@@ -2011,3 +2011,70 @@
     border-radius: 8px;
   }
 }
+
+/* =============================================================================
+   LOAN TRACKER SECTION
+   ============================================================================= */
+.loan-tracker-container {
+  color: var(--text-primary) !important;
+}
+
+.loan-tracker-title {
+  color: var(--text-primary) !important;
+}
+
+.loan-tracker-subtitle {
+  color: var(--text-secondary) !important;
+}
+
+/* Loan Card (Mobile) */
+.loan-card {
+  color: var(--text-primary) !important;
+}
+
+.loan-card-title {
+  color: var(--text-primary) !important;
+}
+
+.loan-card-sub {
+  color: var(--text-secondary) !important;
+}
+
+.loan-card-label {
+  color: var(--text-secondary) !important;
+}
+
+.loan-card-value {
+  color: var(--text-primary) !important;
+}
+
+/* Entry Card (Mobile) */
+.entry-card {
+  color: var(--text-primary) !important;
+}
+
+.entry-card-value {
+  color: var(--text-primary) !important;
+}
+
+.entry-card-sub {
+  color: var(--text-secondary) !important;
+}
+
+/* Loan Detail Panel Card */
+.loan-detail-card {
+  color: var(--text-primary) !important;
+}
+
+.loan-detail-name {
+  color: var(--text-primary) !important;
+}
+
+.loan-detail-sub {
+  color: var(--text-secondary) !important;
+}
+
+.loan-detail-notes {
+  color: var(--text-primary) !important;
+}
+

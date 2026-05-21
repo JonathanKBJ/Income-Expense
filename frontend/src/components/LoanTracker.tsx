@@ -341,8 +341,8 @@ export default function LoanTracker() {
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
           <div>
-            <div style={{ fontWeight: 600, fontSize: 15 }}>{loan.name}</div>
-            <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 1 }}>{loan.counterparty}</div>
+            <div className="loan-card-title" style={{ fontWeight: 600, fontSize: 15 }}>{loan.name}</div>
+            <div className="loan-card-sub" style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 1 }}>{loan.counterparty}</div>
           </div>
           <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
             <Tag color={loan.type === "BORROW" ? "orange" : "blue"}>{loan.type === "BORROW" ? t.loansPage.borrow : t.loansPage.lend}</Tag>
@@ -351,17 +351,17 @@ export default function LoanTracker() {
         </div>
         <Row gutter={[8, 4]}>
           <Col span={8}>
-            <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>{t.loansPage.principal}</div>
-            <div style={{ fontWeight: 500 }}>฿{formatMoney(loan.principal)}</div>
+            <div className="loan-card-label" style={{ fontSize: 11, color: "var(--text-secondary)" }}>{t.loansPage.principal}</div>
+            <div className="loan-card-value" style={{ fontWeight: 500 }}>฿{formatMoney(loan.principal)}</div>
           </Col>
           <Col span={8}>
-            <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>{t.loansPage.owed}</div>
-            <div style={{ fontWeight: 500, color: loan.outstanding > 0 ? "#f59e0b" : "#4ade80" }}>
+            <div className="loan-card-label" style={{ fontSize: 11, color: "var(--text-secondary)" }}>{t.loansPage.owed}</div>
+            <div className="loan-card-value" style={{ fontWeight: 500, color: loan.outstanding > 0 ? "#f59e0b" : "#4ade80" }}>
               ฿{formatMoney(loan.outstanding)}
             </div>
           </Col>
           <Col span={8}>
-            <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>{t.loansPage.progress}</div>
+            <div className="loan-card-label" style={{ fontSize: 11, color: "var(--text-secondary)" }}>{t.loansPage.progress}</div>
             <Progress percent={Math.round(loan.progressPercent)} size="small" style={{ maxWidth: 80 }} />
           </Col>
         </Row>
@@ -404,7 +404,7 @@ export default function LoanTracker() {
             <Tag color={entry.entryType === "INSTALLMENT" ? "purple" : entry.entryType === "WITHDRAWAL" ? "volcano" : "green"}>
               {entry.entryType === "INSTALLMENT" ? t.loansPage.installment : entry.entryType === "WITHDRAWAL" ? t.loansPage.withdrawal : t.loansPage.deposit}
             </Tag>
-            <span style={{ fontWeight: 600 }}>฿{formatMoney(entry.amount)}</span>
+            <span className="entry-card-value" style={{ fontWeight: 600 }}>฿{formatMoney(entry.amount)}</span>
           </div>
           <div style={{ display: "flex", gap: 2 }}>
             <Button size="small" icon={<EditOutlined />} type="text" onClick={() => openEditEntry(entry)} />
@@ -413,7 +413,7 @@ export default function LoanTracker() {
             </Popconfirm>
           </div>
         </div>
-        <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4 }}>
+        <div className="entry-card-sub" style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4 }}>
           {entry.date}{entry.description ? ` - ${entry.description}` : ""}
         </div>
         {entry.receiptImage && (
@@ -459,21 +459,21 @@ export default function LoanTracker() {
           </Col>
         </Row>
 
-        <Card size="small" style={{ marginBottom: 12 }}>
+        <Card size="small" style={{ marginBottom: 12 }} className="loan-detail-card">
           <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
             <div>
               <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                <strong>{loan.name}</strong>
+                <strong className="loan-detail-name">{loan.name}</strong>
                 <Tag color={loan.type === "BORROW" ? "orange" : "blue"}>{loan.type === "BORROW" ? t.loansPage.borrow : t.loansPage.lend}</Tag>
                 <Tag color={loan.status === "ACTIVE" ? "green" : "default"}>{loan.status === "ACTIVE" ? t.common.active : t.common.closed}</Tag>
               </div>
-              <div style={{ color: "var(--text-secondary)", marginTop: 4 }}>{loan.counterparty}</div>
-              <div style={{ color: "var(--text-secondary)", marginTop: 4 }}>
+              <div className="loan-detail-sub" style={{ color: "var(--text-secondary)", marginTop: 4 }}>{loan.counterparty}</div>
+              <div className="loan-detail-sub" style={{ color: "var(--text-secondary)", marginTop: 4 }}>
                 {t.loansPage.start} {loan.startDate}
                 {loan.termMonths ? ` | ${loan.termMonths} ${t.loansPage.months}` : ""}
                 {loan.paymentDay ? ` | ${t.loansPage.dueDay} ${loan.paymentDay}` : ""}
               </div>
-              {loan.notes && <div style={{ marginTop: 8 }}>{loan.notes}</div>}
+              {loan.notes && <div className="loan-detail-notes" style={{ marginTop: 8 }}>{loan.notes}</div>}
             </div>
             <Button
               type="primary"
@@ -513,11 +513,11 @@ export default function LoanTracker() {
   const entryModalIsEdit = Boolean(editingEntry);
 
   return (
-    <div style={{ padding: isMobile ? 12 : 20 }}>
+    <div className="loan-tracker-container" style={{ padding: isMobile ? 12 : 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, gap: 8 }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: isMobile ? 20 : 24 }}>{t.loansPage.title}</h2>
-          <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>
+          <h2 className="loan-tracker-title" style={{ margin: 0, fontSize: isMobile ? 20 : 24 }}>{t.loansPage.title}</h2>
+          <div className="loan-tracker-subtitle" style={{ color: "var(--text-secondary)", fontSize: 13 }}>
             {activeGroup?.name || t.common.currentGroup}
           </div>
         </div>

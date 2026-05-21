@@ -13,7 +13,6 @@ interface SidebarProps {
 
 export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(true);
   const { user, logout, isAdmin, groupInfo, myGroups, activeGroup, switchGroup, createGroup } = useAuth();
   const { t } = useLanguage();
   const [creatingGroup, setCreatingGroup] = useState(false);
@@ -171,6 +170,10 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
         )}
 
         <div className="sidebar-nav">
+          <div className="sidebar-section-title">
+            <span>{t.common.finance}</span>
+          </div>
+
           {/* Dashboard */}
           <button
             className={`sidebar-item ${activePage === "dashboard" ? "active" : ""}`}
@@ -180,29 +183,59 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="7" height="7" rx="1" />
               <rect x="14" y="3" width="7" height="7" rx="1" />
-            <rect x="3" y="14" width="7" height="7" rx="1" />
-            <rect x="14" y="14" width="7" height="7" rx="1" />
-          </svg>
-          <span>{t.common.dashboard}</span>
-        </button>
+              <rect x="3" y="14" width="7" height="7" rx="1" />
+              <rect x="14" y="14" width="7" height="7" rx="1" />
+            </svg>
+            <span>{t.common.dashboard}</span>
+          </button>
 
-        {/* Annual Dashboard */}
-        <button
-          className={`sidebar-item ${activePage === "annual" ? "active" : ""}`}
-          onClick={() => handleNavigate("annual")}
-          id="nav-annual"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-          </svg>
-          <span>{t.common.annual}</span>
-        </button>
+          {/* Annual Dashboard */}
+          <button
+            className={`sidebar-item ${activePage === "annual" ? "active" : ""}`}
+            onClick={() => handleNavigate("annual")}
+            id="nav-annual"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+            </svg>
+            <span>{t.common.annual}</span>
+          </button>
 
-        {isAdmin && (
+          {/* Loans & Debts */}
+          <button
+            className={`sidebar-item ${activePage === "loans" ? "active" : ""}`}
+            onClick={() => handleNavigate("loans")}
+            id="nav-loans"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="1" x2="12" y2="23" />
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+            </svg>
+            <span>{t.common.loans}</span>
+          </button>
+
+          <div className="sidebar-section-title">
+            <span>{t.common.settings}</span>
+          </div>
+
+          {/* Categories */}
+          <button
+            className={`sidebar-item ${activePage === "categories" ? "active" : ""}`}
+            onClick={() => handleNavigate("categories")}
+            id="nav-categories"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+            </svg>
+            <span>{t.common.categories}</span>
+          </button>
+
+          {/* My Group */}
+          {groupInfo && (
             <button
-              className={`sidebar-item ${activePage === "admin" ? "active" : ""}`}
-              onClick={() => handleNavigate("admin")}
-              id="nav-admin"
+              className={`sidebar-item ${activePage === "group" ? "active" : ""}`}
+              onClick={() => handleNavigate("group")}
+              id="nav-group"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -210,65 +243,23 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
                 <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
                 <path d="M16 3.13a4 4 0 0 1 0 7.75" />
               </svg>
-              <span>{t.common.admin}</span>
+              <span>{t.common.myGroup}</span>
             </button>
           )}
 
-          {/* Settings Group */}
-          <button
-            className={`sidebar-item sidebar-group-toggle ${settingsOpen ? "expanded" : ""}`}
-            onClick={() => setSettingsOpen(!settingsOpen)}
-            id="nav-settings"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-            </svg>
-            <span>{t.common.settings}</span>
-            <svg className="chevron-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-          </button>
-
-          {/* Settings Sub-items */}
-          <div className={`sidebar-submenu ${settingsOpen ? "open" : ""}`}>
+          {/* Admin Panel */}
+          {isAdmin && (
             <button
-              className={`sidebar-item sub-item ${activePage === "categories" ? "active" : ""}`}
-              onClick={() => handleNavigate("categories")}
-              id="nav-categories"
+              className={`sidebar-item ${activePage === "admin" ? "active" : ""}`}
+              onClick={() => handleNavigate("admin")}
+              id="nav-admin"
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
               </svg>
-              <span>{t.common.categories}</span>
+              <span>{t.common.admin}</span>
             </button>
-            {groupInfo && (
-              <button
-                className={`sidebar-item sub-item ${activePage === "group" ? "active" : ""}`}
-                onClick={() => handleNavigate("group")}
-                id="nav-group"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                  <circle cx="9" cy="7" r="4" />
-                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                </svg>
-                <span>{t.common.myGroup}</span>
-              </button>
-            )}
-            <button
-              className={`sidebar-item sub-item ${activePage === "loans" ? "active" : ""}`}
-              onClick={() => handleNavigate("loans")}
-              id="nav-loans"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="1" x2="12" y2="23" />
-                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-              </svg>
-              <span>{t.common.loans}</span>
-            </button>
-          </div>
+          )}
         </div>
 
         <div className="sidebar-footer">
@@ -351,6 +342,19 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
         }
         .sidebar-group-selector .ant-select-arrow {
           color: var(--text-secondary);
+        }
+        .sidebar-section-title {
+          font-size: 0.68rem;
+          font-weight: 700;
+          color: var(--text-muted, #8b949e);
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          padding: 14px 14px 6px;
+          margin-top: 8px;
+          opacity: 0.6;
+          display: flex;
+          align-items: center;
+          gap: 6px;
         }
       `}</style>
     </>
