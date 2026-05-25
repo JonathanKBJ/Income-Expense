@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     paid_amount REAL CHECK (paid_amount >= 0 OR paid_amount IS NULL),
     group_id      TEXT,
     user_id       TEXT,
+    created_by    TEXT,
     receipt_image TEXT,
     created_at    TEXT NOT NULL,
     updated_at    TEXT NOT NULL
@@ -230,6 +231,7 @@ func (d *DB) Migrate() error {
 		"ALTER TABLE transactions ADD COLUMN group_id TEXT",
 		"ALTER TABLE transactions ADD COLUMN user_id TEXT",
 		"ALTER TABLE transactions ADD COLUMN receipt_image TEXT",
+			"ALTER TABLE transactions ADD COLUMN created_by TEXT",
 		"ALTER TABLE categories ADD COLUMN group_id TEXT",
 	}
 
@@ -336,6 +338,9 @@ func (d *DB) Migrate() error {
 	for _, sql := range migrationSQL {
 		_, _ = d.ExecContext(ctx, sql)
 	}
+
+	// Backfill created_by for existing transactions (set to user_id where NULL)
+	_, _ = d.ExecContext(ctx, `UPDATE transactions SET created_by = user_id WHERE created_by IS NULL AND user_id IS NOT NULL`)
 
 	// Seed default categories for NULL group (global defaults or template)
 	if err := d.seedCategories(ctx); err != nil {

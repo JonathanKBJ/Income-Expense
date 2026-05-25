@@ -40,17 +40,18 @@ func (r *TransactionRepository) GetByMonthYear(ctx context.Context, month, year 
 
 	query := `
 		SELECT t.id, t.type, t.category, t.description, t.amount, t.date,
-		       t.status, t.paid_amount, t.group_id, t.user_id, t.receipt_image,
-		       CASE WHEN gm.cnt > 1 THEN u.username ELSE NULL END as created_by_username,
+		       t.status, t.paid_amount, t.group_id, t.user_id, t.created_by, t.receipt_image,
+		       rec_u.username as created_by_username,
+		       own_u.username as owner_username,
 		       t.created_at, t.updated_at
 		FROM transactions t
-		LEFT JOIN users u ON t.user_id = u.id
-		CROSS JOIN (SELECT COUNT(*) as cnt FROM group_members WHERE group_id = ?) gm
+		LEFT JOIN users rec_u ON t.created_by = rec_u.id
+		LEFT JOIN users own_u ON t.user_id = own_u.id
 		WHERE t.date >= ? AND t.date < ? AND t.group_id = ?
 		ORDER BY t.date DESC, t.created_at DESC
 	`
 
-	rows, err := r.db.QueryContext(ctx, query, groupID, startDate, endDate, groupID)
+	rows, err := r.db.QueryContext(ctx, query, startDate, endDate, groupID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query transactions: %w", err)
 	}
@@ -72,8 +73,10 @@ func (r *TransactionRepository) GetByMonthYear(ctx context.Context, month, year 
 			&row.PaidAmount,
 			&row.GroupID,
 			&row.UserID,
+			&row.CreatedByID,
 			&row.ReceiptImage,
 			&row.CreatedByUsername,
+			&row.OwnerUsername,
 			&row.CreatedAt,
 			&row.UpdatedAt,
 		)
@@ -121,17 +124,18 @@ func (r *TransactionRepository) GetByMonthYear(ctx context.Context, month, year 
 func (r *TransactionRepository) GetByID(ctx context.Context, id, groupID string) (*models.Transaction, error) {
 	query := `
 		SELECT t.id, t.type, t.category, t.description, t.amount, t.date,
-		       t.status, t.paid_amount, t.group_id, t.user_id, t.receipt_image,
-		       CASE WHEN gm.cnt > 1 THEN u.username ELSE NULL END as created_by_username,
+		       t.status, t.paid_amount, t.group_id, t.user_id, t.created_by, t.receipt_image,
+		       rec_u.username as created_by_username,
+		       own_u.username as owner_username,
 		       t.created_at, t.updated_at
 		FROM transactions t
-		LEFT JOIN users u ON t.user_id = u.id
-		CROSS JOIN (SELECT COUNT(*) as cnt FROM group_members WHERE group_id = ?) gm
+		LEFT JOIN users rec_u ON t.created_by = rec_u.id
+		LEFT JOIN users own_u ON t.user_id = own_u.id
 		WHERE t.id = ? AND t.group_id = ?
 	`
 
 	var row models.TransactionRow
-	err := r.db.QueryRowContext(ctx, query, groupID, id, groupID).Scan(
+	err := r.db.QueryRowContext(ctx, query, id, groupID).Scan(
 		&row.ID,
 		&row.Type,
 		&row.Category,
@@ -142,8 +146,10 @@ func (r *TransactionRepository) GetByID(ctx context.Context, id, groupID string)
 		&row.PaidAmount,
 		&row.GroupID,
 		&row.UserID,
+		&row.CreatedByID,
 		&row.ReceiptImage,
 		&row.CreatedByUsername,
+		&row.OwnerUsername,
 		&row.CreatedAt,
 		&row.UpdatedAt,
 	)
@@ -158,8 +164,9 @@ func (r *TransactionRepository) GetByID(ctx context.Context, id, groupID string)
 	return &t, nil
 }
 
-// Create inserts a new transaction into the database for a specific user and group.
-func (r *TransactionRepository) Create(ctx context.Context, req models.CreateTransactionRequest, userID, groupID string) (*models.Transaction, error) {
+// Create inserts a new transaction into the database for a specific owner, recorder, and group.
+// ownerUserID = wallet owner (user_id), createdByID = who recorded this (created_by / JWT user).
+func (r *TransactionRepository) Create(ctx context.Context, req models.CreateTransactionRequest, ownerUserID, createdByID, groupID string) (*models.Transaction, error) {
 	id := uuid.New().String()
 	now := time.Now().UTC().Format(time.RFC3339)
 
@@ -195,8 +202,8 @@ func (r *TransactionRepository) Create(ctx context.Context, req models.CreateTra
 	// For INCOME: status and paidAmount remain nil
 
 	query := `
-		INSERT INTO transactions (id, type, category, description, amount, date, status, paid_amount, group_id, user_id, receipt_image, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO transactions (id, type, category, description, amount, date, status, paid_amount, group_id, user_id, created_by, receipt_image, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	_, err := r.db.ExecContext(ctx, query,
@@ -209,7 +216,8 @@ func (r *TransactionRepository) Create(ctx context.Context, req models.CreateTra
 		status,
 		paidAmount,
 		groupID,
-		userID,
+		ownerUserID,
+		createdByID,
 		req.ReceiptImage,
 		now,
 		now,
@@ -223,7 +231,8 @@ func (r *TransactionRepository) Create(ctx context.Context, req models.CreateTra
 }
 
 // CreateBatch inserts multiple transactions in a single database transaction.
-func (r *TransactionRepository) CreateBatch(ctx context.Context, requests []models.CreateTransactionRequest, userID, groupID string) error {
+// ownerUserID = wallet owner (user_id), createdByID = who recorded this (created_by / JWT user).
+func (r *TransactionRepository) CreateBatch(ctx context.Context, requests []models.CreateTransactionRequest, ownerUserID, createdByID, groupID string) error {
 	if len(requests) == 0 {
 		return nil
 	}
@@ -237,8 +246,8 @@ func (r *TransactionRepository) CreateBatch(ctx context.Context, requests []mode
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	query := `
-		INSERT INTO transactions (id, type, category, description, amount, date, status, paid_amount, group_id, user_id, receipt_image, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO transactions (id, type, category, description, amount, date, status, paid_amount, group_id, user_id, created_by, receipt_image, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	stmt, err := tx.PrepareContext(ctx, query)
@@ -279,7 +288,8 @@ func (r *TransactionRepository) CreateBatch(ctx context.Context, requests []mode
 			status,
 			paidAmount,
 			groupID,
-			userID,
+		ownerUserID,
+		createdByID,
 			req.ReceiptImage,
 			now,
 			now,
@@ -322,6 +332,11 @@ func (r *TransactionRepository) Update(ctx context.Context, id, groupID string, 
 	if req.ReceiptImage != nil {
 		setClauses = append(setClauses, "receipt_image = ?")
 		args = append(args, *req.ReceiptImage)
+	}
+
+	if req.UserID != nil {
+		setClauses = append(setClauses, "user_id = ?")
+		args = append(args, *req.UserID)
 	}
 
 	// Fetch existing transaction to validate status change rules
@@ -529,4 +544,70 @@ func (r *TransactionRepository) GetAnnualSummary(ctx context.Context, year int, 
 	}
 
 	return summary, nil
+}
+
+// GetWalletSummary returns per-member wallet breakdown for a group/month, grouped by user_id (wallet owner).
+// Uses LEFT JOIN so members with no transactions still appear (with zeroes).
+func (r *TransactionRepository) GetWalletSummary(ctx context.Context, month, year int, groupID string) (*models.WalletSummaryResponse, error) {
+	datePrefix := fmt.Sprintf("%04d-%02d", year, month)
+
+	query := `
+		SELECT
+			gm.user_id,
+			u.username,
+			COALESCE(SUM(CASE WHEN t.type = 'INCOME' THEN t.amount ELSE 0 END), 0) AS total_income,
+			COALESCE(SUM(CASE WHEN t.type = 'EXPENSE' THEN t.amount ELSE 0 END), 0) AS total_expense,
+			COALESCE(SUM(CASE WHEN t.type = 'EXPENSE' AND t.status = 'PAID' THEN t.amount ELSE 0 END), 0) AS total_paid,
+			COALESCE(SUM(CASE WHEN t.type = 'EXPENSE' AND t.status = 'PENDING' THEN t.amount ELSE 0 END), 0) AS total_pending
+		FROM group_members gm
+		JOIN users u ON u.id = gm.user_id
+		LEFT JOIN transactions t ON t.user_id = gm.user_id
+			AND t.group_id = ?
+			AND substr(t.date, 1, 7) = ?
+		WHERE gm.group_id = ?
+		GROUP BY gm.user_id, u.username
+		ORDER BY u.username
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, groupID, datePrefix, groupID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query wallet summary: %w", err)
+	}
+	defer rows.Close()
+
+	var members []models.WalletMemberSummary
+	var groupTotal models.WalletMemberSummary
+
+	for rows.Next() {
+		var m models.WalletMemberSummary
+		if err := rows.Scan(&m.UserID, &m.Username, &m.TotalIncome, &m.TotalExpense, &m.TotalPaid, &m.TotalPending); err != nil {
+			return nil, fmt.Errorf("failed to scan wallet member: %w", err)
+		}
+		m.NetBalance = m.TotalIncome - m.TotalExpense
+		members = append(members, m)
+
+		groupTotal.TotalIncome += m.TotalIncome
+		groupTotal.TotalExpense += m.TotalExpense
+		groupTotal.TotalPaid += m.TotalPaid
+		groupTotal.TotalPending += m.TotalPending
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating wallet rows: %w", err)
+	}
+
+	if members == nil {
+		members = []models.WalletMemberSummary{}
+	}
+
+	groupTotal.NetBalance = groupTotal.TotalIncome - groupTotal.TotalExpense
+	groupTotal.Username = "All Members"
+	groupTotal.UserID = groupID
+
+	return &models.WalletSummaryResponse{
+		Month:      month,
+		Year:       year,
+		Members:    members,
+		GroupTotal: groupTotal,
+	}, nil
 }

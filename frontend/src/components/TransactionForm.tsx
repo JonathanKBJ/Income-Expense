@@ -11,6 +11,7 @@ import type {
 import { useCategories } from "../hooks/useCategories";
 import CopyTransactionsModal from "./CopyTransactionsModal";
 import type { GroupSummary } from "../api/group";
+import { useAuth } from "../contexts/AuthContext";
 import { useLanguage } from "../contexts/LanguageContext";
 
 interface TransactionFormProps {
@@ -41,7 +42,9 @@ export default function TransactionForm({
   activeGroupId,
 }: TransactionFormProps) {
   const { t } = useLanguage();
+  const { groupInfo } = useAuth();
   const [form, setForm] = useState<TransactionFormState>(initialState);
+  const [selectedOwner, setSelectedOwner] = useState<string | undefined>(undefined);
   const [isExpanded, setIsExpanded] = useState(true);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
@@ -171,6 +174,7 @@ export default function TransactionForm({
     }
 
     // Build request based on type
+    const ownerUserId = form.userId || selectedOwner || undefined;
     let req: CreateTransactionRequest;
 
     if (form.type === "INCOME") {
@@ -180,6 +184,7 @@ export default function TransactionForm({
         description: form.description,
         amount,
         date: form.date,
+        userId: ownerUserId,
         receiptImage: form.receiptImage,
       };
     } else {
@@ -197,6 +202,7 @@ export default function TransactionForm({
         date: form.date,
         status: form.status as ExpenseStatus,
         paidAmount: isNaN(paidAmount) ? 0 : paidAmount,
+        userId: ownerUserId,
         receiptImage: form.receiptImage,
       };
     }
@@ -285,6 +291,28 @@ export default function TransactionForm({
               }
             />
           </div>
+
+          {/* Owner selector — only visible for multi-member groups */}
+          {groupInfo && groupInfo.memberCount > 1 && groupInfo.members && (
+            <div className="form-group">
+              <label>{t.transactions.owner}</label>
+              <Select
+                id="form-owner"
+                className="antd-select-full"
+                placeholder={t.transactions.owner}
+                value={selectedOwner}
+                onChange={(val) => {
+                  setSelectedOwner(val);
+                  updateField("userId", val || "");
+                }}
+                allowClear
+                options={groupInfo.members.map((m) => ({
+                  label: m.username,
+                  value: m.userId,
+                }))}
+              />
+            </div>
+          )}
 
           <div className="form-group">
             <label>{t.common.amount}</label>

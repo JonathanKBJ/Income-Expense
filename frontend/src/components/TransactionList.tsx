@@ -178,6 +178,7 @@ export default function TransactionList({
     }
   }
 
+  const hasOwnerColumn = transactions.some(t => t.ownerUsername);
   const filteredTransactions = transactions.filter(t => {
     if (statusFilter === "ALL") return true;
     if (statusFilter === "INCOME") return t.type === "INCOME";
@@ -290,6 +291,7 @@ export default function TransactionList({
               )}
               <th>{tr.common.date}</th>
               <th>{tr.transactions.category}</th>
+              {hasOwnerColumn && <th>{tr.transactions.owner}</th>}
               <th>{tr.common.description}</th>
               <th>{tr.common.type}</th>
               <th className="text-right">{tr.common.amount}</th>
@@ -311,14 +313,28 @@ export default function TransactionList({
                   </td>
                 )}
                 <td className="col-date">{formatDate(t.date)}</td>
-                <td className="col-category">
-                  {t.category}
-                  {t.createdByUsername && (
-                    <Tooltip title={`${tr.transactions.createdBy} ${t.createdByUsername}`}>
-                      <span className="tx-author-badge">{t.createdByUsername.charAt(0).toUpperCase()}</span>
-                    </Tooltip>
-                  )}
-                </td>
+                <td className="col-category">{t.category}</td>
+                {hasOwnerColumn && (
+                  <td className="col-owner">
+                    {t.ownerUsername ? (
+                      <div className="owner-cell">
+                        <span className="owner-name">{t.ownerUsername}</span>
+                        {t.createdByUsername && t.createdByUsername !== t.ownerUsername && (
+                          <Tooltip title={`Recorded by ${t.createdByUsername}`}>
+                            <span className="owner-meta">
+                              <span className="tx-recorder-badge">
+                                {t.createdByUsername.charAt(0).toUpperCase()}
+                              </span>
+                              <span className="owner-recorder-name">{t.createdByUsername}</span>
+                            </span>
+                          </Tooltip>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="na-text">-</span>
+                    )}
+                  </td>
+                )}
                 <td className="col-description">{t.description || "—"}</td>
                 <td className="col-type">
                   <span className={`type-badge ${t.type.toLowerCase()}`}>
@@ -625,6 +641,15 @@ export default function TransactionList({
                 </div>
 
                 {t.description && <div className="card-desc">{t.description}</div>}
+
+                {t.ownerUsername && (
+                  <div className="card-owner">
+                    <span className="card-owner-label">{tr.transactions.owner}:</span> {t.ownerUsername}
+                    {t.createdByUsername && t.createdByUsername !== t.ownerUsername && (
+                      <span className="card-recorder-inline">Recorded by {t.createdByUsername}</span>
+                    )}
+                  </div>
+                )}
 
                 <div className="card-footer">
                   <div className="card-footer-top">

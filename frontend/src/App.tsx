@@ -90,7 +90,7 @@ function AuthenticatedApp() {
   const isMultiMember = groupInfo && groupInfo.memberCount > 1;
   useEffect(() => {
     if (!isMultiMember) return;
-    const id = setInterval(() => refresh(), 30_000);
+    const id = setInterval(() => refresh(), 3 * 60_000);
     return () => clearInterval(id);
   }, [isMultiMember, refresh]);
 

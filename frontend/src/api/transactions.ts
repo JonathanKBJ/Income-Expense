@@ -4,6 +4,7 @@ import type {
   TransactionsResponse,
   UpdateTransactionRequest,
   AnnualSummaryResponse,
+  WalletSummaryResponse,
 } from "../types/transaction";
 import { apiFetch } from "./client";
 
@@ -99,4 +100,15 @@ export async function deleteTransactionsBatch(ids: string[]): Promise<void> {
  */
 export async function getAnnualSummary(year: number): Promise<AnnualSummaryResponse> {
   return apiFetch(`/api/transactions/annual?year=${year}`);
+}
+
+/**
+ * Fetch per-member wallet summary for a month.
+ * GET /api/transactions/wallet-summary?month={M}&year={Y}
+ */
+export async function getWalletSummary(
+  month: number,
+  year: number
+): Promise<WalletSummaryResponse> {
+  return apiFetch(`/api/transactions/wallet-summary?month=${month}&year=${year}`);
 }

@@ -139,7 +139,7 @@ func (h *TransactionHandler) CreateTransaction(w http.ResponseWriter, r *http.Re
 	}
 
 	// Injected by AuthMiddleware
-	userID := middleware.GetUserID(r.Context())
+	createdByID := middleware.GetUserID(r.Context())
 	groupID := middleware.GetGroupID(r.Context())
 
 	if groupID == "" {
@@ -147,7 +147,18 @@ func (h *TransactionHandler) CreateTransaction(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	transaction, err := h.repo.Create(r.Context(), req, userID, groupID)
+	// Determine wallet owner: default to current user, allow manual override
+	ownerUserID := createdByID
+	if req.UserID != nil && *req.UserID != "" && *req.UserID != createdByID {
+		// Validate that the requested owner is a member of this group
+		if _, err := h.groupRepo.GetMemberRole(r.Context(), groupID, *req.UserID); err != nil {
+			writeError(w, http.StatusBadRequest, "owner is not a member of this group")
+			return
+		}
+		ownerUserID = *req.UserID
+	}
+
+	transaction, err := h.repo.Create(r.Context(), req, ownerUserID, createdByID, groupID)
 	if err != nil {
 		log.Printf("ERROR: CreateTransaction: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to create transaction")
@@ -155,7 +166,7 @@ func (h *TransactionHandler) CreateTransaction(w http.ResponseWriter, r *http.Re
 	}
 
 	// Log activity for multi-member groups
-	h.logActivity(r.Context(), groupID, userID, "CREATE_TRANSACTION", "transaction", transaction.ID,
+	h.logActivity(r.Context(), groupID, createdByID, "CREATE_TRANSACTION", "transaction", transaction.ID,
 		fmt.Sprintf(`{"amount":%.2f,"type":"%s","category":"%s"}`, transaction.Amount, transaction.Type, transaction.Category))
 
 	writeJSON(w, http.StatusCreated, transaction)
@@ -178,7 +189,7 @@ func (h *TransactionHandler) CreateTransactionsBatch(w http.ResponseWriter, r *h
 	}
 
 	// Injected by AuthMiddleware
-	userID := middleware.GetUserID(r.Context())
+	createdByID := middleware.GetUserID(r.Context())
 	groupID := middleware.GetGroupID(r.Context())
 
 	if groupID == "" {
@@ -186,7 +197,18 @@ func (h *TransactionHandler) CreateTransactionsBatch(w http.ResponseWriter, r *h
 		return
 	}
 
-	err := h.repo.CreateBatch(r.Context(), reqs, userID, groupID)
+	// Determine wallet owner: default to current user, allow manual override
+	// For batch, use the first request's userId or default to current user
+	ownerUserID := createdByID
+	if len(reqs) > 0 && reqs[0].UserID != nil && *reqs[0].UserID != "" && *reqs[0].UserID != createdByID {
+		if _, err := h.groupRepo.GetMemberRole(r.Context(), groupID, *reqs[0].UserID); err != nil {
+			writeError(w, http.StatusBadRequest, "owner is not a member of this group")
+			return
+		}
+		ownerUserID = *reqs[0].UserID
+	}
+
+	err := h.repo.CreateBatch(r.Context(), reqs, ownerUserID, createdByID, groupID)
 	if err != nil {
 		log.Printf("ERROR: CreateTransactionsBatch: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to create transactions in batch")
@@ -234,7 +256,7 @@ func (h *TransactionHandler) CreateTransactionsBatchToGroup(w http.ResponseWrite
 		}
 	}
 
-	err := h.repo.CreateBatch(r.Context(), req.Transactions, userID, req.TargetGroupID)
+	err := h.repo.CreateBatch(r.Context(), req.Transactions, userID, userID, req.TargetGroupID)
 	if err != nil {
 		log.Printf("ERROR: CreateTransactionsBatchToGroup: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to create transactions in target group")
@@ -283,6 +305,14 @@ func (h *TransactionHandler) UpdateTransaction(w http.ResponseWriter, r *http.Re
 	if err := middleware.ValidateUpdateRequest(&req, existing); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
+	}
+
+	// If changing wallet owner, validate new owner is a group member
+	if req.UserID != nil && *req.UserID != "" {
+		if _, err := h.groupRepo.GetMemberRole(r.Context(), groupID, *req.UserID); err != nil {
+			writeError(w, http.StatusBadRequest, "new owner is not a member of this group")
+			return
+		}
 	}
 
 	updated, err := h.repo.Update(r.Context(), id, groupID, req)
@@ -382,6 +412,44 @@ func (h *TransactionHandler) logActivity(ctx context.Context, groupID, userID, a
 	if err := h.activityRepo.CreateEntry(ctx, entry); err != nil {
 		log.Printf("WARN: failed to log activity: %v", err)
 	}
+}
+
+// GetWalletSummary handles GET /api/transactions/wallet-summary?month=M&year=Y
+// Returns per-member wallet balances grouped by user_id (wallet owner).
+func (h *TransactionHandler) GetWalletSummary(w http.ResponseWriter, r *http.Request) {
+	groupID := middleware.GetGroupID(r.Context())
+	if groupID == "" {
+		writeError(w, http.StatusForbidden, "group identification required for this operation")
+		return
+	}
+
+	monthStr := r.URL.Query().Get("month")
+	yearStr := r.URL.Query().Get("year")
+	if monthStr == "" || yearStr == "" {
+		writeError(w, http.StatusBadRequest, "month and year query parameters are required")
+		return
+	}
+
+	month, err := strconv.Atoi(monthStr)
+	if err != nil || month < 1 || month > 12 {
+		writeError(w, http.StatusBadRequest, "month must be between 1 and 12")
+		return
+	}
+
+	year, err := strconv.Atoi(yearStr)
+	if err != nil || year < 2000 || year > 2100 {
+		writeError(w, http.StatusBadRequest, "year must be between 2000 and 2100")
+		return
+	}
+
+	result, err := h.repo.GetWalletSummary(r.Context(), month, year, groupID)
+	if err != nil {
+		log.Printf("ERROR: GetWalletSummary: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to fetch wallet summary")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
 }
 
 // --- Response helpers ---

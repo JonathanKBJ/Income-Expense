@@ -82,6 +82,7 @@ export interface TranslationKeys {
     removeReceipt: string;
     attachReceipt: string;
     createdBy: string;
+    owner: string;
   };
   copy: {
     title: string;
@@ -215,6 +216,16 @@ export interface TranslationKeys {
     topExpenses: string;
     noExpenses: string;
   };
+  wallet: {
+    title: string;
+    income: string;
+    expense: string;
+    pending: string;
+    netBalance: string;
+    perPerson: string;
+    groupTotal: string;
+    allMembers: string;
+  };
   theme: {
     light: string;
     dark: string;
@@ -304,7 +315,8 @@ export const translations: Record<Language, TranslationKeys> = {
       viewReceipt: "View Receipt",
       removeReceipt: "Remove Receipt",
       attachReceipt: "Attach Receipt",
-      createdBy: "Created by",
+      createdBy: "Owner",
+      owner: "Owner",
     },
     copy: {
       title: "Copy Transactions from Other Month",
@@ -438,6 +450,16 @@ export const translations: Record<Language, TranslationKeys> = {
       topExpenses: "Top 5 Highest Expenses",
       noExpenses: "No expenses recorded.",
     },
+    wallet: {
+      title: "Wallet",
+      income: "Income",
+      expense: "Expense",
+      pending: "Pending",
+      netBalance: "Balance",
+      perPerson: "Per Person",
+      groupTotal: "Group Total",
+      allMembers: "All Members",
+    },
     theme: {
       light: "Switch to Light Mode",
       dark: "Switch to Dark Mode",
@@ -528,7 +550,8 @@ export const translations: Record<Language, TranslationKeys> = {
       viewReceipt: "ดูใบเสร็จ",
       removeReceipt: "ลบใบเสร็จ",
       attachReceipt: "แนบใบเสร็จ",
-      createdBy: "สร้างโดย",
+      createdBy: "เจ้าของ",
+      owner: "เจ้าของ",
     },
     copy: {
       title: "คัดลอกรายการจากเดือนอื่น",
@@ -661,6 +684,16 @@ export const translations: Record<Language, TranslationKeys> = {
       monthlyOverview: "ภาพรวมรายเดือน",
       topExpenses: "5 รายจ่ายสูงสุด",
       noExpenses: "ยังไม่มีรายจ่ายที่บันทึกไว้",
+    },
+    wallet: {
+      title: "กระเป๋า",
+      income: "รายรับ",
+      expense: "รายจ่าย",
+      pending: "รอจ่าย",
+      netBalance: "คงเหลือ",
+      perPerson: "แยกตามบุคคล",
+      groupTotal: "รวมทั้งกลุ่ม",
+      allMembers: "สมาชิกทั้งหมด",
     },
     theme: {
       light: "เปลี่ยนเป็นโหมดสว่าง",

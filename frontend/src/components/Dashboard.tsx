@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Transaction, TransactionSummary, CategorySummary } from "../types/transaction";
 import CategoryDonutChart from "./charts/CategoryDonutChart";
+import WalletView from "./WalletView";
 import { useAuth } from "../contexts/AuthContext";
 import { useLanguage } from "../contexts/LanguageContext";
 import { getActivityFeed, type ActivityLogEntry } from "../api/group";
@@ -30,6 +31,7 @@ export default function Dashboard({ summary, transactions, month, year }: Dashbo
   const { groupInfo } = useAuth();
   const [activity, setActivity] = useState<ActivityLogEntry[]>([]);
   const isMultiMember = groupInfo && groupInfo.memberCount > 1;
+  const [viewMode, setViewMode] = useState<"group" | "wallet">("group");
   const netBalance = summary.totalIncome - summary.totalPaid - summary.totalPending;
 
   useEffect(() => {
@@ -61,9 +63,37 @@ export default function Dashboard({ summary, transactions, month, year }: Dashbo
       <h2 className="dashboard-title">
         <span className="dashboard-month">{t.months[month - 1]}</span>
         <span className="dashboard-year">{year}</span>
+        {isMultiMember && (
+          <div className="dashboard-view-toggle">
+            <div className="dashboard-view-segmented" role="tablist" aria-label="Dashboard view mode">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={viewMode === "group"}
+                className={`dashboard-view-option ${viewMode === "group" ? "active" : ""}`}
+                onClick={() => setViewMode("group")}
+              >
+                <span className="dashboard-view-option-label">{t.common.dashboard}</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={viewMode === "wallet"}
+                className={`dashboard-view-option ${viewMode === "wallet" ? "active" : ""}`}
+                onClick={() => setViewMode("wallet")}
+              >
+                <span className="dashboard-view-option-label">{t.wallet.title}</span>
+              </button>
+            </div>
+          </div>
+        )}
       </h2>
 
-      <div className="metric-cards">
+      {viewMode === "wallet" ? (
+        <WalletView month={month} year={year} />
+      ) : (
+        <>
+          <div className="metric-cards">
         <div className="metric-card metric-income" id="metric-income">
           <div className="metric-icon">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -172,6 +202,8 @@ export default function Dashboard({ summary, transactions, month, year }: Dashbo
             ))}
           </div>
         </div>
+      )}
+        </>
       )}
     </section>
   );

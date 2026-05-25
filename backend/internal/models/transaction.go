@@ -27,13 +27,15 @@ type Transaction struct {
 	Category          string          `json:"category"`
 	Description       string          `json:"description"`
 	Amount            float64         `json:"amount"`
-	Date              string          `json:"date"`      // YYYY-MM-DD
-	Status            *ExpenseStatus  `json:"status"`     // nil for INCOME
-	PaidAmount        *float64        `json:"paidAmount"` // nil for INCOME
-	GroupID           *string         `json:"groupId"`    // Owner group
-	UserID            *string         `json:"userId"`     // Creator user
+	Date              string          `json:"date"`         // YYYY-MM-DD
+	Status            *ExpenseStatus  `json:"status"`        // nil for INCOME
+	PaidAmount        *float64        `json:"paidAmount"`    // nil for INCOME
+	GroupID           *string         `json:"groupId"`       // Owner group
+	UserID            *string         `json:"userId"`        // Wallet owner (manually selectable)
+	CreatedByID       *string         `json:"createdById"`   // Who recorded this (always JWT user)
 	ReceiptImage      *string         `json:"receiptImage"`
-	CreatedByUsername *string         `json:"createdByUsername,omitempty"`
+	CreatedByUsername *string         `json:"createdByUsername,omitempty"` // recorder username
+	OwnerUsername     *string         `json:"ownerUsername,omitempty"`     // wallet owner username
 	CreatedAt         string          `json:"createdAt"`
 	UpdatedAt         string          `json:"updatedAt"`
 }
@@ -51,8 +53,10 @@ type TransactionRow struct {
 	PaidAmount        sql.NullFloat64
 	GroupID           sql.NullString
 	UserID            sql.NullString
+	CreatedByID       sql.NullString
 	ReceiptImage      sql.NullString
 	CreatedByUsername sql.NullString
+	OwnerUsername     sql.NullString
 	CreatedAt         string
 	UpdatedAt         string
 }
@@ -95,9 +99,19 @@ func (r *TransactionRow) ToTransaction() Transaction {
 		t.ReceiptImage = &val
 	}
 
+	if r.CreatedByID.Valid {
+		val := r.CreatedByID.String
+		t.CreatedByID = &val
+	}
+
 	if r.CreatedByUsername.Valid {
 		val := r.CreatedByUsername.String
 		t.CreatedByUsername = &val
+	}
+
+	if r.OwnerUsername.Valid {
+		val := r.OwnerUsername.String
+		t.OwnerUsername = &val
 	}
 
 	return t
@@ -114,6 +128,7 @@ type CreateTransactionRequest struct {
 	Date        string          `json:"date"`
 	Status      *ExpenseStatus  `json:"status,omitempty"`
 	PaidAmount  *float64        `json:"paidAmount,omitempty"`
+	UserID      *string         `json:"userId,omitempty"`     // Optional: override wallet owner (must be group member)
 	ReceiptImage *string        `json:"receiptImage,omitempty"`
 }
 
@@ -122,6 +137,7 @@ type UpdateTransactionRequest struct {
 	Amount      *float64       `json:"amount,omitempty"`
 	Status      *ExpenseStatus `json:"status,omitempty"`
 	PaidAmount  *float64       `json:"paidAmount,omitempty"`
+	UserID      *string        `json:"userId,omitempty"`     // Optional: change wallet owner (must be group member)
 	ReceiptImage *string       `json:"receiptImage,omitempty"`
 }
 
@@ -164,4 +180,23 @@ type CategorySummary struct {
 	Category string          `json:"category"`
 	Type     TransactionType `json:"type"` // INCOME or EXPENSE
 	Amount   float64         `json:"amount"`
+}
+
+// WalletMemberSummary holds per-member wallet metrics, calculated by user_id (wallet owner).
+type WalletMemberSummary struct {
+	UserID       string  `json:"userId"`
+	Username     string  `json:"username"`
+	TotalIncome  float64 `json:"totalIncome"`
+	TotalExpense float64 `json:"totalExpense"` // all expenses (paid + pending)
+	TotalPaid    float64 `json:"totalPaid"`    // paid expenses only
+	TotalPending float64 `json:"totalPending"` // pending expenses only
+	NetBalance   float64 `json:"netBalance"`   // totalIncome - totalExpense
+}
+
+// WalletSummaryResponse is the envelope for GET /api/transactions/wallet-summary.
+type WalletSummaryResponse struct {
+	Month      int                   `json:"month"`
+	Year       int                   `json:"year"`
+	Members    []WalletMemberSummary `json:"members"`
+	GroupTotal WalletMemberSummary   `json:"groupTotal"` // aggregated across all members
 }

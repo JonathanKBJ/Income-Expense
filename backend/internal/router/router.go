@@ -63,6 +63,7 @@ func New(
 				// Read: all group members
 				r.Get("/", txHandler.GetTransactions)
 				r.Get("/annual", txHandler.GetAnnualSummary)
+				r.Get("/wallet-summary", txHandler.GetWalletSummary)
 				// Write: EDITOR+
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Post("/", txHandler.CreateTransaction)
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Post("/batch", txHandler.CreateTransactionsBatch)

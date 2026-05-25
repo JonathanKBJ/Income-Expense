@@ -110,7 +110,7 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
                 label: (
                   <span>
                     {g.name}
-                    <span style={{ fontSize: 11, opacity: 0.6, marginLeft: 6 }}>
+                    <span style={{ fontSize: 12, opacity: 0.72, marginLeft: 6 }}>
                       ({g.memberCount})
                     </span>
                   </span>
@@ -334,17 +334,26 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
         }
         .sidebar-group-selector .ant-select {
           color: var(--text-primary);
+          font-size: 0.95rem;
+          font-weight: 600;
         }
         .sidebar-group-selector .ant-select-selector {
           background: rgba(255, 255, 255, 0.05) !important;
           border-color: rgba(255, 255, 255, 0.1) !important;
           border-radius: 8px !important;
+          min-height: 42px !important;
+          padding: 4px 10px !important;
+        }
+        .sidebar-group-selector .ant-select-selection-item,
+        .sidebar-group-selector .ant-select-selection-placeholder {
+          font-size: 0.95rem;
+          font-weight: 600;
         }
         .sidebar-group-selector .ant-select-arrow {
           color: var(--text-secondary);
         }
         .sidebar-section-title {
-          font-size: 0.68rem;
+          font-size: 0.78rem;
           font-weight: 700;
           color: var(--text-muted, #8b949e);
           text-transform: uppercase;

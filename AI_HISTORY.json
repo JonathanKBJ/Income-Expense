@@ -403,5 +403,160 @@
         ],
         "logic_changed": "Recovered LoanTracker.tsx from malformed JSX/duplicated loanColumns by rebuilding the component with complete desktop/mobile loan list, detail panel, create loan modal, add/edit entry modal, and receipt compression. Wrapped loan Close actions in Popconfirm on both desktop table and mobile cards to prevent accidental status changes. Expanded translations/index.ts from minimal common/dashboard keys into a broad TH/EN dictionary covering common labels, transactions, copy modal, categories, group, loans, auth, annual dashboard, and theme text. App.tsx now passes Ant Design locale (th_TH/en_US) into ConfigProvider and translates breadcrumbs/theme tooltip. Core components now read labels/messages/dropdowns from useLanguage() instead of hardcoded English. StatusBadge now localizes PAID/PENDING. Chart labels and empty states were partially localized and Baht mojibake was replaced with the real Baht symbol/escaped output where needed. npm run build passes after fixes.",
         "ai_warning": "Several components still contain domain enum values (INCOME/EXPENSE/BORROW/LEND/ACTIVE) for API/type logic; only display labels should be localized. TransactionList uses const { t: tr } = useLanguage() because map callbacks commonly name each transaction t; do not rename back to t without also renaming callback variables. Loan entry editing still uses delete-then-create, so a failed create after delete can lose the original entry. CategoryDonutChart/MonthlyMixedChart were touched for encoding cleanup; if UTF-8 errors reappear, rewrite affected files as UTF-8 and prefer ASCII/Unicode escapes for Thai text inside code."
+    },
+    {
+        "date": "2026-05-21",
+        "scope": "[Frontend]",
+        "task": "Fix translation type error (pool), reorganize sidebar categories, and resolve dark mode text blending in Loan Tracker",
+        "files_touched": [
+            "frontend/src/translations/index.ts",
+            "frontend/src/components/Sidebar.tsx",
+            "frontend/src/components/LoanTracker.tsx",
+            "frontend/src/index.css",
+            "frontend/src/App.css"
+        ],
+        "logic_changed": "1) Added 'pool' key to TranslationKeys interface and TH/EN dictionaries to resolve TypeScript error in LoanTracker t.loansPage.pool. 2) Reorganized Sidebar structure by replacing the collapsible Settings sub-menu with clear, text-labeled flat sections (Finance: Dashboard, Annual, Loans; Settings: Categories, My Group, Admin Panel) using the sidebar-section-title class. 3) Resolved dark mode text blending issue on the Loan/Loan Detail pages by adding '!important' to the body text color rule in index.css and applying highly specific class selectors (.loan-tracker-container, .loan-card, .entry-card, .loan-detail-card) in App.css mapped with CSS variables (--text-primary and --text-secondary) to override Ant Design's default text colors.",
+        "ai_warning": "The Sidebar reorganization flattened the navigation hierarchy; do not revert to a nested/collapsible Settings sub-menu without updating both styles and tests. The Loan Tracker text color fixes rely on specific className selectors with !important flags in App.css to override Ant Design's CSS-in-JS defaults. Ensure any newly added cards or text blocks in LoanTracker.tsx use these classNames to avoid text blending issues in dark mode."
+    },
+    {
+        "date": "2026-05-25",
+        "scope": "[Full-Stack]",
+        "task": "Wallet/Group: Separate owner (user_id) from recorder (created_by) — manual owner selection, per-member wallet balance view, transaction owner column, polling reduction",
+        "files_touched": [
+            "backend/internal/database/schema.go",
+            "backend/internal/models/transaction.go",
+            "backend/internal/repository/transaction.go",
+            "backend/internal/handlers/transaction.go",
+            "backend/internal/router/router.go",
+            "frontend/src/types/transaction.ts",
+            "frontend/src/api/transactions.ts",
+            "frontend/src/components/WalletView.tsx",
+            "frontend/src/components/Dashboard.tsx",
+            "frontend/src/components/TransactionForm.tsx",
+            "frontend/src/components/TransactionList.tsx",
+            "frontend/src/translations/index.ts",
+            "frontend/src/App.css",
+            "frontend/src/App.tsx",
+            "WALLET_VIEW_PLAN.md",
+            "TX_OWNER_COLUMN_PLAN.md"
+        ],
+        "logic_changed": "Phase 0 (Owner vs Recorder separation): Added created_by TEXT column to transactions table with ALTER TABLE migration + backfill (created_by = user_id WHERE created_by IS NULL). Transactions now have: user_id = wallet owner (manually selectable, defaults to JWT user), created_by = recorder (always JWT user, cant change). CreateTransactionRequest gets optional userId field; handler validates requested owner is group member via GetMemberRole(). Create/CreateBatch repo methods changed signature: ownerUserID + createdByID instead of single userID. UpdateTransactionRequest supports changing userId (owner). GetByMonthYear/GetByID queries now JOIN users rec_u ON t.created_by and users own_u ON t.user_id, returning createdByUsername (recorder) and ownerUsername (wallet owner) separately. Phase 1 (Wallet Summary): GET /api/transactions/wallet-summary?month=&year= returns per-member breakdown grouped by user_id (wallet owner), using LEFT JOIN so members with no transactions show zeroes. Phase 3 (WalletView UI): New WalletView.tsx with inline styles (not dependent on App.css since it kept getting truncated), compact 3-column horizontal card layout per member (Income | Expense | Balance), single-line group total bar (income - expense = balance). Dashboard.tsx gets Segmented toggle 'Dashboard/Wallet' visible only for multi-member groups. TransactionForm.tsx gets member <Select> dropdown for manual owner selection (visible when memberCount>1, default=current user). TransactionList.tsx: Desktop table gets 'Owner' column showing ownerUsername; mobile cards get card-owner text line. AuthContext polling reduced from 30s to 3min (3*60000). SQL CASE WHEN gm.cnt>1 gates removed from GetByMonthYear/GetByID — ownerUsername and createdByUsername now always returned regardless of group size. CROSS JOIN gm subquery removed from these queries.",
+        "ai_warning": "CRLF line endings in Go files cause Edit tool to silently fail — always use Bash+Python for Go file edits. App.css modifications are unreliable (file gets truncated/overwritten by linter) — prefer inline styles for critical new components. The Create repo now takes (ownerUserID, createdByID, groupID) — handlers must pass JWT userID as createdByID (3rd param), NOT as ownerUserID (2nd param defaults to JWT user unless req.UserID overrides). schema.go was truncated to 364 lines during edits and needed rebuilding — after any schema.go edit, verify file ends with seedCategories function closing braces and return nil. The transaction list hasOwnerColumn check uses transactions.some(t => t.ownerUsername) to conditionally show the Owner column. WalletView.tsx uses all inline styles — do NOT add wallet CSS to App.css unless also updating the component to use className instead. Batch-to-group handler still passes userID for both ownerUserID and createdByID (self-assignment for cross-group copy). Translations: transactions.owner key added (EN: 'Owner', TH: 'เจ้าของ'); transactions.createdBy now means wallet owner badge."
+    },
+    {
+        "date": "2026-05-25",
+        "scope": "[Frontend]",
+        "task": "Fix transaction owner column binding/layout and enlarge wallet menu typography",
+        "files_touched": [
+            "frontend/src/components/TransactionList.tsx",
+            "frontend/src/components/Sidebar.tsx",
+            "frontend/src/App.css"
+        ],
+        "logic_changed": "TransactionList desktop rows now render a real owner <td> when the Owner column is enabled, so category/description/type cells no longer shift under the wrong headers. Owner names are shown as text in the Owner column, while recorder info stays as secondary metadata only when createdByUsername differs from ownerUsername. Mobile cards now show the owner name line with optional recorder text. Dashboard wallet toggle styling was enlarged and made full-width on mobile to reduce cramped labels. Sidebar wallet/group selector and section heading typography were increased for readability.",
+        "ai_warning": "TransactionList still conditionally shows the Owner column via transactions.some(t => t.ownerUsername); if backend data regresses to null ownerUsername, the column disappears again. Recorder text is intentionally secondary metadata, not a primary column; keep row cell counts aligned with the header whenever this table changes. Sidebar typography is currently adjusted via the component's embedded <style> block, so matching changes may need edits in both Sidebar.tsx and App.css if the sidebar styling is later centralized."
+    },
+    {
+        "date": "2026-05-25",
+        "scope": "[Frontend]",
+        "task": "Restyle dashboard wallet toggle to match language selector and improve wallet card readability/spacing",
+        "files_touched": [
+            "frontend/src/components/Dashboard.tsx",
+            "frontend/src/components/WalletView.tsx",
+            "frontend/src/App.css"
+        ],
+        "logic_changed": "Dashboard view toggle now reuses the language-selector Segmented styling via a shared class, with responsive full-width behavior on mobile. WalletView was rebuilt from compact inline 3-column text rows into class-based cards with a clearer hierarchy: member header, income/expense stat panels, and a dedicated balance row. Group total is now rendered as a separate summary card with larger values and explicit balance labeling to reduce visual overlap with member cards.",
+        "ai_warning": "This pass intentionally overrides earlier wallet CSS later in App.css instead of deleting the older block, because App.css is large and historically brittle during edits. If wallet styles are refactored later, remove or consolidate the duplicated wallet rules carefully so the later readability override block remains the winner. Build verification could not be rerun in the current shell because the available Node runtime was v10.24.1, which is too old for TypeScript 5/Vite 8 syntax."
+    },
+    {
+        "date": "2026-05-25",
+        "scope": "[Frontend]",
+        "task": "Soften dashboard wallet segmented control UI",
+        "files_touched": [
+            "frontend/src/App.css"
+        ],
+        "logic_changed": "Dashboard wallet toggle styling was refined from a hard rectangular segmented button into a softer glassy control: added translucent container, subtle border/shadow, rounded thumb, calmer inactive text color, stronger active gradient, and slightly taller mobile hit area. The goal was to make the control feel integrated with the dashboard surface instead of looking like a detached action button.",
+        "ai_warning": "The dashboard toggle still shares the base `language-selector` class with TH/EN and then layers `dashboard-view-segmented` overrides on top. If the shared Segmented styling changes later, re-check both controls together so one does not inherit awkward colors, padding, or thumb shapes from the other."
+    },
+    {
+        "date": "2026-05-25",
+        "scope": "[Frontend]",
+        "task": "Remove blue rectangular active artifact from dashboard wallet toggle",
+        "files_touched": [
+            "frontend/src/App.css"
+        ],
+        "logic_changed": "dashboard-view-segmented now explicitly clears `.ant-segmented-item-selected` background and item box-shadow so the control only shows the rounded thumb, not the inherited rectangular active fill from `language-selector`.",
+        "ai_warning": "The dashboard toggle intentionally reuses `language-selector` and must override its selected-state background. If the base TH/EN segmented styles change, verify the dashboard toggle still removes the inherited active rectangle."
+    },
+    {
+        "date": "2026-05-25",
+        "scope": "[Frontend]",
+        "task": "Decouple dashboard wallet toggle styling from TH/EN active-state logic",
+        "files_touched": [
+            "frontend/src/components/Dashboard.tsx",
+            "frontend/src/App.css"
+        ],
+        "logic_changed": "Dashboard toggle no longer shares the `language-selector` class directly. It now uses only `dashboard-view-segmented`, while App.css gives it a visually similar segmented look with its own transparent item background and dedicated thumb styling. This preserves the blue selected pill without inheriting the rectangular active fill from the language switcher.",
+        "ai_warning": "Do not re-add `language-selector` to the dashboard toggle unless you also want to inherit TH/EN selected-state behavior again. Keep visual similarity by copying style tokens, not by sharing the exact class when the UX requirements diverge."
+    },
+    {
+        "date": "2026-05-25",
+        "scope": "[Frontend]",
+        "task": "Force dashboard wallet selected state to use blue thumb without white overlay",
+        "files_touched": [
+            "frontend/src/App.css"
+        ],
+        "logic_changed": "dashboard-view-segmented now explicitly sets the selected item background to transparent, removes selected box-shadow, and forces the selected label color to white. This ensures Ant Design's default selected panel does not render as a white rectangle over the custom blue thumb.",
+        "ai_warning": "If Ant Design Segmented internals change, re-check both `.ant-segmented-item-selected` and `.ant-segmented-item-label` inside dashboard-view-segmented. The visual relies on the thumb being the only active background layer."
+    },
+    {
+        "date": "2026-05-25",
+        "scope": "[Frontend]",
+        "task": "Stop relying on Ant Segmented thumb for dashboard wallet toggle active state",
+        "files_touched": [
+            "frontend/src/App.css"
+        ],
+        "logic_changed": "Dashboard toggle active styling now uses `.ant-segmented-item-selected` itself as the blue rounded pill and hides `.ant-segmented-thumb` entirely. This avoids inconsistent layering where Ant's selected panel/thumb produced white backgrounds or invisible text in the custom dashboard control.",
+        "ai_warning": "For this control, selected-state visuals are item-driven, not thumb-driven. If someone later re-enables `.ant-segmented-thumb`, they must remove the selected item gradient or the layers will fight again."
+    },
+    {
+        "date": "2026-05-25",
+        "scope": "[Frontend]",
+        "task": "Refine dashboard wallet toggle to a more minimal pill style with centered labels",
+        "files_touched": [
+            "frontend/src/App.css"
+        ],
+        "logic_changed": "Dashboard toggle container and selected item were softened into fully rounded pill shapes with lighter borders/shadows and a calmer blue active fill. The segmented item label now uses flex centering with fixed min-height so text stays visually centered inside each pill on both desktop and mobile.",
+        "ai_warning": "Label centering for the dashboard toggle depends on `.ant-segmented-item-label` being turned into an inline-flex container. If Ant Design changes that internal markup, re-check vertical centering before tweaking padding or line-height."
+    },
+    {
+        "date": "2026-05-25",
+        "scope": "[Frontend]",
+        "task": "Replace dashboard wallet Ant Segmented with custom toggle to stop disappearing active highlight",
+        "files_touched": [
+            "frontend/src/components/Dashboard.tsx",
+            "frontend/src/App.css"
+        ],
+        "logic_changed": "Dashboard/Wallet view switch no longer uses Ant Design Segmented internals. It now renders two plain buttons bound directly to `viewMode`, with `.dashboard-view-option.active` controlling the blue selected pill. This avoids unstable active-state rendering where Ant's internal selected/thumb layers caused the blue highlight to disappear after interaction or rerender.",
+        "ai_warning": "The dashboard toggle is now a custom control, not an Ant component. Future visual changes should target `.dashboard-view-segmented`, `.dashboard-view-option`, and `.dashboard-view-option.active` instead of Ant selectors like `.ant-segmented-item-selected`."
+    },
+    {
+        "date": "2026-05-25",
+        "scope": "[Frontend]",
+        "task": "Widen desktop shell so dashboard uses more horizontal space on Windows",
+        "files_touched": [
+            "frontend/src/App.css"
+        ],
+        "logic_changed": "Increased the desktop max-width of both `.header-content` and `.app-main` from 1400px to 1680px so the top dashboard region can stretch wider and feel proportionate to the lower content area on large Windows screens.",
+        "ai_warning": "This change widens the whole authenticated shell on desktop, not just the dashboard. If future layouts start to feel too loose on extra-wide screens, consider introducing view-specific max-widths instead of shrinking `app-main` globally again."
+    },
+    {
+        "date": "2026-05-25",
+        "scope": "[Frontend]",
+        "task": "Fix add-transaction owner selection not being sent in create payload",
+        "files_touched": [
+            "frontend/src/components/TransactionForm.tsx"
+        ],
+        "logic_changed": "TransactionForm was storing the selected owner in local/form state but did not include `userId` when building the create request. Both INCOME and EXPENSE submissions now pass `userId` from the selected owner override, so backend owner assignment can differ from the logged-in recorder as intended. The owner dropdown label/placeholder was also switched from `createdBy` to `owner` for clarity.",
+        "ai_warning": "If owner selection breaks again, inspect request construction in TransactionForm before debugging backend handlers. The backend already honors `req.UserID`; this bug was caused by the frontend omitting `userId` from the POST payload."
     }
 ]

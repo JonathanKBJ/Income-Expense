@@ -19,9 +19,11 @@ interface BaseTransaction {
   description: string;
   amount: number;
   date: string; // YYYY-MM-DD
-  userId?: string;
+  userId?: string;          // wallet owner
+  createdById?: string;     // who recorded this
   receiptImage?: string;
-  createdByUsername?: string; // only populated in multi-member groups
+  createdByUsername?: string; // recorder username (multi-member groups)
+  ownerUsername?: string;     // wallet owner username (multi-member groups)
   createdAt: string;
   updatedAt: string;
 }
@@ -51,6 +53,7 @@ export interface CreateIncomeRequest {
   description: string;
   amount: number;
   date: string;
+  userId?: string;       // optional: override wallet owner
   receiptImage?: string;
 }
 
@@ -62,6 +65,7 @@ export interface CreateExpenseRequest {
   date: string;
   status: ExpenseStatus;
   paidAmount: number;
+  userId?: string;       // optional: override wallet owner
   receiptImage?: string;
 }
 
@@ -71,6 +75,7 @@ export interface UpdateTransactionRequest {
   amount?: number;
   status?: ExpenseStatus;
   paidAmount?: number;
+  userId?: string;       // optional: change wallet owner
   receiptImage?: string;
 }
 
@@ -123,6 +128,7 @@ export interface TransactionFormState {
   date: string;
   status: ExpenseStatus;
   paidAmount: string; // string for controlled input binding
+  userId?: string;    // optional: wallet owner override
   receiptImage?: string;
 }
 
@@ -134,6 +140,25 @@ export function isExpense(t: Transaction): t is ExpenseTransaction {
 
 export function isIncome(t: Transaction): t is IncomeTransaction {
   return t.type === "INCOME";
+}
+
+// --- Wallet Summary ---
+
+export interface WalletMemberSummary {
+  userId: string;
+  username: string;
+  totalIncome: number;
+  totalExpense: number;
+  totalPaid: number;
+  totalPending: number;
+  netBalance: number;
+}
+
+export interface WalletSummaryResponse {
+  month: number;
+  year: number;
+  members: WalletMemberSummary[];
+  groupTotal: WalletMemberSummary;
 }
 
 // --- Categories ---
