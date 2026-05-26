@@ -556,8 +556,13 @@ func (r *TransactionRepository) GetWalletSummary(ctx context.Context, month, yea
 			gm.user_id,
 			u.username,
 			COALESCE(SUM(CASE WHEN t.type = 'INCOME' THEN t.amount ELSE 0 END), 0) AS total_income,
-			COALESCE(SUM(CASE WHEN t.type = 'EXPENSE' THEN t.amount ELSE 0 END), 0) AS total_expense,
-			COALESCE(SUM(CASE WHEN t.type = 'EXPENSE' AND t.status = 'PAID' THEN t.amount ELSE 0 END), 0) AS total_paid,
+			COALESCE(SUM(CASE
+				WHEN t.type = 'EXPENSE' AND t.status = 'PAID' THEN COALESCE(t.paid_amount, t.amount)
+				WHEN t.type = 'EXPENSE' AND t.status = 'PENDING' THEN t.amount
+				WHEN t.type = 'EXPENSE' THEN t.amount
+				ELSE 0
+			END), 0) AS total_expense,
+			COALESCE(SUM(CASE WHEN t.type = 'EXPENSE' AND t.status = 'PAID' THEN COALESCE(t.paid_amount, t.amount) ELSE 0 END), 0) AS total_paid,
 			COALESCE(SUM(CASE WHEN t.type = 'EXPENSE' AND t.status = 'PENDING' THEN t.amount ELSE 0 END), 0) AS total_pending
 		FROM group_members gm
 		JOIN users u ON u.id = gm.user_id

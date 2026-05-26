@@ -558,5 +558,20 @@
         ],
         "logic_changed": "TransactionForm was storing the selected owner in local/form state but did not include `userId` when building the create request. Both INCOME and EXPENSE submissions now pass `userId` from the selected owner override, so backend owner assignment can differ from the logged-in recorder as intended. The owner dropdown label/placeholder was also switched from `createdBy` to `owner` for clarity.",
         "ai_warning": "If owner selection breaks again, inspect request construction in TransactionForm before debugging backend handlers. The backend already honors `req.UserID`; this bug was caused by the frontend omitting `userId` from the POST payload."
+    },
+    {
+        "date": "2026-05-26",
+        "scope": "[Full-Stack]",
+        "task": "Transaction owner editing, mobile group activity collapse, annual chart currency cleanup, and wallet summary paid-overage reconciliation",
+        "files_touched": [
+            "backend/internal/repository/transaction.go",
+            "frontend/src/components/TransactionList.tsx",
+            "frontend/src/components/Dashboard.tsx",
+            "frontend/src/components/charts/MonthlyMixedChart.tsx",
+            "frontend/src/components/WalletView.tsx",
+            "frontend/src/App.css"
+        ],
+        "logic_changed": "TransactionList edit mode now supports changing the transaction owner (`userId`) for multi-member groups on both desktop and mobile, while save/cancel actions use clearer pill-style buttons. Dashboard recent group activity is collapsible on mobile and defaults to collapsed. MonthlyMixedChart replaced mojibake currency output with stable THB formatters for the left axis and tooltip. WalletView group total balance now mirrors dashboard net-balance logic (`totalIncome - totalPaid - totalPending`). Backend wallet summary aggregation was corrected so paid expenses use `paid_amount` when present, and wallet `totalExpense` now reflects actual paid overages plus pending amounts; this keeps per-member and group wallet totals aligned with dashboard metrics when paid amounts exceed the original expense amount.",
+        "ai_warning": "Wallet summary math now distinguishes three concepts: `totalExpense` = paid_amount for PAID rows plus amount for PENDING rows, `totalPaid` = paid_amount for PAID rows only, and wallet group net balance is intentionally calculated from `totalIncome - totalPaid - totalPending` to match the dashboard summary cards. If wallet cards or API consumers assume `totalExpense == totalPaid + totalPending` from the original transaction amount, re-check them after any future repository changes. TransactionList owner editing depends on `groupInfo.members` from AuthContext and will only render the owner selector for multi-member groups."
     }
 ]

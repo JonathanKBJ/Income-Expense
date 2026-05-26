@@ -24,6 +24,17 @@ export default function MonthlyMixedChart({ data }: Props) {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [mobileOffset, setMobileOffset] = useState(0);
 
+  const formatAxisCurrency = (value: number) => {
+    if (isMobile) {
+      return value >= 1000 || value <= -1000
+        ? `THB${(value / 1000).toFixed(0)}k`
+        : `THB${value}`;
+    }
+    return `THB${value.toLocaleString()}`;
+  };
+
+  const formatTooltipCurrency = (value: number) => `THB${Number(value).toLocaleString()}`;
+
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener("resize", handleResize);
@@ -126,11 +137,7 @@ export default function MonthlyMixedChart({ data }: Props) {
           tick={{ fill: "var(--text-muted)", fontSize: isMobile ? 10 : 12 }}
           tickLine={false}
           axisLine={false}
-          tickFormatter={(value) => 
-            isMobile 
-              ? (value >= 1000 ? `เธฟ${(value / 1000).toFixed(0)}k` : `เธฟ${value}`) 
-              : `เธฟ${value.toLocaleString()}`
-          }
+          tickFormatter={formatAxisCurrency}
           width={isMobile ? 40 : 60}
         />
         <YAxis
@@ -155,7 +162,7 @@ export default function MonthlyMixedChart({ data }: Props) {
           itemStyle={{ color: "var(--text-primary)" }}
           formatter={(value: any, name: any) => {
             if (name.includes("%")) return [`${value}%`, name];
-            return [`เธฟ${Number(value).toLocaleString()}`, name];
+            return [formatTooltipCurrency(Number(value)), name];
           }}
         />
         <Legend 

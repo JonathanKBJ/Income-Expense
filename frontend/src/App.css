@@ -314,6 +314,72 @@
   font-weight: 400;
 }
 
+.dashboard-activity-card {
+  background: var(--bg-card, #1e1e2d);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  margin-top: 1.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.dashboard-activity-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dashboard-activity-title {
+  color: var(--text-primary);
+  margin: 0 0 0.75rem;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.dashboard-activity-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.dashboard-activity-toggle:hover {
+  color: var(--text-primary);
+  border-color: var(--border-light);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.dashboard-activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dashboard-activity-row {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.dashboard-activity-user {
+  color: var(--text-primary);
+  font-weight: 500;
+  min-width: 90px;
+}
+
+.dashboard-activity-time {
+  margin-left: auto;
+  opacity: 0.6;
+}
+
 .metric-cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -1188,6 +1254,43 @@
 .action-btn.cancel:hover {
   color: var(--red-400);
 }
+.edit-decision-btn {
+  width: auto;
+  min-width: 78px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
+.edit-decision-btn.save {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.18), rgba(34, 197, 94, 0.1));
+  border-color: rgba(34, 197, 94, 0.28);
+  color: #22c55e;
+}
+
+.edit-decision-btn.save:hover {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.24), rgba(34, 197, 94, 0.16));
+  color: #16a34a;
+  transform: translateY(-1px);
+}
+
+.edit-decision-btn.cancel {
+  background: rgba(148, 163, 184, 0.12);
+  border-color: rgba(148, 163, 184, 0.22);
+  color: var(--text-secondary);
+}
+
+.edit-decision-btn.cancel:hover {
+  background: rgba(148, 163, 184, 0.18);
+  border-color: rgba(148, 163, 184, 0.3);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
 .action-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
@@ -1253,6 +1356,10 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+.owner-edit-select {
+  min-width: 140px;
 }
 
 .owner-meta {
@@ -1333,6 +1440,36 @@
   .submit-btn {
     flex-shrink: 0;
     margin-top: 16px;
+  }
+
+  .dashboard-activity-card {
+    padding: 1rem;
+  }
+
+  .dashboard-activity-title {
+    margin-bottom: 0;
+  }
+
+  .dashboard-activity-toggle {
+    display: inline-flex;
+    flex-shrink: 0;
+  }
+
+  .dashboard-activity-row {
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .dashboard-activity-user {
+    min-width: 0;
+  }
+
+  .dashboard-activity-time {
+    width: 100%;
+    margin-left: 0;
+    font-size: 11px;
   }
 }
 
@@ -1437,6 +1574,18 @@
   gap: 8px;
 }
 
+.card-edit-grid .card-actions {
+  justify-content: stretch !important;
+  gap: 10px;
+}
+
+.card-edit-grid .edit-decision-btn {
+  flex: 1;
+  min-width: 0;
+  height: 42px;
+  font-size: 0.92rem;
+}
+
 .card-paid-label {
   font-size: 0.7rem;
   color: var(--text-muted);
@@ -1466,6 +1615,15 @@
   }
   .transaction-list-section {
     padding: 20px 12px;
+  }
+
+  .card-edit-grid .card-actions {
+    margin-top: 12px !important;
+  }
+
+  .card-edit-grid .edit-decision-btn {
+    height: 44px;
+    font-size: 0.95rem;
   }
 }
 

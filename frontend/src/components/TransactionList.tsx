@@ -9,6 +9,7 @@ import type {
 import { isExpense } from "../types/transaction";
 import StatusBadge from "./StatusBadge";
 import { useLanguage } from "../contexts/LanguageContext";
+import { useAuth } from "../contexts/AuthContext";
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -43,10 +44,12 @@ export default function TransactionList({
   onRemoveBatch,
 }: TransactionListProps) {
   const { t: tr } = useLanguage();
+  const { groupInfo, user } = useAuth();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState<number>(0);
   const [editStatus, setEditStatus] = useState<ExpenseStatus>("PENDING");
   const [editPaidAmount, setEditPaidAmount] = useState<number>(0);
+  const [editOwnerId, setEditOwnerId] = useState<string | undefined>(undefined);
   const [editReceiptImage, setEditReceiptImage] = useState<string | undefined>(undefined);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
@@ -56,10 +59,13 @@ export default function TransactionList({
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const groupMembers = groupInfo?.members ?? [];
+  const canEditOwner = Boolean(groupInfo && groupInfo.memberCount > 1 && groupMembers.length > 0);
 
   function startEdit(tx: Transaction) {
     setEditingId(tx.id);
     setEditAmount(tx.amount);
+    setEditOwnerId(tx.userId ?? user?.id);
     if (isExpense(tx)) {
       setEditStatus(tx.status);
       setEditPaidAmount(tx.paidAmount);
@@ -67,6 +73,12 @@ export default function TransactionList({
     } else {
       setEditReceiptImage(tx.receiptImage);
     }
+  }
+
+  function resetEditState() {
+    setEditingId(null);
+    setEditOwnerId(undefined);
+    setEditReceiptImage(undefined);
   }
 
   const compressImage = (file: File): Promise<string> => {
@@ -117,6 +129,9 @@ export default function TransactionList({
     setActionLoading(tx.id);
     try {
       const req: UpdateTransactionRequest = { amount: editAmount };
+      if (canEditOwner && editOwnerId) {
+        req.userId = editOwnerId;
+      }
       if (isExpense(tx)) {
         if (editStatus === "PAID" && !editReceiptImage && !tx.receiptImage) {
           message.error(tr.transactions.receiptRequiredPaid);
@@ -128,8 +143,7 @@ export default function TransactionList({
       }
       req.receiptImage = editReceiptImage;
       await onUpdate(tx.id, req);
-      setEditingId(null);
-      setEditReceiptImage(undefined);
+      resetEditState();
     } catch {
       // Error handled by parent
     } finally {
@@ -178,7 +192,7 @@ export default function TransactionList({
     }
   }
 
-  const hasOwnerColumn = transactions.some(t => t.ownerUsername);
+  const hasOwnerColumn = canEditOwner || transactions.some(t => t.ownerUsername);
   const filteredTransactions = transactions.filter(t => {
     if (statusFilter === "ALL") return true;
     if (statusFilter === "INCOME") return t.type === "INCOME";
@@ -316,7 +330,18 @@ export default function TransactionList({
                 <td className="col-category">{t.category}</td>
                 {hasOwnerColumn && (
                   <td className="col-owner">
-                    {t.ownerUsername ? (
+                    {editingId === t.id && canEditOwner ? (
+                      <Select
+                        size="small"
+                        className="owner-edit-select"
+                        value={editOwnerId}
+                        onChange={(val) => setEditOwnerId(val)}
+                        options={groupMembers.map((member) => ({
+                          label: member.username,
+                          value: member.userId,
+                        }))}
+                      />
+                    ) : t.ownerUsername ? (
                       <div className="owner-cell">
                         <span className="owner-name">{t.ownerUsername}</span>
                         {t.createdByUsername && t.createdByUsername !== t.ownerUsername && (
@@ -455,7 +480,7 @@ export default function TransactionList({
                         </Upload>
                       )}
                       <button
-                        className="action-btn save"
+                        className="action-btn save edit-decision-btn"
                         onClick={() => handleSave(t)}
                         disabled={actionLoading === t.id}
                         title={tr.common.save}
@@ -463,8 +488,8 @@ export default function TransactionList({
                         ✓
                       </button>
                       <button
-                        className="action-btn cancel"
-                        onClick={() => setEditingId(null)}
+                        className="action-btn cancel edit-decision-btn"
+                        onClick={resetEditState}
                         title={tr.common.cancel}
                       >
                         ✕
@@ -535,6 +560,20 @@ export default function TransactionList({
             )}
             {editingId === t.id ? (
               <div className="card-edit-grid">
+                {canEditOwner && (
+                  <div className="form-group">
+                    <label>{tr.transactions.owner}</label>
+                    <Select
+                      className="antd-select-full"
+                      value={editOwnerId}
+                      onChange={(val) => setEditOwnerId(val)}
+                      options={groupMembers.map((member) => ({
+                        label: member.username,
+                        value: member.userId,
+                      }))}
+                    />
+                  </div>
+                )}
                 <div className="form-group">
                   <label>{tr.common.amount}</label>
                   <InputNumber
@@ -619,8 +658,8 @@ export default function TransactionList({
                   </div>
                 )}
                 <div className="card-actions" style={{ justifyContent: 'flex-end', marginTop: '8px' }}>
-                  <button className="action-btn save" onClick={() => handleSave(t)} disabled={actionLoading === t.id}>{tr.common.save}</button>
-                  <button className="action-btn cancel" onClick={() => setEditingId(null)}>{tr.common.cancel}</button>
+                  <button className="action-btn save edit-decision-btn" onClick={() => handleSave(t)} disabled={actionLoading === t.id}>{tr.common.save}</button>
+                  <button className="action-btn cancel edit-decision-btn" onClick={resetEditState}>{tr.common.cancel}</button>
                 </div>
               </div>
             ) : (

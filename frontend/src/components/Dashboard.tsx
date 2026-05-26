@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { DownOutlined, UpOutlined } from "@ant-design/icons";
 import type { Transaction, TransactionSummary, CategorySummary } from "../types/transaction";
 import CategoryDonutChart from "./charts/CategoryDonutChart";
 import WalletView from "./WalletView";
@@ -32,6 +33,8 @@ export default function Dashboard({ summary, transactions, month, year }: Dashbo
   const [activity, setActivity] = useState<ActivityLogEntry[]>([]);
   const isMultiMember = groupInfo && groupInfo.memberCount > 1;
   const [viewMode, setViewMode] = useState<"group" | "wallet">("group");
+  const [isMobileActivity, setIsMobileActivity] = useState(false);
+  const [activityCollapsed, setActivityCollapsed] = useState(false);
   const netBalance = summary.totalIncome - summary.totalPaid - summary.totalPending;
 
   useEffect(() => {
@@ -39,6 +42,19 @@ export default function Dashboard({ summary, transactions, month, year }: Dashbo
       getActivityFeed(10).then(setActivity).catch(() => {});
     }
   }, [isMultiMember, transactions]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 768px)");
+    const applyLayout = (mobile: boolean) => {
+      setIsMobileActivity(mobile);
+      setActivityCollapsed(mobile);
+    };
+
+    applyLayout(mediaQuery.matches);
+    const handleChange = (event: MediaQueryListEvent) => applyLayout(event.matches);
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, []);
 
   const categoryData = useMemo(() => {
     const categories: Record<string, CategorySummary> = {};
@@ -175,32 +191,34 @@ export default function Dashboard({ summary, transactions, month, year }: Dashbo
       </div>
 
       {isMultiMember && activity.length > 0 && (
-        <div style={{
-          backgroundColor: "var(--bg-card, #1e1e2d)",
-          borderRadius: "12px",
-          padding: "1.25rem 1.5rem",
-          marginTop: "1.5rem",
-          border: "1px solid rgba(255,255,255,0.05)"
-        }}>
-          <h3 style={{ color: "var(--text-primary)", margin: "0 0 0.75rem", fontSize: 14, fontWeight: 600 }}>
-            {t.dashboard.recentGroupActivity}
-          </h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {activity.slice(0, 5).map((entry) => (
-              <div key={entry.id} style={{
-                display: "flex",
-                gap: 12,
-                fontSize: 12,
-                color: "var(--text-secondary)",
-              }}>
-                <span style={{ color: "var(--text-primary)", fontWeight: 500, minWidth: 90 }}>
-                  {entry.username}
-                </span>
-                <span>{entry.action.replace(/_/g, " ")}</span>
-                <span style={{ marginLeft: "auto", opacity: 0.6 }}>{formatTime(entry.createdAt)}</span>
-              </div>
-            ))}
+        <div className={`dashboard-activity-card ${isMobileActivity && activityCollapsed ? "collapsed" : "expanded"}`}>
+          <div className="dashboard-activity-header">
+            <h3 className="dashboard-activity-title">{t.dashboard.recentGroupActivity}</h3>
+            {isMobileActivity && (
+              <button
+                type="button"
+                className="dashboard-activity-toggle"
+                onClick={() => setActivityCollapsed((prev) => !prev)}
+                aria-expanded={!activityCollapsed}
+                aria-label={t.dashboard.recentGroupActivity}
+              >
+                {activityCollapsed ? <DownOutlined /> : <UpOutlined />}
+              </button>
+            )}
           </div>
+          {(!isMobileActivity || !activityCollapsed) && (
+            <div className="dashboard-activity-list">
+              {activity.slice(0, 5).map((entry) => (
+                <div key={entry.id} className="dashboard-activity-row">
+                  <span className="dashboard-activity-user">
+                    {entry.username}
+                  </span>
+                  <span>{entry.action.replace(/_/g, " ")}</span>
+                  <span className="dashboard-activity-time">{formatTime(entry.createdAt)}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
         </>

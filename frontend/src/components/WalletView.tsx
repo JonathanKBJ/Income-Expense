@@ -38,6 +38,8 @@ export default function WalletView({ month, year }: WalletViewProps) {
     return <div className="wallet-empty">{t.wallet.perPerson}</div>;
   }
 
+  const groupNetBalance = data.groupTotal.totalIncome - data.groupTotal.totalPaid - data.groupTotal.totalPending;
+
   return (
     <section className="wallet-view">
       <div className="wallet-grid">
@@ -90,9 +92,9 @@ export default function WalletView({ month, year }: WalletViewProps) {
             </div>
           </div>
 
-          <div className={`wallet-group-balance ${data.groupTotal.netBalance >= 0 ? "positive" : "negative"}`}>
+          <div className={`wallet-group-balance ${groupNetBalance >= 0 ? "positive" : "negative"}`}>
             <span className="wallet-group-balance-label">{t.wallet.netBalance}</span>
-            <span>{fmt(data.groupTotal.netBalance)}</span>
+            <span>{fmt(groupNetBalance)}</span>
           </div>
         </div>
       )}
