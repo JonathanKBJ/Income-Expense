@@ -338,4 +338,116 @@ const AdminPanel: React.FC = () => {
               actions={[
                 <Popconfirm
                   key="delete"
-                  title={l.remo
+                  title={l.removeTitle}
+                  description={l.removeDescription}
+                  onConfirm={() => handleRemoveMember(item.id)}
+                  okText={l.yes}
+                  cancelText={l.no}
+                  placement="left"
+                >
+                  <Button 
+                    type="text" 
+                    danger 
+                    icon={<DeleteOutlined />} 
+                    size="small"
+                  />
+                </Popconfirm>
+              ]}
+            >
+              <List.Item.Meta
+                avatar={<UserOutlined />}
+                title={item.username}
+                description={item.role}
+              />
+              <Tag color={item.status === "ACTIVE" ? "success" : "error"}>{item.status}</Tag>
+            </List.Item>
+          )}
+          locale={{ emptyText: l.noMembers }}
+        />
+      </Modal>
+
+      <Modal
+        title={l.addUserToGroup}
+        open={addUserToGroupOpen}
+        onCancel={() => setAddUserToGroupOpen(false)}
+        onOk={handleAddMember}
+        okText={l.add}
+      >
+        <div style={{ marginBottom: 10 }}>
+          <Text>{l.selectUserJoin} <b>{selectedGroup?.name}</b>:</Text>
+        </div>
+        <Select
+          style={{ width: '100%' }}
+          placeholder={l.selectUser}
+          onChange={(val) => setSelectedUserForGroup(val)}
+        >
+          {users.map(u => (
+            <Select.Option key={u.id} value={u.id}>{u.username}</Select.Option>
+          ))}
+        </Select>
+        <div style={{ marginTop: 10 }}>
+          <Text type="warning" style={{ fontSize: '12px' }}>{l.note}</Text>
+        </div>
+      </Modal>
+
+      <Modal
+        title={`${l.resetPasswordTitle} ${resetTargetUser?.username || ""}`}
+        open={resetPasswordOpen}
+        onCancel={() => setResetPasswordOpen(false)}
+        onOk={handleResetPassword}
+        confirmLoading={resetting}
+        okText={l.resetPasswordBtn}
+        cancelText={t.common.cancel}
+      >
+        <div style={{ marginBottom: 8 }}>
+          <Text>{l.enterNewPassword}:</Text>
+        </div>
+        <input
+          type="password"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          placeholder={l.newPassword}
+          minLength={6}
+          style={{
+            width: "100%",
+            padding: "8px 12px",
+            border: "1px solid var(--border-subtle, rgba(255,255,255,0.1))",
+            borderRadius: "6px",
+            background: "var(--bg-secondary, #12121a)",
+            color: "var(--text-primary, #f0f0f5)",
+            fontSize: "0.9rem",
+            outline: "none",
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleResetPassword();
+          }}
+        />
+      </Modal>
+
+      <style>{`
+        .admin-header {
+          margin-bottom: 24px;
+        }
+        .admin-grid {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 24px;
+        }
+        @media (min-width: 1024px) {
+          .admin-grid {
+            grid-template-columns: 1.2fr 0.8fr;
+          }
+        }
+        .animate-in {
+          animation: slideUp 0.4s ease-out;
+        }
+        @keyframes slideUp {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+    </div>
+  );
+};
+
+export default AdminPanel;
