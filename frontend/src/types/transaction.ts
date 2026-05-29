@@ -132,6 +132,19 @@ export interface TransactionFormState {
   receiptImage?: string;
 }
 
+// --- Month-over-Month Change ---
+
+export interface MomChange {
+  previousAmount: number;
+  currentAmount: number;
+  percentChange: number; // positive = increased, negative = decreased
+  isNew: boolean;        // no matching transaction in previous month
+  isUnchanged: boolean;  // exact same amount
+  prevTxId: string;      // previous month's transaction ID (empty if new)
+}
+
+export type MomChangeMap = Record<string, MomChange>; // keyed by current tx ID
+
 // --- Utility type guards ---
 
 export function isExpense(t: Transaction): t is ExpenseTransaction {

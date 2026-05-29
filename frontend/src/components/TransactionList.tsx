@@ -5,6 +5,7 @@ import type {
   Transaction,
   UpdateTransactionRequest,
   ExpenseStatus,
+  MomChangeMap,
 } from "../types/transaction";
 import { isExpense } from "../types/transaction";
 import StatusBadge from "./StatusBadge";
@@ -17,6 +18,7 @@ interface TransactionListProps {
   onUpdate: (id: string, req: UpdateTransactionRequest) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onRemoveBatch: (ids: string[]) => Promise<void>;
+  momChanges: MomChangeMap;
 }
 
 function formatCurrency(value: number): string {
@@ -36,12 +38,55 @@ function formatDate(dateStr: string): string {
   });
 }
 
+function renderMomBadge(
+  tx: Transaction,
+  momChanges: MomChangeMap,
+  momLabels: { newLabel: string; unchanged: string; tooltip: string }
+) {
+  const change = momChanges[tx.id];
+  if (!change || change.isNew) {
+    return (
+      <span className="mom-badge mom-new" title={momLabels.newLabel}>
+        {momLabels.newLabel}
+      </span>
+    );
+  }
+  if (change.isUnchanged) {
+    return (
+      <span className="mom-badge mom-unchanged" title={momLabels.unchanged}>
+        —
+      </span>
+    );
+  }
+
+  const pct = change.percentChange;
+  const abs = Math.abs(pct);
+  const isExpense = tx.type === "EXPENSE";
+  // For expenses: increase=bad(red), decrease=good(green)
+  // For income: increase=good(green), decrease=bad(red)
+  const isIncrease = pct > 0;
+  const isGood = isExpense ? !isIncrease : isIncrease;
+  const cls = `mom-badge ${isGood ? "mom-good" : "mom-bad"}`;
+  const arrow = isIncrease ? "↑" : "↓";
+  const tooltip = momLabels.tooltip
+    .replace("{prev}", formatCurrency(change.previousAmount))
+    .replace("{curr}", formatCurrency(change.currentAmount))
+    .replace("{pct}", `${abs}%`);
+
+  return (
+    <span className={cls} title={tooltip}>
+      {arrow}{abs}%
+    </span>
+  );
+}
+
 export default function TransactionList({
   transactions,
   loading,
   onUpdate,
   onDelete,
   onRemoveBatch,
+  momChanges,
 }: TransactionListProps) {
   const { t: tr } = useLanguage();
   const { groupInfo, user } = useAuth();
@@ -309,6 +354,7 @@ export default function TransactionList({
               <th>{tr.common.description}</th>
               <th>{tr.common.type}</th>
               <th className="text-right">{tr.common.amount}</th>
+              <th className="text-right mom-header">{tr.common.momChange || "∆ MoM"}</th>
               <th>{tr.common.status}</th>
               <th className="text-right">{tr.common.paid}</th>
               <th>{tr.common.actions}</th>
@@ -389,6 +435,13 @@ export default function TransactionList({
                       {formatCurrency(t.amount)}
                     </>
                   )}
+                </td>
+                <td className="col-mom text-right">
+                  {renderMomBadge(t, momChanges, {
+                    newLabel: tr.transactions.momNew || "NEW",
+                    unchanged: tr.transactions.momUnchanged || "—",
+                    tooltip: tr.transactions.momTooltip || "Prev: {prev} → Curr: {curr} ({pct})",
+                  })}
                 </td>
                 <td className="col-status">
                   {isExpense(t) ? (
@@ -672,6 +725,13 @@ export default function TransactionList({
                   <div className="card-amount-box">
                     <span className={`card-amount ${t.type.toLowerCase()}`}>
                       {t.type === "INCOME" ? "+" : "−"}{formatCurrency(t.amount)}
+                    </span>
+                    <span className="card-mom">
+                      {renderMomBadge(t, momChanges, {
+                        newLabel: tr.transactions.momNew || "NEW",
+                        unchanged: tr.transactions.momUnchanged || "—",
+                        tooltip: tr.transactions.momTooltip || "Prev: {prev} → Curr: {curr} ({pct})",
+                      })}
                     </span>
                     <span className={`type-badge ${t.type.toLowerCase()}`}>
                       {t.type}

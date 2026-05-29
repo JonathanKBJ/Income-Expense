@@ -1,11 +1,71 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   CreateTransactionRequest,
+  MomChangeMap,
   Transaction,
   TransactionSummary,
   UpdateTransactionRequest,
 } from "../types/transaction";
 import * as api from "../api/transactions";
+
+/**
+ * Compute the previous month/year given a current month and year.
+ */
+function getPreviousMonth(month: number, year: number): { month: number; year: number } {
+  if (month === 1) return { month: 12, year: year - 1 };
+  return { month: month - 1, year };
+}
+
+/**
+ * Build a composite key for matching transactions across months.
+ * Matches by userId (wallet owner) + category + description + type.
+ * This mirrors the clone/copy logic which preserves these fields.
+ */
+function makeMomKey(tx: Transaction): string {
+  const uid = tx.userId ?? "__nobody__";
+  return `${uid}|${tx.type}|${tx.category}|${(tx.description || "").trim().toLowerCase()}`;
+}
+
+/**
+ * Compute month-over-month change data by matching current transactions
+ * against previous month transactions using the composite key.
+ */
+function computeMomChanges(
+  currentTxs: Transaction[],
+  prevTxs: Transaction[]
+): MomChangeMap {
+  const map: MomChangeMap = {};
+
+  // Build lookup from previous month
+  const prevLookup: Record<string, Transaction> = {};
+  for (const pt of prevTxs) {
+    const key = makeMomKey(pt);
+    // If duplicate key in prev month, keep the first one (highest amount or first seen)
+    if (!prevLookup[key]) {
+      prevLookup[key] = pt;
+    }
+  }
+
+  for (const ct of currentTxs) {
+    const key = makeMomKey(ct);
+    const prev = prevLookup[key];
+    if (prev) {
+      const pct = prev.amount > 0
+        ? Math.round(((ct.amount - prev.amount) / prev.amount) * 1000) / 10
+        : ct.amount > 0 ? 100 : 0;
+      map[ct.id] = {
+        previousAmount: prev.amount,
+        currentAmount: ct.amount,
+        percentChange: pct,
+        isNew: false,
+        isUnchanged: ct.amount === prev.amount,
+        prevTxId: prev.id,
+      };
+    }
+  }
+
+  return map;
+}
 
 interface UseTransactionsReturn {
   transactions: Transaction[];
@@ -22,6 +82,7 @@ interface UseTransactionsReturn {
   update: (id: string, req: UpdateTransactionRequest) => Promise<void>;
   remove: (id: string) => Promise<void>;
   removeBatch: (ids: string[]) => Promise<void>;
+  momChanges: MomChangeMap;
 }
 
 const defaultSummary: TransactionSummary = {
@@ -48,13 +109,26 @@ export function useTransactions(): UseTransactionsReturn {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Previous month transactions for MoM comparison
+  const [prevMonthTransactions, setPrevMonthTransactions] = useState<Transaction[]>([]);
+
+  const momChanges = useMemo(
+    () => computeMomChanges(transactions, prevMonthTransactions),
+    [transactions, prevMonthTransactions]
+  );
+
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.getTransactions(month, year);
+      const prev = getPreviousMonth(month, year);
+      const [data, prevData] = await Promise.all([
+        api.getTransactions(month, year),
+        api.getTransactions(prev.month, prev.year),
+      ]);
       setTransactions(data.transactions);
       setSummary(data.summary);
+      setPrevMonthTransactions(prevData.transactions);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch");
     } finally {
@@ -124,5 +198,6 @@ export function useTransactions(): UseTransactionsReturn {
     update,
     remove,
     removeBatch,
+    momChanges,
   };
 }

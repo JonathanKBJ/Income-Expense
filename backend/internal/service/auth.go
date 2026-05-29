@@ -65,6 +65,17 @@ func (s *AuthService) hashWithPepper(password, username string) string {
 	return hex.EncodeToString(hash[:])
 }
 
+// HashPassword hashes a plaintext password using the same pepper+bcrypt scheme.
+// Exported so AdminHandler can reset user passwords.
+func (s *AuthService) HashPassword(password, username string) (string, error) {
+	peppered := s.hashWithPepper(password, username)
+	hashed, err := bcrypt.GenerateFromPassword([]byte(peppered), bcrypt.DefaultCost)
+	if err != nil {
+		return "", fmt.Errorf("failed to hash password: %w", err)
+	}
+	return string(hashed), nil
+}
+
 // Register creates a new user and an associated group.
 func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) (*models.User, error) {
 	// Check if user already exists
@@ -77,8 +88,7 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 	}
 
 	// Hash password with pepper and username
-	pepperedPassword := s.hashWithPepper(req.Password, req.Username)
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(pepperedPassword), bcrypt.DefaultCost)
+	hashedPassword, err := s.HashPassword(req.Password, req.Username)
 	if err != nil {
 		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}

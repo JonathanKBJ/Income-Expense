@@ -114,6 +114,7 @@ func New(
 				r.Use(middleware.AdminOnly)
 				r.Get("/users", adminHandler.ListUsers)
 				r.Patch("/users/{id}/status", adminHandler.UpdateUserStatus)
+				r.Patch("/users/{id}/reset-password", adminHandler.ResetUserPassword)
 				r.Get("/groups", adminHandler.ListGroups)
 				r.Get("/groups/{id}/members", adminHandler.GetGroupMembers)
 				r.Post("/groups/{id}/members", adminHandler.AddMemberToGroup)

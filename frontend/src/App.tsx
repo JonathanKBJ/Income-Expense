@@ -69,6 +69,7 @@ function AuthenticatedApp() {
     remove,
     removeBatch,
     refresh,
+    momChanges,
   } = useTransactions();
 
   useEffect(() => {
@@ -224,6 +225,7 @@ function AuthenticatedApp() {
                 onUpdate={update}
                 onDelete={remove}
                 onRemoveBatch={removeBatch}
+                momChanges={momChanges}
               />
             </div>
           </>

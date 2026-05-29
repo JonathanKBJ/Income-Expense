@@ -40,6 +40,7 @@ export interface TranslationKeys {
     active: string;
     closed: string;
     currentGroup: string;
+    momChange: string;
   };
   dashboard: {
     title: string;
@@ -83,6 +84,9 @@ export interface TranslationKeys {
     attachReceipt: string;
     createdBy: string;
     owner: string;
+    momNew: string;
+    momUnchanged: string;
+    momTooltip: string;
   };
   copy: {
     title: string;
@@ -274,6 +278,7 @@ export const translations: Record<Language, TranslationKeys> = {
       active: "Active",
       closed: "Closed",
       currentGroup: "Current group",
+      momChange: "∆ MoM",
     },
     dashboard: {
       title: "Financial Overview",
@@ -317,6 +322,9 @@ export const translations: Record<Language, TranslationKeys> = {
       attachReceipt: "Attach Receipt",
       createdBy: "Owner",
       owner: "Owner",
+      momNew: "NEW",
+      momUnchanged: "—",
+      momTooltip: "Prev: {prev} → Now: {curr} ({pct})",
     },
     copy: {
       title: "Copy Transactions from Other Month",
@@ -509,6 +517,7 @@ export const translations: Record<Language, TranslationKeys> = {
       active: "ใช้งานอยู่",
       closed: "ปิดแล้ว",
       currentGroup: "กลุ่มปัจจุบัน",
+      momChange: "∆ MoM",
     },
     dashboard: {
       title: "ภาพรวมการเงิน",
@@ -552,6 +561,9 @@ export const translations: Record<Language, TranslationKeys> = {
       attachReceipt: "แนบใบเสร็จ",
       createdBy: "เจ้าของ",
       owner: "เจ้าของ",
+      momNew: "ใหม่",
+      momUnchanged: "—",
+      momTooltip: "เดือนก่อน: {prev} → ปัจจุบัน: {curr} ({pct})",
     },
     copy: {
       title: "คัดลอกรายการจากเดือนอื่น",

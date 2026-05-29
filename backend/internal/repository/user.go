@@ -129,3 +129,23 @@ func (r *UserRepository) UpdateStatus(ctx context.Context, id string, status mod
 
 	return nil
 }
+
+// UpdatePassword sets a new password hash for a user.
+func (r *UserRepository) UpdatePassword(ctx context.Context, id string, passwordHash string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	query := `UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?`
+	result, err := r.db.ExecContext(ctx, query, passwordHash, now, id)
+	if err != nil {
+		return fmt.Errorf("failed to update user password: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("user not found")
+	}
+
+	return nil
+}

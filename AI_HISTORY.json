@@ -573,5 +573,36 @@
         ],
         "logic_changed": "TransactionList edit mode now supports changing the transaction owner (`userId`) for multi-member groups on both desktop and mobile, while save/cancel actions use clearer pill-style buttons. Dashboard recent group activity is collapsible on mobile and defaults to collapsed. MonthlyMixedChart replaced mojibake currency output with stable THB formatters for the left axis and tooltip. WalletView group total balance now mirrors dashboard net-balance logic (`totalIncome - totalPaid - totalPending`). Backend wallet summary aggregation was corrected so paid expenses use `paid_amount` when present, and wallet `totalExpense` now reflects actual paid overages plus pending amounts; this keeps per-member and group wallet totals aligned with dashboard metrics when paid amounts exceed the original expense amount.",
         "ai_warning": "Wallet summary math now distinguishes three concepts: `totalExpense` = paid_amount for PAID rows plus amount for PENDING rows, `totalPaid` = paid_amount for PAID rows only, and wallet group net balance is intentionally calculated from `totalIncome - totalPaid - totalPending` to match the dashboard summary cards. If wallet cards or API consumers assume `totalExpense == totalPaid + totalPending` from the original transaction amount, re-check them after any future repository changes. TransactionList owner editing depends on `groupInfo.members` from AuthContext and will only render the owner selector for multi-member groups."
+    },
+    {
+        "date": "2026-05-29",
+        "scope": "[Frontend]",
+        "task": "Month-over-month change indicator in TransactionList — shows percentage increase/decrease for each transaction vs previous month",
+        "files_touched": [
+            "frontend/src/types/transaction.ts",
+            "frontend/src/hooks/useTransactions.ts",
+            "frontend/src/components/TransactionList.tsx",
+            "frontend/src/App.tsx",
+            "frontend/src/App.css",
+            "frontend/src/translations/index.ts"
+        ],
+        "logic_changed": "Added MomChange/MomChangeMap types to transaction.ts for tracking previousAmount, currentAmount, percentChange, isNew, isUnchanged, prevTxId. useTransactions hook now fetches previous month transactions in parallel (Promise.all) and computes a momChanges map via useMemo. Matching is done by composite key: userId|type|category|description (same fields the clone/copy feature preserves). Percent change is computed as ((curr - prev) / prev) * 100 rounded to 1 decimal place. In TransactionList: desktop table gets a new '∆ MoM' column header + col-mom cells between Amount and Status; mobile cards show the MoM badge between card-amount and type-badge. Color coding: green for 'good' changes (expense decrease or income increase), red for 'bad' changes (expense increase or income decrease), arrow indicators (↑/↓), NEW label for items without a previous month match, '—' for unchanged. Tooltip shows previous/current amounts and percentage. CSS uses existing theme variables (--green-glow, --red-glow, --green-500, --red-400, --blue-400, --blue-glow) for theme-aware coloring. Translations added: common.momChange (table header), transactions.momNew, transactions.momUnchanged, transactions.momTooltip with TH/EN versions.",
+        "ai_warning": "No backend changes were made — all MoM computation happens on the frontend via dual fetch (current + previous month). The makeMomKey function uses userId|type|category|description — if the clone/copy feature changes what fields it preserves, update this key. Previous month lookup keeps only the first duplicate match by key (if multiple transactions have same composite key in prev month, only the first one is matched). Transactions with userId === null use '__nobody__' as fallback in the composite key. The renderMomBadge helper takes a momLabels object, not the full translation context — if new badges are needed, extend the interface. CSS mom-badge class uses hardcoded text-transform:uppercase on mom-new only — non-blue badges inherit text formatting from their content. The card-mom CSS uses align-self: flex-end to position inside the column-layout card-amount-box."
+    },
+    {
+        "date": "2026-05-29",
+        "scope": "[Full-Stack]",
+        "task": "Admin password reset: admin can reset any user's password to a new value",
+        "files_touched": [
+            "backend/internal/repository/user.go",
+            "backend/internal/service/auth.go",
+            "backend/internal/handlers/admin.go",
+            "backend/internal/models/user.go",
+            "backend/internal/router/router.go",
+            "backend/cmd/server/main.go",
+            "frontend/src/components/AdminPanel.tsx"
+        ],
+        "logic_changed": "Backend: Added UpdatePassword(id, passwordHash) to UserRepository. Exposed HashPassword(password, username) on AuthService (public wrapper around the private hashWithPepper + bcrypt chain) so AdminHandler can hash passwords with the same scheme. AdminHandler now takes authService as constructor param (NewAdminHandler signature changed). ResetUserPassword handler at PATCH /api/admin/users/{id}/reset-password: validates password >=6 chars, fetches user for username-based peppering, hashes, calls UpdatePassword. Returns { message, username } on success. Route added inside /api/admin group (behind AuthMiddleware + AdminOnly). main.go updated to pass authService to NewAdminHandler. Fixed Go build error: removed unused pepperedPassword variable left over from Register refactor. Frontend: AdminPanel user table gets 'Actions' column with LockOutlined 'Reset Password' button. Modal for password input (minLength=6), Enter key submits. CRITICAL FIX: AdminPanel now calls hashPassword(resetTargetUser.username, newPassword) before sending — this produces SHA256(password:username_lowercase) matching the client-side hashing used by Login/Register forms. Without this, the backend stores SHA256(plaintext:username:pepper) but login sends SHA256(SHA256_hash:username:pepper), causing mismatch and login failure.",
+        "ai_warning": "FRONTEND PASSWORD FLOW: Login.tsx and Register.tsx both call hashPassword(username, password) from api/security.ts which produces SHA256(password:username_lowercase) via SubtleCrypto. The backend then peppers this hash with SHA256(hash:username:pepper). When building any admin feature that touches passwords, ALWAYS hash on the client side via hashPassword() before sending to /api/admin/users/{id}/reset-password. The admin panel labels are in a local 'l' object (not the main i18n system) — if the app is fully migrated to useLanguage(), move these labels to translations/index.ts. Router.go uses CRLF line endings and tab indentation — Python script needed for edits; the Edit tool cannot match tab-indented Go code reliably. The password peppering scheme (SHA256(password:username:pepperSecret) → bcrypt) means the username is part of the hash input — the handler fetches the user by ID first to ensure the right username is used."
     }
 ]

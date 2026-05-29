@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { Table, Tag, Switch, Space, Card, Typography, Select, Button, Modal, List, Badge, App as AntApp, Popconfirm } from "antd";
-import { UserOutlined, TeamOutlined, UserAddOutlined, DeleteOutlined } from "@ant-design/icons";
+import { UserOutlined, TeamOutlined, UserAddOutlined, DeleteOutlined, LockOutlined } from "@ant-design/icons";
 import { apiFetch } from "../api/client";
+import { hashPassword } from "../api/security";
 import { useLanguage } from "../contexts/LanguageContext";
 
 const { Title, Text } = Typography;
@@ -47,6 +48,12 @@ const AdminPanel: React.FC = () => {
     memberAdded: "เพิ่มสมาชิกเข้ากลุ่มแล้ว",
     memberRemoved: "ลบสมาชิกออกจากกลุ่มแล้ว",
     statusUpdated: "อัปเดตสถานะผู้ใช้เป็น",
+    resetPassword: "รีเซ็ตรหัสผ่าน",
+    resetPasswordTitle: "รีเซ็ตรหัสผ่านสำหรับ",
+    newPassword: "รหัสผ่านใหม่",
+    enterNewPassword: "กรอกรหัสผ่านใหม่ (อย่างน้อย 6 ตัวอักษร)",
+    passwordResetSuccess: "รีเซ็ตรหัสผ่านสำเร็จ",
+    resetPasswordBtn: "รีเซ็ต",
   } : {
     username: "Username",
     role: "Role",
@@ -73,6 +80,12 @@ const AdminPanel: React.FC = () => {
     memberAdded: "Member added to group",
     memberRemoved: "Member removed from group",
     statusUpdated: "User status updated to",
+    resetPassword: "Reset Password",
+    resetPasswordTitle: "Reset Password for",
+    newPassword: "New Password",
+    enterNewPassword: "Enter new password (at least 6 characters)",
+    passwordResetSuccess: "Password reset successfully",
+    resetPasswordBtn: "Reset",
   };
   const [users, setUsers] = useState<User[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -82,6 +95,10 @@ const AdminPanel: React.FC = () => {
   const [groupMembers, setGroupMembers] = useState<User[]>([]);
   const [addUserToGroupOpen, setAddUserToGroupOpen] = useState(false);
   const [selectedUserForGroup, setSelectedUserForGroup] = useState<string | null>(null);
+  const [resetPasswordOpen, setResetPasswordOpen] = useState(false);
+  const [resetTargetUser, setResetTargetUser] = useState<User | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [resetting, setResetting] = useState(false);
 
   const { message } = AntApp.useApp();
 
@@ -116,6 +133,36 @@ const AdminPanel: React.FC = () => {
       fetchData();
     } catch (error: any) {
       message.error(error.message);
+    }
+  };
+
+  const openResetPassword = (user: User) => {
+    setResetTargetUser(user);
+    setNewPassword("");
+    setResetPasswordOpen(true);
+  };
+
+  const handleResetPassword = async () => {
+    if (!resetTargetUser || !newPassword || newPassword.length < 6) {
+      message.error(l.enterNewPassword);
+      return;
+    }
+    setResetting(true);
+    try {
+      // Hash password client-side to match login/register flow
+      const hashedPassword = await hashPassword(resetTargetUser.username, newPassword);
+      await apiFetch(`/api/admin/users/${resetTargetUser.id}/reset-password`, {
+        method: "PATCH",
+        body: JSON.stringify({ password: hashedPassword }),
+      });
+      message.success(l.passwordResetSuccess);
+      setResetPasswordOpen(false);
+      setNewPassword("");
+      setResetTargetUser(null);
+    } catch (error: any) {
+      message.error(error.message);
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -187,13 +234,26 @@ const AdminPanel: React.FC = () => {
       render: (status: string, record: User) => (
         <Space>
           <Badge status={status === "ACTIVE" ? "success" : "error"} />
-          <Switch 
-            checked={status === "ACTIVE"} 
+          <Switch
+            checked={status === "ACTIVE"}
             onChange={() => toggleUserStatus(record.id, status)}
             size="small"
           />
           <Text style={{ fontSize: '12px' }}>{status === "ACTIVE" ? t.common.active : "INACTIVE"}</Text>
         </Space>
+      ),
+    },
+    {
+      title: l.action,
+      key: "action",
+      render: (_: any, record: User) => (
+        <Button
+          size="small"
+          icon={<LockOutlined />}
+          onClick={() => openResetPassword(record)}
+        >
+          {l.resetPassword}
+        </Button>
       ),
     },
   ];
@@ -278,82 +338,4 @@ const AdminPanel: React.FC = () => {
               actions={[
                 <Popconfirm
                   key="delete"
-                  title={l.removeTitle}
-                  description={l.removeDescription}
-                  onConfirm={() => handleRemoveMember(item.id)}
-                  okText={l.yes}
-                  cancelText={l.no}
-                  placement="left"
-                >
-                  <Button 
-                    type="text" 
-                    danger 
-                    icon={<DeleteOutlined />} 
-                    size="small"
-                  />
-                </Popconfirm>
-              ]}
-            >
-              <List.Item.Meta
-                avatar={<UserOutlined />}
-                title={item.username}
-                description={item.role}
-              />
-              <Tag color={item.status === "ACTIVE" ? "success" : "error"}>{item.status}</Tag>
-            </List.Item>
-          )}
-          locale={{ emptyText: l.noMembers }}
-        />
-      </Modal>
-
-      <Modal
-        title={l.addUserToGroup}
-        open={addUserToGroupOpen}
-        onCancel={() => setAddUserToGroupOpen(false)}
-        onOk={handleAddMember}
-        okText={l.add}
-      >
-        <div style={{ marginBottom: 10 }}>
-          <Text>{l.selectUserJoin} <b>{selectedGroup?.name}</b>:</Text>
-        </div>
-        <Select
-          style={{ width: '100%' }}
-          placeholder={l.selectUser}
-          onChange={(val) => setSelectedUserForGroup(val)}
-        >
-          {users.map(u => (
-            <Select.Option key={u.id} value={u.id}>{u.username}</Select.Option>
-          ))}
-        </Select>
-        <div style={{ marginTop: 10 }}>
-          <Text type="warning" style={{ fontSize: '12px' }}>{l.note}</Text>
-        </div>
-      </Modal>
-
-      <style>{`
-        .admin-header {
-          margin-bottom: 24px;
-        }
-        .admin-grid {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 24px;
-        }
-        @media (min-width: 1024px) {
-          .admin-grid {
-            grid-template-columns: 1.2fr 0.8fr;
-          }
-        }
-        .animate-in {
-          animation: slideUp 0.4s ease-out;
-        }
-        @keyframes slideUp {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
-    </div>
-  );
-};
-
-export default AdminPanel;
+                  title={l.remo

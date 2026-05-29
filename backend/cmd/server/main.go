@@ -52,7 +52,7 @@ func main() {
 	authService := service.NewAuthService(userRepo, groupRepo)
 
 	authHandler := handlers.NewAuthHandler(authService)
-	adminHandler := handlers.NewAdminHandler(userRepo, groupRepo, activityRepo)
+	adminHandler := handlers.NewAdminHandler(userRepo, groupRepo, activityRepo, authService)
 
 	txRepo := repository.NewTransactionRepository(db)
 	txHandler := handlers.NewTransactionHandler(txRepo, groupRepo, activityRepo)

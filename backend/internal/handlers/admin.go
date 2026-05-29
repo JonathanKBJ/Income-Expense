@@ -9,6 +9,7 @@ import (
 
 	"expense-tracker/internal/models"
 	"expense-tracker/internal/repository"
+	"expense-tracker/internal/service"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -18,17 +19,20 @@ type AdminHandler struct {
 	userRepo     *repository.UserRepository
 	groupRepo    *repository.GroupRepository
 	activityRepo *repository.ActivityLogRepository
+	authService  *service.AuthService
 }
 
 func NewAdminHandler(
 	userRepo *repository.UserRepository,
 	groupRepo *repository.GroupRepository,
 	activityRepo *repository.ActivityLogRepository,
+	authService *service.AuthService,
 ) *AdminHandler {
 	return &AdminHandler{
 		userRepo:     userRepo,
 		groupRepo:    groupRepo,
 		activityRepo: activityRepo,
+		authService:  authService,
 	}
 }
 
@@ -120,6 +124,53 @@ func (h *AdminHandler) RemoveMemberFromGroup(w http.ResponseWriter, r *http.Requ
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "member removed from group"})
+}
+
+// ResetUserPassword handles PATCH /api/admin/users/{id}/reset-password
+// Allows an admin to reset any user's password.
+func (h *AdminHandler) ResetUserPassword(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	var req models.ResetPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.Password == "" || len(req.Password) < 6 {
+		writeError(w, http.StatusBadRequest, "password must be at least 6 characters")
+		return
+	}
+
+	// Fetch the user to get username for peppering
+	user, err := h.userRepo.GetByID(r.Context(), id)
+	if err != nil || user == nil {
+		writeError(w, http.StatusNotFound, "user not found")
+		return
+	}
+
+	// Hash the new password with the same pepper+bcrypt scheme
+	hashed, err := h.authService.HashPassword(req.Password, user.Username)
+	if err != nil {
+		log.Printf("ERROR: ResetUserPassword (hash): %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to hash password")
+		return
+	}
+
+	if err := h.userRepo.UpdatePassword(r.Context(), id, hashed); err != nil {
+		log.Printf("ERROR: ResetUserPassword (update): %v", err)
+		if err.Error() == "user not found" {
+			writeError(w, http.StatusNotFound, "user not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to reset password")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, models.ResetPasswordResponse{
+		Message:  "password reset successfully",
+		Username: user.Username,
+	})
 }
 
 // logActivity creates an activity log entry only for multi-member groups.

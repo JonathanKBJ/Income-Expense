@@ -51,3 +51,14 @@ type AuthResponse struct {
 type UpdateUserStatusRequest struct {
 	Status UserStatus `json:"status"`
 }
+
+// ResetPasswordRequest is used by Admins to reset a user's password.
+type ResetPasswordRequest struct {
+	Password string `json:"password"`
+}
+
+// ResetPasswordResponse contains the new password info after reset.
+type ResetPasswordResponse struct {
+	Message  string `json:"message"`
+	Username string `json:"username"`
+}
