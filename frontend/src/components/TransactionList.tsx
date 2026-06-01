@@ -102,10 +102,12 @@ export default function TransactionList({
 
   // New states for filtering and bulk actions
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [memberFilter, setMemberFilter] = useState<string>("ALL");
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const groupMembers = groupInfo?.members ?? [];
   const canEditOwner = Boolean(groupInfo && groupInfo.memberCount > 1 && groupMembers.length > 0);
+  const showMemberFilter = canEditOwner;
 
   function startEdit(tx: Transaction) {
     setEditingId(tx.id);
@@ -239,12 +241,21 @@ export default function TransactionList({
 
   const hasOwnerColumn = canEditOwner || transactions.some(t => t.ownerUsername);
   const filteredTransactions = transactions.filter(t => {
-    if (statusFilter === "ALL") return true;
-    if (statusFilter === "INCOME") return t.type === "INCOME";
-    if (isExpense(t)) {
-      return t.status === statusFilter;
+    if (statusFilter === "ALL" && memberFilter === "ALL") return true;
+    let matches = true;
+    if (statusFilter !== "ALL") {
+      if (statusFilter === "INCOME") {
+        matches = t.type === "INCOME";
+      } else if (isExpense(t)) {
+        matches = t.status === statusFilter;
+      } else {
+        matches = false;
+      }
     }
-    return false;
+    if (memberFilter !== "ALL" && matches) {
+      matches = t.userId === memberFilter;
+    }
+    return matches;
   });
 
   if (loading) {
@@ -284,8 +295,8 @@ export default function TransactionList({
         </h2>
         
         <div className="list-controls">
-          <Select 
-            value={statusFilter} 
+          <Select
+            value={statusFilter}
             onChange={setStatusFilter}
             style={{ width: 120 }}
             className="status-filter-select"
@@ -296,6 +307,23 @@ export default function TransactionList({
               { label: tr.common.income, value: "INCOME" },
             ]}
           />
+
+          {showMemberFilter && (
+            <Select
+              value={memberFilter}
+              onChange={setMemberFilter}
+              style={{ width: 160 }}
+              className="member-filter-select"
+              placeholder={tr.transactions.filterByMember}
+              options={[
+                { label: tr.wallet.allMembersFilter, value: "ALL" },
+                ...groupMembers.map(member => ({
+                  label: member.username,
+                  value: member.userId,
+                })),
+              ]}
+            />
+          )}
           
           <Button 
             type={selectionMode ? "primary" : "default"}

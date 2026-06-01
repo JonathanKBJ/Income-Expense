@@ -44,15 +44,13 @@ export default function WalletView({ month, year }: WalletViewProps) {
     <section className="wallet-view">
       <div className="wallet-grid">
         {data.members.map((m) => {
-          const balanceClass = m.netBalance >= 0 ? "positive" : "negative";
+          const paidBalance = m.totalIncome - m.totalPaid;
+          const balanceClass = paidBalance >= 0 ? "positive" : "negative";
 
           return (
             <article key={m.userId} className="wallet-card">
               <header className="wallet-card-header">
                 <div className="member-name">{m.username}</div>
-                <div className={`wallet-balance-pill ${balanceClass}`}>
-                  {fmt(m.netBalance)}
-                </div>
               </header>
 
               <div className="wallet-stats">
@@ -63,7 +61,7 @@ export default function WalletView({ month, year }: WalletViewProps) {
 
                 <div className="wallet-stat expense">
                   <span className="wallet-stat-label">{t.wallet.expense}</span>
-                  <span className="wallet-stat-num">{fmt(m.totalExpense)}</span>
+                  <span className="wallet-stat-num">{fmt(m.totalPaid)}</span>
                   {m.totalPending > 0 && (
                     <span className="pending-hint">
                       {fmt(m.totalPending)} {t.wallet.pending.toLowerCase()}
@@ -74,7 +72,7 @@ export default function WalletView({ month, year }: WalletViewProps) {
 
               <div className={`wallet-balance-row ${balanceClass}`}>
                 <span className="wallet-balance-label">{t.wallet.netBalance}</span>
-                <span className="wallet-balance-value">{fmt(m.netBalance)}</span>
+                <span className="wallet-balance-value">{fmt(paidBalance)}</span>
               </div>
             </article>
           );

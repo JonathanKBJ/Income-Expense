@@ -87,6 +87,7 @@ export interface TranslationKeys {
     momNew: string;
     momUnchanged: string;
     momTooltip: string;
+    filterByMember: string;
   };
   copy: {
     title: string;
@@ -229,6 +230,8 @@ export interface TranslationKeys {
     perPerson: string;
     groupTotal: string;
     allMembers: string;
+    paid: string;
+    allMembersFilter: string;
   };
   theme: {
     light: string;
@@ -325,6 +328,7 @@ export const translations: Record<Language, TranslationKeys> = {
       momNew: "NEW",
       momUnchanged: "—",
       momTooltip: "Prev: {prev} → Now: {curr} ({pct})",
+      filterByMember: "Filter by Member",
     },
     copy: {
       title: "Copy Transactions from Other Month",
@@ -467,6 +471,8 @@ export const translations: Record<Language, TranslationKeys> = {
       perPerson: "Per Person",
       groupTotal: "Group Total",
       allMembers: "All Members",
+      paid: "Paid",
+      allMembersFilter: "All Members",
     },
     theme: {
       light: "Switch to Light Mode",
@@ -564,6 +570,7 @@ export const translations: Record<Language, TranslationKeys> = {
       momNew: "ใหม่",
       momUnchanged: "—",
       momTooltip: "เดือนก่อน: {prev} → ปัจจุบัน: {curr} ({pct})",
+      filterByMember: "กรองตามสมาชิก",
     },
     copy: {
       title: "คัดลอกรายการจากเดือนอื่น",
@@ -706,6 +713,8 @@ export const translations: Record<Language, TranslationKeys> = {
       perPerson: "แยกตามบุคคล",
       groupTotal: "รวมทั้งกลุ่ม",
       allMembers: "สมาชิกทั้งหมด",
+      paid: "จ่ายแล้ว",
+      allMembersFilter: "สมาชิกทั้งหมด",
     },
     theme: {
       light: "เปลี่ยนเป็นโหมดสว่าง",
