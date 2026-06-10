@@ -199,4 +199,20 @@ type CompactTransaction struct {
 	ID          string          `json:"id"`
 	Type        TransactionType `json:"type"`
 	Category    string          `json:"category"`
-	Description string          `js
+	Description string          `json:"description"`
+	Amount      float64         `json:"amount"`
+	UserID      *string         `json:"userId"`
+}
+
+// CompactTransactionsResponse is the envelope for compact transaction queries.
+type CompactTransactionsResponse struct {
+	Transactions []CompactTransaction `json:"transactions"`
+}
+
+// WalletSummaryResponse is the envelope for GET /api/transactions/wallet-summary.
+type WalletSummaryResponse struct {
+	Month      int                   `json:"month"`
+	Year       int                   `json:"year"`
+	Members    []WalletMemberSummary `json:"members"`
+	GroupTotal WalletMemberSummary   `json:"groupTotal"` // aggregated across all members
+}

@@ -363,4 +363,10 @@ func (d *DB) seedCategories(ctx context.Context) error {
 				id, name, catType, now, now,
 			)
 			if err != nil {
-				return fmt.Erro
+				return fmt.Errorf("failed to seed category %q (%s): %w", name, catType, err)
+			}
+		}
+	}
+
+	return nil
+}
