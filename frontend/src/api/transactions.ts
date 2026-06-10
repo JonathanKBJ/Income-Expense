@@ -5,6 +5,7 @@ import type {
   UpdateTransactionRequest,
   AnnualSummaryResponse,
   WalletSummaryResponse,
+  CompactTransactionsResponse,
 } from "../types/transaction";
 import { apiFetch } from "./client";
 
@@ -17,6 +18,18 @@ export async function getTransactions(
   year: number
 ): Promise<TransactionsResponse> {
   return apiFetch(`/api/transactions?month=${month}&year=${year}`);
+}
+
+/**
+ * Fetch lightweight transactions for month-over-month comparison.
+ * GET /api/transactions/compact?month={M}&year={Y}
+ * Excludes receipt_image (base64 blob), status, paid_amount, timestamps, and JOINs.
+ */
+export async function getTransactionsCompact(
+  month: number,
+  year: number
+): Promise<CompactTransactionsResponse> {
+  return apiFetch(`/api/transactions/compact?month=${month}&year=${year}`);
 }
 
 /**

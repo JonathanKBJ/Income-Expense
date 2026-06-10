@@ -120,6 +120,53 @@ func (r *TransactionRepository) GetByMonthYear(ctx context.Context, month, year 
 	}, nil
 }
 
+// GetByMonthYearCompact retrieves a minimal set of fields for MoM comparison.
+// Only returns id, type, category, description, amount, and user_id — no receipt_image, status, or JOINs.
+func (r *TransactionRepository) GetByMonthYearCompact(ctx context.Context, month, year int, groupID string) (*models.CompactTransactionsResponse, error) {
+	startDate := fmt.Sprintf("%04d-%02d-01", year, month)
+	nextMonth := month + 1
+	nextYear := year
+	if nextMonth > 12 {
+		nextMonth = 1
+		nextYear++
+	}
+	endDate := fmt.Sprintf("%04d-%02d-01", nextYear, nextMonth)
+
+	query := `
+		SELECT t.id, t.type, t.category, t.description, t.amount, t.user_id
+		FROM transactions t
+		WHERE t.date >= ? AND t.date < ? AND t.group_id = ?
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, startDate, endDate, groupID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query compact transactions: %w", err)
+	}
+	defer rows.Close()
+
+	transactions := make([]models.CompactTransaction, 0)
+	for rows.Next() {
+		var t models.CompactTransaction
+		var userID sql.NullString
+		if err := rows.Scan(&t.ID, &t.Type, &t.Category, &t.Description, &t.Amount, &userID); err != nil {
+			return nil, fmt.Errorf("failed to scan compact transaction: %w", err)
+		}
+		if userID.Valid {
+			val := userID.String
+			t.UserID = &val
+		}
+		transactions = append(transactions, t)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating compact rows: %w", err)
+	}
+
+	return &models.CompactTransactionsResponse{
+		Transactions: transactions,
+	}, nil
+}
+
 // GetByID retrieves a single transaction by its ID and group ID.
 func (r *TransactionRepository) GetByID(ctx context.Context, id, groupID string) (*models.Transaction, error) {
 	query := `

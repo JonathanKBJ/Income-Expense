@@ -77,6 +77,7 @@ const createIndexes = `
 CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
 CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(type);
 CREATE INDEX IF NOT EXISTS idx_transactions_group ON transactions(group_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_group_date ON transactions(group_id, date);
 CREATE INDEX IF NOT EXISTS idx_categories_group ON categories(group_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_global_unique ON categories(name, type) WHERE group_id IS NULL AND user_id IS NULL;
 `
@@ -362,10 +363,4 @@ func (d *DB) seedCategories(ctx context.Context) error {
 				id, name, catType, now, now,
 			)
 			if err != nil {
-				return fmt.Errorf("failed to seed category %q (%s): %w", name, catType, err)
-			}
-		}
-	}
-
-	return nil
-}
+				return fmt.Erro

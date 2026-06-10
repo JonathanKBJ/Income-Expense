@@ -83,6 +83,50 @@ func (h *TransactionHandler) GetTransactions(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, result)
 }
 
+// GetTransactionsCompact handles GET /api/transactions/compact?month={M}&year={Y}
+// Returns a lightweight response (no receipt images, no JOINs) for MoM comparison.
+func (h *TransactionHandler) GetTransactionsCompact(w http.ResponseWriter, r *http.Request) {
+	monthStr := r.URL.Query().Get("month")
+	yearStr := r.URL.Query().Get("year")
+
+	now := time.Now()
+	month := int(now.Month())
+	year := now.Year()
+
+	if monthStr != "" {
+		m, err := strconv.Atoi(monthStr)
+		if err != nil || m < 1 || m > 12 {
+			writeError(w, http.StatusBadRequest, "month must be between 1 and 12")
+			return
+		}
+		month = m
+	}
+
+	if yearStr != "" {
+		y, err := strconv.Atoi(yearStr)
+		if err != nil || y < 2000 || y > 2100 {
+			writeError(w, http.StatusBadRequest, "year must be between 2000 and 2100")
+			return
+		}
+		year = y
+	}
+
+	groupID := middleware.GetGroupID(r.Context())
+	if groupID == "" {
+		writeError(w, http.StatusForbidden, "group identification required for this operation")
+		return
+	}
+
+	result, err := h.repo.GetByMonthYearCompact(r.Context(), month, year, groupID)
+	if err != nil {
+		log.Printf("ERROR: GetTransactionsCompact: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to fetch transactions")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
 // GetAnnualSummary handles GET /api/transactions/annual?year={Y}
 func (h *TransactionHandler) GetAnnualSummary(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()

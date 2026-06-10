@@ -193,10 +193,10 @@ type WalletMemberSummary struct {
 	NetBalance   float64 `json:"netBalance"`   // totalIncome - totalExpense
 }
 
-// WalletSummaryResponse is the envelope for GET /api/transactions/wallet-summary.
-type WalletSummaryResponse struct {
-	Month      int                   `json:"month"`
-	Year       int                   `json:"year"`
-	Members    []WalletMemberSummary `json:"members"`
-	GroupTotal WalletMemberSummary   `json:"groupTotal"` // aggregated across all members
-}
+// CompactTransaction is a lightweight transaction for MoM comparison.
+// Excludes receipt_image (base64 blob), status, paid_amount, timestamps, and usernames.
+type CompactTransaction struct {
+	ID          string          `json:"id"`
+	Type        TransactionType `json:"type"`
+	Category    string          `json:"category"`
+	Description string          `js

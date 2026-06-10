@@ -42,7 +42,7 @@
             "backend/internal/repository/category.go",
             "backend/internal/handlers/category.go"
         ],
-        "logic_changed": "Added categories table with UNIQUE(name, type, group_id, user_id) constraint. Seeded default categories: INCOME (7: Salary, Freelance, Investment, Rental, Gift, Refund, Other) and EXPENSE (11: Food \u0026 Dining through Other) using INSERT OR IGNORE for idempotency. Categories can be global (group_id IS NULL AND user_id IS NULL) or group/user-specific. GetAll query uses UNION to merge group-specific + global categories. Created partial unique index for global categories: WHERE group_id IS NULL AND user_id IS NULL. Category migration uses rename-recreate-copy-drop pattern for adding user_id column to existing tables.",
+        "logic_changed": "Added categories table with UNIQUE(name, type, group_id, user_id) constraint. Seeded default categories: INCOME (7: Salary, Freelance, Investment, Rental, Gift, Refund, Other) and EXPENSE (11: Food & Dining through Other) using INSERT OR IGNORE for idempotency. Categories can be global (group_id IS NULL AND user_id IS NULL) or group/user-specific. GetAll query uses UNION to merge group-specific + global categories. Created partial unique index for global categories: WHERE group_id IS NULL AND user_id IS NULL. Category migration uses rename-recreate-copy-drop pattern for adding user_id column to existing tables.",
         "ai_warning": "The UNIQUE constraint includes group_id and user_id -- different groups can have categories with the same name+type. When deleting a category, always check IsCategoryInUse() first to avoid breaking FK references. The seed runs on every migration but is idempotent. The migration for adding user_id column is complex (rename old table, create new, copy data, drop old) -- do not modify without understanding the full flow."
     },
     {
@@ -617,5 +617,22 @@
         ],
         "logic_changed": "WalletView.tsx: per-member expense stat now shows totalPaid (was totalExpense). Per-member netBalance computed as income - paid instead of using backend's netBalance (= income - totalExpense). Group total math line also shows totalPaid instead of totalExpense, and group net balance = totalIncome - totalPaid (was totalIncome - totalPaid - totalPending). The pending hint remains as a secondary indicator below the expense stat. TransactionList.tsx: added memberFilter state ('ALL' by default) and a new Select dropdown next to the existing status filter. The dropdown only renders when showMemberFilter = canEditOwner (group has >1 member). Options are 'All Members' + each group member's username (keyed by userId). Filtered transactions now consider both statusFilter and memberFilter. CSS: .member-filter-select gets width:100%!important on mobile (<=768px). Translations: added wallet.paid, wallet.allMembersFilter, and transactions.filterByMember keys with EN/TH values.",
         "ai_warning": "Wallet expense is now totalPaid, NOT totalExpense. If someone reverts to showing totalExpense or expects netBalance to match the old calculation (income - totalExpense), the wallet will show incorrect figures. The member filter matches by t.userId (wallet owner), not createdBy. If the member dropdown doesn't appear, check that canEditOwner is true (group must have memberCount > 1 AND groupMembers.length > 0). Member filter only affects the frontend display — no API changes. The .member-filter-select CSS is inside the 768px media query, so desktop width (160px) is set via inline style, mobile is overridden to 100%."
+    },
+    {
+        "date": "2026-06-10",
+        "scope": "[Full-Stack]",
+        "task": "Performance optimization: Eliminated re-fetch on CRUD, added compact endpoint for MoM, composite DB index",
+        "files_touched": [
+            "backend/internal/database/schema.go",
+            "backend/internal/models/transaction.go",
+            "backend/internal/repository/transaction.go",
+            "backend/internal/handlers/transaction.go",
+            "backend/internal/router/router.go",
+            "frontend/src/types/transaction.ts",
+            "frontend/src/api/transactions.ts",
+            "frontend/src/hooks/useTransactions.ts"
+        ],
+        "logic_changed": "Three optimizations to fix slow transaction fetching: (1) Optimistic UI updates — create/update/delete operations now update local React state directly instead of calling refresh() (2 full API calls). Falls back to full refresh on API error. (2) Added GET /api/transactions/compact endpoint returning only id/type/category/description/amount/userId (no receipt_image, status, paid_amount, timestamps, JOINs) — used for previous-month MoM comparison instead of full fetch. (3) Added composite index idx_transactions_group_date on (group_id, date) for the main query pattern. Frontend computeSummary() mirrors backend aggregation locally for optimistic updates.",
+        "ai_warning": "The /compact route is registered BEFORE /{id} in router.go to prevent Chi from matching \"compact\" as a transaction ID. If adding more named GET routes under /api/transactions/, always add them before the /{id} param route. computeSummary() must stay in sync with the backend aggregation logic in GetByMonthYear — if backend changes how summary is computed (e.g., includes new status types), update both places. Optimistic updates assume the API response matches local state expectations — if the backend returns partial/incomplete Transaction objects from create/update, local state may diverge."
     }
 ]

@@ -62,6 +62,7 @@ func New(
 			r.Route("/transactions", func(r chi.Router) {
 				// Read: all group members
 				r.Get("/", txHandler.GetTransactions)
+				r.Get("/compact", txHandler.GetTransactionsCompact)
 				r.Get("/annual", txHandler.GetAnnualSummary)
 				r.Get("/wallet-summary", txHandler.GetWalletSummary)
 				// Write: EDITOR+

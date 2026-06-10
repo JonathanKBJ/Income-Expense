@@ -92,6 +92,20 @@ export interface TransactionsResponse {
   summary: TransactionSummary;
 }
 
+/** Lightweight transaction used for month-over-month comparison (no receipt image, status, or timestamps) */
+export interface CompactTransaction {
+  id: string;
+  type: TransactionType;
+  category: string;
+  description: string;
+  amount: number;
+  userId?: string;
+}
+
+export interface CompactTransactionsResponse {
+  transactions: CompactTransaction[];
+}
+
 export interface MonthlySummary {
   month: number;
   income: number;
