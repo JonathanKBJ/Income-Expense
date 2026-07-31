@@ -191,6 +191,11 @@ export interface TranslationKeys {
     entryDeleteFailed: string;
     entryUpdated: string;
     entryUpdateFailed: string;
+    dashboard: string;
+    allTypes: string;
+    totalPrincipal: string;
+    totalPaid: string;
+    totalRemaining: string;
   };
   auth: {
     welcomeBack: string;
@@ -432,6 +437,11 @@ export const translations: Record<Language, TranslationKeys> = {
       entryDeleteFailed: "Failed to delete entry",
       entryUpdated: "Entry updated",
       entryUpdateFailed: "Failed to update entry",
+      dashboard: "Dashboard",
+      allTypes: "All Types",
+      totalPrincipal: "Total Principal",
+      totalPaid: "Total Paid",
+      totalRemaining: "Remaining",
     },
     auth: {
       welcomeBack: "Welcome Back",
@@ -674,6 +684,11 @@ export const translations: Record<Language, TranslationKeys> = {
       entryDeleteFailed: "ลบรายการไม่สำเร็จ",
       entryUpdated: "อัปเดตรายการแล้ว",
       entryUpdateFailed: "อัปเดตรายการไม่สำเร็จ",
+      dashboard: "แดชบอร์ด",
+      allTypes: "ทั้งหมด",
+      totalPrincipal: "เงินต้นทั้งหมด",
+      totalPaid: "จ่ายแล้วทั้งหมด",
+      totalRemaining: "คงเหลือทั้งหมด",
     },
     auth: {
       welcomeBack: "ยินดีต้อนรับกลับ",

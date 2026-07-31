@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Button, Table, Tag, Modal, Input, InputNumber, DatePicker, Select,
   Progress, Card, Statistic, Row, Col, App, Popconfirm, Upload, Image, Empty,
@@ -54,6 +54,10 @@ export default function LoanTracker() {
   const [editEntryDesc, setEditEntryDesc] = useState("");
   const [editEntryReceipt, setEditEntryReceipt] = useState<string | undefined>();
 
+  const [dashboardFilter, setDashboardFilter] = useState<"ALL" | "BORROW" | "LEND">("ALL");
+  const [loanPageSize, setLoanPageSize] = useState(10);
+  const [entryPageSize, setEntryPageSize] = useState(8);
+
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < MOBILE_BP);
     window.addEventListener("resize", onResize);
@@ -79,6 +83,19 @@ export default function LoanTracker() {
   useEffect(() => {
     if (activeGroup?.id) fetchLoans();
   }, [activeGroup?.id, fetchLoans]);
+
+  const dashboardStats = useMemo(() => {
+    const filtered = dashboardFilter === "ALL" ? loans : loans.filter((l) => l.type === dashboardFilter);
+    let totalPrincipal = 0;
+    let totalPaid = 0;
+    let totalRemaining = 0;
+    for (const l of filtered) {
+      totalPrincipal += l.principal;
+      totalPaid += l.type === "BORROW" ? l.totalInstallments : l.totalDeposited;
+      totalRemaining += l.outstanding;
+    }
+    return { totalPrincipal, totalPaid, totalRemaining, count: filtered.length };
+  }, [loans, dashboardFilter]);
 
   function selectLoan(loan: LoanDetail) {
     setSelectedLoan(loan);
@@ -501,7 +518,7 @@ export default function LoanTracker() {
               size="small"
               dataSource={sorted}
               columns={entryColumns}
-            pagination={{ pageSize: 8 }}
+              pagination={{ pageSize: entryPageSize, showSizeChanger: true, pageSizeOptions: ["8", "10", "20", "50"], onShowSizeChange: (_: number, size: number) => setEntryPageSize(size) }}
             scroll={{ x: 650 }}
           />
           );
@@ -526,6 +543,63 @@ export default function LoanTracker() {
         </Button>
       </div>
 
+      {/* Dashboard Summary */}
+      <Card size="small" style={{ marginBottom: 14 }} styles={{ body: { padding: isMobile ? 10 : 14 } }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontWeight: 600, fontSize: isMobile ? 14 : 16 }}>{t.loansPage.dashboard}</span>
+          <Select
+            size="small"
+            value={dashboardFilter}
+            onChange={setDashboardFilter}
+            style={{ minWidth: 130 }}
+            options={[
+              { value: "ALL", label: t.loansPage.allTypes },
+              { value: "BORROW", label: t.loansPage.borrow },
+              { value: "LEND", label: t.loansPage.lend },
+            ]}
+          />
+        </div>
+        <Row gutter={[10, 10]}>
+          <Col span={isMobile ? 8 : 8}>
+            <Card size="small" styles={{ body: { padding: isMobile ? 8 : 12 } }}>
+              <Statistic
+                title={t.loansPage.totalPrincipal}
+                value={dashboardStats.totalPrincipal}
+                prefix="฿"
+                precision={2}
+                styles={{ content: { fontSize: isMobile ? 16 : 20, fontWeight: 600 } }}
+              />
+            </Card>
+          </Col>
+          <Col span={isMobile ? 8 : 8}>
+            <Card size="small" styles={{ body: { padding: isMobile ? 8 : 12 } }}>
+              <Statistic
+                title={t.loansPage.totalPaid}
+                value={dashboardStats.totalPaid}
+                prefix="฿"
+                precision={2}
+                styles={{ content: { color: dashboardStats.totalPaid > 0 ? "#4ade80" : undefined, fontSize: isMobile ? 16 : 20, fontWeight: 600 } }}
+              />
+            </Card>
+          </Col>
+          <Col span={isMobile ? 8 : 8}>
+            <Card size="small" styles={{ body: { padding: isMobile ? 8 : 12 } }}>
+              <Statistic
+                title={t.loansPage.totalRemaining}
+                value={dashboardStats.totalRemaining}
+                prefix="฿"
+                precision={2}
+                styles={{ content: { color: dashboardStats.totalRemaining > 0 ? "#f59e0b" : "#4ade80", fontSize: isMobile ? 16 : 20, fontWeight: 600 } }}
+              />
+            </Card>
+          </Col>
+        </Row>
+        <div style={{ marginTop: 8, fontSize: 11, color: "var(--text-secondary)", textAlign: "right" }}>
+          {dashboardFilter === "ALL" ? t.loansPage.allTypes : dashboardFilter === "BORROW" ? t.loansPage.borrow : t.loansPage.lend}
+          {" · "}{dashboardStats.count} {dashboardStats.count === 1 ? "loan" : "loans"}
+        </div>
+      </Card>
+
       {isMobile ? (
         <div>{loans.length ? loans.map(renderLoanCard) : <Empty description={t.loansPage.noLoans} />}</div>
       ) : (
@@ -536,7 +610,7 @@ export default function LoanTracker() {
               loading={loading}
               dataSource={loans}
               columns={loanColumns}
-              pagination={{ pageSize: 10 }}
+              pagination={{ pageSize: loanPageSize, showSizeChanger: true, pageSizeOptions: ["10", "20", "50", "100"], onShowSizeChange: (_: number, size: number) => setLoanPageSize(size) }}
               scroll={{ x: 860 }}
               onRow={(record) => ({
                 onClick: () => selectLoan(record),

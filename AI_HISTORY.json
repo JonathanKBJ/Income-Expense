@@ -634,5 +634,16 @@
         ],
         "logic_changed": "Three optimizations to fix slow transaction fetching: (1) Optimistic UI updates — create/update/delete operations now update local React state directly instead of calling refresh() (2 full API calls). Falls back to full refresh on API error. (2) Added GET /api/transactions/compact endpoint returning only id/type/category/description/amount/userId (no receipt_image, status, paid_amount, timestamps, JOINs) — used for previous-month MoM comparison instead of full fetch. (3) Added composite index idx_transactions_group_date on (group_id, date) for the main query pattern. Frontend computeSummary() mirrors backend aggregation locally for optimistic updates.",
         "ai_warning": "The /compact route is registered BEFORE /{id} in router.go to prevent Chi from matching \"compact\" as a transaction ID. If adding more named GET routes under /api/transactions/, always add them before the /{id} param route. computeSummary() must stay in sync with the backend aggregation logic in GetByMonthYear — if backend changes how summary is computed (e.g., includes new status types), update both places. Optimistic updates assume the API response matches local state expectations — if the backend returns partial/incomplete Transaction objects from create/update, local state may diverge."
+    },
+    {
+        "date": "2026-07-31",
+        "scope": "[Frontend]",
+        "task": "LoanTracker dashboard: summary card with type filter + page size changer for both tables",
+        "files_touched": [
+            "frontend/src/components/LoanTracker.tsx",
+            "frontend/src/translations/index.ts"
+        ],
+        "logic_changed": "(1) Added dashboard summary Card above the loan list showing three computed Statistic cards: Total Principal, Total Paid, Remaining. Stats are filtered by loan type via a Select dropdown (All/Borrow/Lend). Total Paid is type-aware: BORROW loans sum totalInstallments, LEND loans sum totalDeposited. Computation uses useMemo keyed on [loans, dashboardFilter]. Card footer shows filtered type label + loan count. (2) Added showSizeChanger + pageSizeOptions to both the main loan Table (10/20/50/100) and the entry detail Table (8/10/20/50). Page size is managed by loanPageSize/entryPageSize state with onShowSizeChange callbacks because antd Table overrides internal state when pagination is a static object. (3) Translations added: dashboard, allTypes, totalPrincipal, totalPaid, totalRemaining (EN + TH).",
+        "ai_warning": "dashboardStats computes paid as (loan.type==='BORROW' ? totalInstallments : totalDeposited) — if backend changes the meaning of these fields, dashboard totals will diverge from detail panel stats. The loanPageSize/entryPageSize pattern with onShowSizeChange is the antd 5 recommended way to make showSizeChanger work; do NOT revert to a static pagination object or the size dropdown silently breaks. Dashboard card uses inline styles consistently with the rest of LoanTracker — if extracting to a separate component later, move inline styles to App.css."
     }
 ]
