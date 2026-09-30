@@ -241,18 +241,21 @@ func (h *TransactionHandler) CreateTransactionsBatch(w http.ResponseWriter, r *h
 		return
 	}
 
-	// Determine wallet owner: default to current user, allow manual override
-	// For batch, use the first request's userId or default to current user
-	ownerUserID := createdByID
-	if len(reqs) > 0 && reqs[0].UserID != nil && *reqs[0].UserID != "" && *reqs[0].UserID != createdByID {
-		if _, err := h.groupRepo.GetMemberRole(r.Context(), groupID, *reqs[0].UserID); err != nil {
+	// Validate any explicit wallet owner per request. CreateBatch will preserve
+	// each request's userId, falling back to the recorder when it is omitted.
+	validatedOwners := map[string]bool{createdByID: true}
+	for _, req := range reqs {
+		if req.UserID == nil || *req.UserID == "" || validatedOwners[*req.UserID] {
+			continue
+		}
+		if _, err := h.groupRepo.GetMemberRole(r.Context(), groupID, *req.UserID); err != nil {
 			writeError(w, http.StatusBadRequest, "owner is not a member of this group")
 			return
 		}
-		ownerUserID = *reqs[0].UserID
+		validatedOwners[*req.UserID] = true
 	}
 
-	err := h.repo.CreateBatch(r.Context(), reqs, ownerUserID, createdByID, groupID)
+	err := h.repo.CreateBatch(r.Context(), reqs, createdByID, createdByID, groupID)
 	if err != nil {
 		log.Printf("ERROR: CreateTransactionsBatch: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to create transactions in batch")
@@ -298,6 +301,18 @@ func (h *TransactionHandler) CreateTransactionsBatchToGroup(w http.ResponseWrite
 			writeError(w, http.StatusBadRequest, "validation failed: "+err.Error())
 			return
 		}
+	}
+
+	validatedOwners := map[string]bool{userID: true}
+	for _, t := range req.Transactions {
+		if t.UserID == nil || *t.UserID == "" || validatedOwners[*t.UserID] {
+			continue
+		}
+		if _, err := h.groupRepo.GetMemberRole(r.Context(), req.TargetGroupID, *t.UserID); err != nil {
+			writeError(w, http.StatusBadRequest, "owner is not a member of the target group")
+			return
+		}
+		validatedOwners[*t.UserID] = true
 	}
 
 	err := h.repo.CreateBatch(r.Context(), req.Transactions, userID, userID, req.TargetGroupID)

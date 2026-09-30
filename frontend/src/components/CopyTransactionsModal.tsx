@@ -82,6 +82,7 @@ export default function CopyTransactionsModal({
         description: t.description,
         amount: t.amount,
         date: newDate.format("YYYY-MM-DD"),
+        userId: t.userId,
       };
 
       if (t.type === "EXPENSE") {
@@ -142,6 +143,7 @@ export default function CopyTransactionsModal({
       width: 100,
       render: (_: any, record: Transaction) => {
         const duplicate = destTransactions.find(d => 
+          d.userId === record.userId &&
           d.category === record.category && 
           d.description === record.description && 
           d.amount === record.amount

@@ -278,8 +278,9 @@ func (r *TransactionRepository) Create(ctx context.Context, req models.CreateTra
 }
 
 // CreateBatch inserts multiple transactions in a single database transaction.
-// ownerUserID = wallet owner (user_id), createdByID = who recorded this (created_by / JWT user).
-func (r *TransactionRepository) CreateBatch(ctx context.Context, requests []models.CreateTransactionRequest, ownerUserID, createdByID, groupID string) error {
+// defaultOwnerUserID = fallback wallet owner (user_id), createdByID = who recorded this (created_by / JWT user).
+// Each request can override the wallet owner with req.UserID.
+func (r *TransactionRepository) CreateBatch(ctx context.Context, requests []models.CreateTransactionRequest, defaultOwnerUserID, createdByID, groupID string) error {
 	if len(requests) == 0 {
 		return nil
 	}
@@ -307,6 +308,11 @@ func (r *TransactionRepository) CreateBatch(ctx context.Context, requests []mode
 		id := uuid.New().String()
 		var status *string
 		var paidAmount *float64
+		ownerUserID := defaultOwnerUserID
+
+		if req.UserID != nil && *req.UserID != "" {
+			ownerUserID = *req.UserID
+		}
 
 		if req.Type == models.TypeExpense {
 			if req.Status != nil {
@@ -335,8 +341,8 @@ func (r *TransactionRepository) CreateBatch(ctx context.Context, requests []mode
 			status,
 			paidAmount,
 			groupID,
-		ownerUserID,
-		createdByID,
+			ownerUserID,
+			createdByID,
 			req.ReceiptImage,
 			now,
 			now,
