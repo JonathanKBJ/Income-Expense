@@ -21,7 +21,7 @@ function formatTime(iso: string): string {
 
 export default function GroupPage() {
   const { t } = useLanguage();
-  const { groupInfo, refreshGroupInfo } = useAuth();
+  const { groupInfo, refreshGroupInfo, refreshMyGroups } = useAuth();
   const [members, setMembers] = useState<GroupMember[]>([]);
   const [myRole, setMyRole] = useState<string>("");
   const [groupName, setGroupName] = useState("");
@@ -52,8 +52,9 @@ export default function GroupPage() {
       message.success(t.group.groupNameUpdated);
       setEditingName(false);
       refreshGroupInfo();
-    } catch (e: any) {
-      message.error(e.message || t.group.renameFailed);
+      refreshMyGroups();
+    } catch (e: unknown) {
+      message.error(e instanceof Error ? e.message : t.group.renameFailed);
     }
   }
 
@@ -77,14 +78,20 @@ export default function GroupPage() {
     if (!joinCode.trim()) return;
     setJoining(true);
     try {
-      await joinGroup(joinCode.trim());
+      const resp = (await joinGroup(joinCode.trim())) as unknown as { token?: string; groupId?: string };
+      if (resp?.token) {
+        localStorage.setItem("auth_token", resp.token);
+        if (resp.groupId) {
+          localStorage.setItem("active_group_id", resp.groupId);
+        }
+      }
       message.success(t.group.joined);
       setJoinCode("");
       setTimeout(() => {
         window.location.reload();
       }, 1500);
-    } catch (e: any) {
-      message.error(e.message || t.group.joinFailed);
+    } catch (e: unknown) {
+      message.error(e instanceof Error ? e.message : t.group.joinFailed);
     } finally {
       setJoining(false);
     }
@@ -92,14 +99,20 @@ export default function GroupPage() {
 
   async function handleLeaveGroup() {
     try {
-      await leaveGroup();
+      const resp = (await leaveGroup()) as unknown as { token?: string; groupId?: string };
+      if (resp?.token) {
+        localStorage.setItem("auth_token", resp.token);
+        if (resp.groupId) {
+          localStorage.setItem("active_group_id", resp.groupId);
+        }
+      }
       message.success(t.group.left);
       setShowLeaveConfirm(false);
       setTimeout(() => {
         window.location.reload();
       }, 1500);
-    } catch (e: any) {
-      message.error(e.message || t.group.leaveFailed);
+    } catch (e: unknown) {
+      message.error(e instanceof Error ? e.message : t.group.leaveFailed);
     }
   }
 

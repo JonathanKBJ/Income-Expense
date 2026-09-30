@@ -645,5 +645,30 @@
         ],
         "logic_changed": "(1) Added dashboard summary Card above the loan list showing three computed Statistic cards: Total Principal, Total Paid, Remaining. Stats are filtered by loan type via a Select dropdown (All/Borrow/Lend). Total Paid is type-aware: BORROW loans sum totalInstallments, LEND loans sum totalDeposited. Computation uses useMemo keyed on [loans, dashboardFilter]. Card footer shows filtered type label + loan count. (2) Added showSizeChanger + pageSizeOptions to both the main loan Table (10/20/50/100) and the entry detail Table (8/10/20/50). Page size is managed by loanPageSize/entryPageSize state with onShowSizeChange callbacks because antd Table overrides internal state when pagination is a static object. (3) Translations added: dashboard, allTypes, totalPrincipal, totalPaid, totalRemaining (EN + TH).",
         "ai_warning": "dashboardStats computes paid as (loan.type==='BORROW' ? totalInstallments : totalDeposited) — if backend changes the meaning of these fields, dashboard totals will diverge from detail panel stats. The loanPageSize/entryPageSize pattern with onShowSizeChange is the antd 5 recommended way to make showSizeChanger work; do NOT revert to a static pagination object or the size dropdown silently breaks. Dashboard card uses inline styles consistently with the rest of LoanTracker — if extracting to a separate component later, move inline styles to App.css."
+    },
+    {
+        "date": "2026-08-11",
+        "scope": "[Full-Stack]",
+        "task": "Copy Transactions from Other Month now preserves wallet owner",
+        "files_touched": [
+            "frontend/src/components/CopyTransactionsModal.tsx",
+            "backend/internal/handlers/transaction.go",
+            "backend/internal/repository/transaction.go"
+        ],
+        "logic_changed": "CopyTransactionsModal includes source transaction userId in each CreateTransactionRequest and duplicate detection now includes userId. CreateTransactionsBatch validates explicit owner userId per request instead of only reading the first request. CreateTransactionsBatchToGroup validates each requested owner against the target group. TransactionRepository.CreateBatch now uses req.UserID per row, falling back to the recorder/default owner only when userId is omitted.",
+        "ai_warning": "Batch copy owner preservation depends on frontend sending userId and backend honoring req.UserID per request. Do not change CreateBatch back to one ownerUserID for the whole batch or mixed-owner monthly copies will be assigned to the wrong wallet. Cross-group copy will reject owners that are not members of the target group."
+    },
+    {
+        "date": "2026-09-30",
+        "scope": "[Frontend]",
+        "task": "Fix pocket/group state desync on page refresh (Loans & Debts and app-wide)",
+        "files_touched": [
+            "frontend/src/contexts/AuthContext.tsx",
+            "frontend/src/api/client.ts",
+            "frontend/src/components/LoanTracker.tsx",
+            "frontend/src/components/GroupPage.tsx"
+        ],
+        "logic_changed": "Resolved activeGroup jumping back to 'Main' (groups[0]) on page refresh while token was still set to the previously selected group: (1) In AuthContext, lazy initialize activeGroup and user/token directly from localStorage on initial render to prevent null state flicker. (2) Added getGroupIdFromToken helper to decode groupId from JWT claims as a fallback source of truth. (3) In refreshMyGroups, resolve target group by activeGroupRef.current?.id || savedGroupId || tokenGroupId instead of blindly resetting to groups[0] when activeGroup is not yet set. If group is valid, persist active_group and active_group_id to localStorage; if group was deleted/inaccessible, fallback to groups[0] and call apiSwitchGroup to resync token. (4) Updated switchGroupFn, logout, and apiFetch 401 handler to maintain active_group and active_group_id. (5) In LoanTracker, reset selectedLoan(null) when activeGroup?.id changes. (6) In GroupPage, persist new token/groupId on join/leave and refreshMyGroups on rename.",
+        "ai_warning": "activeGroup is now persisted under 'active_group' and 'active_group_id' in localStorage and synchronized with the JWT's embedded groupId. When modifying AuthContext or group switching logic, always ensure the JWT token (auth_token) and the active group (active_group / activeGroup state) remain in lockstep so backend queries filter by the matching group ID."
     }
 ]

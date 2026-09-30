@@ -25,6 +25,8 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}) {
     // login page before isAuthenticated is confirmed).
     localStorage.removeItem("auth_token");
     localStorage.removeItem("auth_user");
+    localStorage.removeItem("active_group");
+    localStorage.removeItem("active_group_id");
     window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
     throw new Error("Session expired. Please log in again.");
   }

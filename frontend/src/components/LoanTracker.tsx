@@ -81,7 +81,10 @@ export default function LoanTracker() {
   }, [message]);
 
   useEffect(() => {
-    if (activeGroup?.id) fetchLoans();
+    if (activeGroup?.id) {
+      setSelectedLoan(null);
+      fetchLoans();
+    }
   }, [activeGroup?.id, fetchLoans]);
 
   const dashboardStats = useMemo(() => {

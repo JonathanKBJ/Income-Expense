@@ -33,49 +33,95 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function getGroupIdFromToken(jwtToken: string): string | null {
+  try {
+    const parts = jwtToken.split(".");
+    if (parts.length < 2) return null;
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const json = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+    const payload = JSON.parse(json);
+    return payload.groupId || null;
+  } catch {
+    return null;
+  }
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(() => {
+    const saved = localStorage.getItem("auth_user");
+    if (!saved) return null;
+    try {
+      return JSON.parse(saved);
+    } catch {
+      return null;
+    }
+  });
+  const [token, setToken] = useState<string | null>(() => {
+    return localStorage.getItem("auth_token") || null;
+  });
   const [groupInfo, setGroupInfo] = useState<GroupInfo | null>(null);
   const [myGroups, setMyGroups] = useState<GroupSummary[]>([]);
-  const [activeGroup, setActiveGroup] = useState<GroupSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const activeGroupRef = useRef<GroupSummary | null>(null);
-
+  const [activeGroup, setActiveGroup] = useState<GroupSummary | null>(() => {
+    const saved = localStorage.getItem("active_group");
+    if (!saved) return null;
+    try {
+      return JSON.parse(saved);
+    } catch {
+      return null;
+    }
+  });
+  const [loading] = useState(false);
+  const activeGroupRef = useRef<GroupSummary | null>(activeGroup);
   // Sync ref with state to break dependency cycle
   useEffect(() => {
     activeGroupRef.current = activeGroup;
   }, [activeGroup]);
-
-  useEffect(() => {
-    // Restore session from localStorage
-    const savedToken = localStorage.getItem("auth_token");
-    const savedUser = localStorage.getItem("auth_user");
-
-    if (savedToken && savedUser) {
-      setToken(savedToken);
-      setUser(JSON.parse(savedUser));
-    }
-    setLoading(false);
-  }, []);
 
   const refreshMyGroups = useCallback(async () => {
     if (!token) return;
     try {
       const groups = await listMyGroups();
       setMyGroups(groups);
-      // Update activeGroup data using ref (avoids dependency cycle with switchGroupFn)
-      const currentId = activeGroupRef.current?.id;
-      if (groups.length > 0 && !currentId) {
-        setActiveGroup(groups[0]);
-      } else if (groups.length > 0 && currentId) {
-        const updated = groups.find(g => g.id === currentId);
-        if (updated) setActiveGroup(updated);
+      // Determine target group ID to maintain active selection across page refreshes:
+      // 1. Current ref/state (if set)
+      // 2. Saved active_group_id from localStorage
+      // 3. Embedded groupId from the active JWT token
+      const tokenGroupId = getGroupIdFromToken(token);
+      const savedGroupId = localStorage.getItem("active_group_id");
+      const currentId = activeGroupRef.current?.id || savedGroupId || tokenGroupId;
+
+      if (groups.length > 0) {
+        const matched = groups.find((g) => g.id === currentId);
+        if (matched) {
+          setActiveGroup(matched);
+          activeGroupRef.current = matched;
+          localStorage.setItem("active_group", JSON.stringify(matched));
+          localStorage.setItem("active_group_id", matched.id);
+        } else {
+          // Fallback if the target group was deleted or user removed
+          const fallback = groups[0];
+          setActiveGroup(fallback);
+          activeGroupRef.current = fallback;
+          localStorage.setItem("active_group", JSON.stringify(fallback));
+          localStorage.setItem("active_group_id", fallback.id);
+          try {
+            const resp = await apiSwitchGroup(fallback.id);
+            setToken(resp.token);
+            localStorage.setItem("auth_token", resp.token);
+          } catch {
+            // Silently fail
+          }
+        }
       }
     } catch {
       // Silently fail
     }
-  }, [token]); // Removed activeGroup dependency — uses ref instead
+  }, [token]);
 
   // Fetch group info + groups list when token changes
   useEffect(() => {
@@ -88,6 +134,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setGroupInfo(null);
       setMyGroups([]);
       setActiveGroup(null);
+      activeGroupRef.current = null;
     }
   }, [token, refreshMyGroups]);
 
@@ -96,6 +143,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(newUser);
     localStorage.setItem("auth_token", newToken);
     localStorage.setItem("auth_user", JSON.stringify(newUser));
+    localStorage.removeItem("active_group");
+    localStorage.removeItem("active_group_id");
   };
 
   const logout = () => {
@@ -104,8 +153,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setGroupInfo(null);
     setMyGroups([]);
     setActiveGroup(null);
+    activeGroupRef.current = null;
     localStorage.removeItem("auth_token");
     localStorage.removeItem("auth_user");
+    localStorage.removeItem("active_group");
+    localStorage.removeItem("active_group_id");
   };
 
   const refreshGroupInfo = useCallback(async () => {
@@ -123,17 +175,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Update token with the new JWT
       setToken(resp.token);
       localStorage.setItem("auth_token", resp.token);
-      setActiveGroup({
+      const newActive: GroupSummary = {
         id: resp.groupId,
         name: resp.groupName,
-        memberCount: 0, // will be populated by refreshMyGroups
+        memberCount: group.memberCount,
         myRole: resp.groupRole as GroupSummary["myRole"],
-      });
+      };
+      setActiveGroup(newActive);
+      activeGroupRef.current = newActive;
+      localStorage.setItem("active_group", JSON.stringify(newActive));
+      localStorage.setItem("active_group_id", resp.groupId);
       // Refresh group info for the new active group
       const info = await getMyGroup();
       setGroupInfo(info);
       await refreshMyGroups();
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("Failed to switch group:", e);
       throw e;
     }
@@ -143,7 +199,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       await apiCreateMyGroup(name);
       await refreshMyGroups();
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("Failed to create group:", e);
       throw e;
     }
