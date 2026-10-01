@@ -3,9 +3,9 @@ package handlers
 import (
 	"encoding/json"
 	"log"
+	"math"
 	"net/http"
 	"strings"
-
 	"expense-tracker/internal/middleware"
 	"expense-tracker/internal/models"
 	"expense-tracker/internal/repository"
@@ -395,27 +395,6 @@ func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstall
 		utilization = (acc.CurrentBalance / acc.CreditLimit) * 100
 	}
 
-	// Estimated minimum payment
-	var minPay float64
-	if acc.CurrentBalance > 0 {
-		rate := acc.MinPaymentRate
-		if rate <= 0 {
-			rate = 5.0
-		}
-		floor := acc.MinPaymentFloor
-		if floor < 0 {
-			floor = 0
-		}
-
-		minPay = acc.CurrentBalance * (rate / 100.0)
-		if minPay < floor {
-			minPay = floor
-		}
-		if minPay > acc.CurrentBalance {
-			minPay = acc.CurrentBalance
-		}
-	}
-
 	// Active installments monthly sum
 	var monthlyInstDue float64
 	activeInstCount := 0
@@ -423,6 +402,38 @@ func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstall
 		if inst.Status == models.InstallmentStatusActive && inst.PaidTerms < inst.TotalTerms {
 			monthlyInstDue += inst.MonthlyAmount
 			activeInstCount++
+		}
+	}
+
+	// Estimated minimum payment:
+	// In Thai banking practice (e.g. Bank of Thailand regulations & UOB Cash Plus / credit cards):
+	// Total Balance = Revolving Balance + Current Month Installments
+	// Minimum Payment = Current Month Installments + ceil(Revolving Balance * MinPaymentRate%)
+	var minPay float64
+	if acc.CurrentBalance > 0 {
+		rate := acc.MinPaymentRate
+		if rate <= 0 {
+			rate = 2.5
+		}
+		floor := acc.MinPaymentFloor
+		if floor < 0 {
+			floor = 0
+		}
+
+		revolvingBal := acc.CurrentBalance - monthlyInstDue
+		if revolvingBal < 0 {
+			revolvingBal = 0
+		}
+
+		revMin := revolvingBal * (rate / 100.0)
+		if floor > 0 && revMin < floor && revolvingBal > 0 {
+			revMin = floor
+		}
+
+		// Banks round up minimum payment to whole baht (e.g. 741.86 -> 742)
+		minPay = math.Ceil(monthlyInstDue + revMin)
+		if minPay > acc.CurrentBalance {
+			minPay = acc.CurrentBalance
 		}
 	}
 
@@ -435,9 +446,8 @@ func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstall
 			totalDue = minPay
 		}
 	} else {
-		// Credit / Cash Card: Estimated Minimum + active installments (if distinct)
-		// Or simply the minimum payment if balance includes installments
-		totalDue = minPay + monthlyInstDue
+		// For cards with revolving lines, Total Due is either minimum payment or statement balance
+		totalDue = minPay
 	}
 
 	return models.CreditAccountDetail{

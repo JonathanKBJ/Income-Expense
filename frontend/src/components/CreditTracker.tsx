@@ -336,8 +336,16 @@ export default function CreditTracker() {
       setTxAmount(selectedAccount.currentBalance);
     } else if (opt === "MINIMUM") {
       setTxAmount(selectedAccount.estimatedMinPayment);
+      const activeInst = selectedAccount.installments.find((i) => i.status === "ACTIVE");
+      if (activeInst) {
+        setTxInstallmentId(activeInst.id);
+      }
     } else if (opt === "INSTALLMENT") {
       setTxAmount(selectedAccount.monthlyInstallmentDue);
+      const activeInst = selectedAccount.installments.find((i) => i.status === "ACTIVE");
+      if (activeInst) {
+        setTxInstallmentId(activeInst.id);
+      }
     }
   }
 
@@ -627,6 +635,26 @@ export default function CreditTracker() {
                     <div style={{ fontSize: 14, color: "#fff" }}>{selectedAccount.minPaymentRate}% (min ฿{formatMoney(selectedAccount.minPaymentFloor)})</div>
                   </Col>
                 </Row>
+                {/* Breakdown explanation card */}
+                {selectedAccount.activeInstallmentCount > 0 && (
+                  <div style={{ marginBottom: 20, padding: "12px 16px", background: "rgba(59, 130, 246, 0.08)", border: "1px solid rgba(59, 130, 246, 0.2)", borderRadius: 10, fontSize: 13 }}>
+                    <div style={{ fontWeight: 600, color: "#93c5fd", marginBottom: 6 }}>
+                      💡 แจกแจงการคำนวณยอดชำระขั้นต่ำ (สูตรคิดขั้นต่ำของธนาคาร):
+                    </div>
+                    <div style={{ color: "rgba(255, 255, 255, 0.85)", lineHeight: 1.7 }}>
+                      • ยอดหนี้รวมตามใบแจ้งยอด: <strong>฿{formatMoney(selectedAccount.currentBalance)}</strong>
+                      <br />
+                      • ค่างวดผ่อนประจำเดือนนี้: <strong>฿{formatMoney(selectedAccount.monthlyInstallmentDue)}</strong>
+                      <br />
+                      • ยอดหมุนเวียน/กดเงินสดคงเหลือ: ฿{formatMoney(Math.max(0, selectedAccount.currentBalance - selectedAccount.monthlyInstallmentDue))}
+                      <br />
+                      • ยอดขั้นต่ำหมุนเวียน ({selectedAccount.minPaymentRate}%): ฿{formatMoney(Math.max(0, selectedAccount.currentBalance - selectedAccount.monthlyInstallmentDue) * (selectedAccount.minPaymentRate / 100))}
+                      <br />
+                      • <strong>ยอดชำระขั้นต่ำที่ต้องจ่ายรอบนี้ = ค่างวดผ่อน + ขั้นต่ำหมุนเวียน = ฿{formatMoney(selectedAccount.estimatedMinPayment)}</strong>
+                    </div>
+                  </div>
+                )}
+
 
                 {/* Tabs: Installments and Transactions */}
                 <Tabs

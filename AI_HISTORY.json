@@ -730,4 +730,16 @@
         "logic_changed": "Allowed minPaymentFloor to be 0 instead of defaulting to 500 in repository, handlers, and frontend form. Used nullish coalescing to prevent 0 from being treated as falsy.",
         "ai_warning": "When minPaymentFloor is 0, estimated minimum payment is strictly based on currentBalance * (minPaymentRate / 100)."
     }
+    ,
+    {
+        "date": "2026-10-01",
+        "scope": "[Full-Stack]",
+        "task": "Align minimum payment calculation with bank formula: installment due + ceil(revolving balance * rate%)",
+        "files_touched": [
+            "backend/internal/handlers/credit.go",
+            "frontend/src/components/CreditTracker.tsx"
+        ],
+        "logic_changed": "In computeAccountDetail, deduct monthlyInstallmentDue from currentBalance before applying minPaymentRate%, and ceiling round the sum of installment due and revolving minimum. Added a live breakdown box in CreditTracker and auto-linking active installment on minimum payment selection.",
+        "ai_warning": "Ensure monthlyInstallmentDue is accurately deducted from revolving balance so installment amounts are not charged revolving interest or counted twice in the minimum payment."
+    }
 ]
