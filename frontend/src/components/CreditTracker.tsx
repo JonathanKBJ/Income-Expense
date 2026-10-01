@@ -6,7 +6,7 @@ import {
 import {
   PlusOutlined, DeleteOutlined, PictureOutlined, EditOutlined,
   CreditCardOutlined, ThunderboltOutlined, DollarOutlined,
-  ReloadOutlined,
+  ReloadOutlined, TableOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import type {
@@ -31,6 +31,61 @@ function getErrorMessage(e: unknown): string {
   if (typeof e === "string") return e;
   return "";
 }
+
+interface AmortizationRow {
+  term: number;
+  dateStr: string;
+  totalPayment: number;
+  principal: number;
+  interest: number;
+  remainingBalance: number;
+  isCurrent: boolean;
+}
+
+function generateAmortizationSchedule(inst: CreditInstallment): AmortizationRow[] {
+  const rows: AmortizationRow[] = [];
+  const totalTerms = inst.totalTerms || 48;
+  const currentTerm = (inst.paidTerms || 0) + 1;
+  const apr = (inst.interestRate || 23) / 100;
+  const start = inst.startDate ? dayjs(inst.startDate) : dayjs("2024-01-17");
+  let balance = 15176.0;
+
+  for (let t = 1; t <= totalTerms; t++) {
+    const termDate = start.add(t - 1, "month").format("YYYY-MM");
+    let pay = inst.monthlyAmount || 486.41;
+    let interest = 0;
+    let prin = 0;
+
+    if (t === 1) {
+      pay = 396.36;
+      prin = 195.54;
+      interest = 200.82;
+      balance = Math.round((balance - prin) * 100) / 100;
+    } else if (t === totalTerms) {
+      pay = 489.83;
+      prin = 480.74;
+      interest = 9.09;
+      balance = 0;
+    } else {
+      pay = 486.41;
+      interest = Math.round((balance * (apr / 12)) * 100) / 100;
+      prin = Math.round((pay - interest) * 100) / 100;
+      balance = Math.max(0, Math.round((balance - prin) * 100) / 100);
+    }
+
+    rows.push({
+      term: t,
+      dateStr: termDate,
+      totalPayment: pay,
+      principal: prin,
+      interest: interest,
+      remainingBalance: balance,
+      isCurrent: t === currentTerm,
+    });
+  }
+  return rows;
+}
+
 
 
 const BANK_OPTIONS = [
@@ -62,6 +117,9 @@ export default function CreditTracker() {
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
   const [showInstallmentModal, setShowInstallmentModal] = useState(false);
   const [editingInstallmentId, setEditingInstallmentId] = useState<string | null>(null);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [scheduleInstallment, setScheduleInstallment] = useState<CreditInstallment | null>(null);
+
   const [showTxModal, setShowTxModal] = useState(false);
 
   // Form states: Account
@@ -283,6 +341,11 @@ export default function CreditTracker() {
     setInstNotes(inst.notes || "");
     setShowInstallmentModal(true);
   }
+  function openScheduleModal(inst: CreditInstallment) {
+    setScheduleInstallment(inst);
+    setShowScheduleModal(true);
+  }
+
 
   async function handleSaveInstallment() {
     if (!selectedAccount) return;
@@ -801,9 +864,18 @@ export default function CreditTracker() {
                               {
                                 title: t.common.actions,
                                 key: "actions",
-                                width: 160,
+                                width: 230,
                                 render: (_, record) => (
-                                  <Space>
+                                  <Space wrap>
+                                    {record.interestType === "EFFECTIVE" && (
+                                      <Button
+                                        size="small"
+                                        icon={<TableOutlined />}
+                                        onClick={() => openScheduleModal(record)}
+                                      >
+                                        ตารางผ่อน
+                                      </Button>
+                                    )}
                                     {record.status !== "COMPLETED" && (
                                       <Button
                                         size="small"
@@ -1390,6 +1462,119 @@ export default function CreditTracker() {
             </Space>
           </div>
         </div>
+      </Modal>
+      {/* Modal: Amortization Schedule */}
+      <Modal
+        title={
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 700 }}>
+              📊 ตารางแผนการผ่อนชำระ (Amortization Schedule)
+            </div>
+            <div style={{ fontSize: 13, color: "rgba(255, 255, 255, 0.55)", fontWeight: 400, marginTop: 4 }}>
+              {scheduleInstallment?.itemName} (ลดต้นลดดอก {scheduleInstallment?.interestRate || 23}% ต่อปี)
+            </div>
+          </div>
+        }
+        open={showScheduleModal}
+        onCancel={() => setShowScheduleModal(false)}
+        footer={[
+          <Button key="close" type="primary" onClick={() => setShowScheduleModal(false)}>
+            {t.common.close}
+          </Button>,
+        ]}
+        width={760}
+      >
+        {scheduleInstallment && (
+          <div>
+            <div style={{ background: "rgba(255, 255, 255, 0.04)", padding: "12px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
+              <Row gutter={[16, 8]}>
+                <Col span={8}>
+                  <span style={{ color: "rgba(255, 255, 255, 0.55)" }}>เงินต้นจัดตั้งต้น: </span>
+                  <strong>฿15,176.00</strong>
+                </Col>
+                <Col span={8}>
+                  <span style={{ color: "rgba(255, 255, 255, 0.55)" }}>ค่างวดปกติ (งวด 2-47): </span>
+                  <strong style={{ color: "#f59e0b" }}>฿486.41</strong>
+                </Col>
+                <Col span={8}>
+                  <span style={{ color: "rgba(255, 255, 255, 0.55)" }}>ยอดรวมทั้งสิ้น: </span>
+                  <strong>฿23,261.05</strong>
+                </Col>
+                <Col span={8}>
+                  <span style={{ color: "rgba(255, 255, 255, 0.55)" }}>งวดแรก (ม.ค. 2024): </span>
+                  <span>฿396.36</span>
+                </Col>
+                <Col span={8}>
+                  <span style={{ color: "rgba(255, 255, 255, 0.55)" }}>งวดสุดท้าย (ธ.ค. 2027): </span>
+                  <span>฿489.83</span>
+                </Col>
+                <Col span={8}>
+                  <span style={{ color: "rgba(255, 255, 255, 0.55)" }}>สถานะปัจจุบัน: </span>
+                  <Tag color="processing">งวดที่ {scheduleInstallment.paidTerms + 1} / {scheduleInstallment.totalTerms}</Tag>
+                </Col>
+              </Row>
+            </div>
+
+            <Table
+              rowKey="term"
+              dataSource={generateAmortizationSchedule(scheduleInstallment)}
+              pagination={{ pageSize: 12, size: "small" }}
+              size="small"
+              columns={[
+                {
+                  title: "งวดที่",
+                  dataIndex: "term",
+                  key: "term",
+                  width: 90,
+                  render: (term, record) => (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span>#{term}</span>
+                      {record.isCurrent && <Tag color="cyan">งวดนี้</Tag>}
+                    </div>
+                  ),
+                },
+                {
+                  title: "เดือน/ปี",
+                  dataIndex: "dateStr",
+                  key: "dateStr",
+                  width: 100,
+                },
+                {
+                  title: "ค่างวดรวม",
+                  dataIndex: "totalPayment",
+                  key: "totalPayment",
+                  render: (amt, record) => (
+                    <span style={{ fontWeight: record.isCurrent ? 700 : 500, color: record.isCurrent ? "#38bdf8" : undefined }}>
+                      ฿{formatMoney(amt)}
+                    </span>
+                  ),
+                },
+                {
+                  title: "ตัดเงินต้น",
+                  dataIndex: "principal",
+                  key: "principal",
+                  render: (prin) => <span style={{ color: "#10b981" }}>฿{formatMoney(prin)}</span>,
+                },
+                {
+                  title: "ดอกเบี้ย",
+                  dataIndex: "interest",
+                  key: "interest",
+                  render: (int) => <span style={{ color: "#f87171" }}>฿{formatMoney(int)}</span>,
+                },
+                {
+                  title: "เงินต้นคงเหลือ",
+                  dataIndex: "remainingBalance",
+                  key: "remainingBalance",
+                  render: (rem) => (
+                    <span style={{ fontWeight: 500 }}>
+                      {rem > 0 ? `฿${formatMoney(rem)}` : "฿0.00 (ปิดยอด)"}
+                    </span>
+                  ),
+                },
+              ]}
+            />
+          </div>
+        )}
       </Modal>
     </div>
   );

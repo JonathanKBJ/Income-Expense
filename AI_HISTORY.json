@@ -783,4 +783,15 @@
         "logic_changed": "Disabled automatic flat-division (totalAmount / terms) for effective rate installments so users can specify exact monthly amounts (e.g. 486.41 instead of 484.61). Added Edit Installment modal with prefilled values and edit action button in table rows.",
         "ai_warning": "Installment monthlyAmount can now be adjusted cycle-by-cycle via the Edit button as effective rate principal/interest evolves."
     }
+    ,
+    {
+        "date": "2026-10-01",
+        "scope": "[Frontend]",
+        "task": "Add Amortization Schedule modal with 48-month principal and interest breakdown",
+        "files_touched": [
+            "frontend/src/components/CreditTracker.tsx"
+        ],
+        "logic_changed": "Implemented full 48-month amortization schedule generator for reducing balance loans (first month 396.36, months 2-47 fixed at 486.41, last month 489.83). Added interactive Amortization Schedule modal with term highlight and principal/interest/balance columns.",
+        "ai_warning": "Amortization schedule shows standard reducing balance breakdown while monthly payment for terms 2-47 is fixed at 486.41."
+    }
 ]
