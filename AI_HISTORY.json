@@ -717,4 +717,17 @@
         "logic_changed": "Created credit_accounts, credit_installments, and credit_transactions tables in schema.go. Implemented full CRUD, atomic balance updates, installment term advancement, and minimum payment calculations in backend repository/handlers. Added CreditTracker UI with dashboard summary cards, account utilization bars, installment tracking, and flexible payment recording with receipt slips.",
         "ai_warning": "Credit balance adjustments occur inside database transactions in AddTransaction/DeleteTransaction. When linking a payment to an installment (installmentId), paidTerms advances automatically. Ensure payment calculations respect minPaymentRate and minPaymentFloor when balance is below the floor."
     }
+    ,
+    {
+        "date": "2026-10-01",
+        "scope": "[Full-Stack]",
+        "task": "Allow min_payment_floor to be 0 for credit accounts without minimum floor requirement",
+        "files_touched": [
+            "backend/internal/repository/credit.go",
+            "backend/internal/handlers/credit.go",
+            "frontend/src/components/CreditTracker.tsx"
+        ],
+        "logic_changed": "Allowed minPaymentFloor to be 0 instead of defaulting to 500 in repository, handlers, and frontend form. Used nullish coalescing to prevent 0 from being treated as falsy.",
+        "ai_warning": "When minPaymentFloor is 0, estimated minimum payment is strictly based on currentBalance * (minPaymentRate / 100)."
+    }
 ]

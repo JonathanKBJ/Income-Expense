@@ -403,8 +403,8 @@ func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstall
 			rate = 5.0
 		}
 		floor := acc.MinPaymentFloor
-		if floor <= 0 {
-			floor = 500.0
+		if floor < 0 {
+			floor = 0
 		}
 
 		minPay = acc.CurrentBalance * (rate / 100.0)

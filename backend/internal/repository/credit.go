@@ -32,8 +32,8 @@ func (r *CreditRepository) CreateAccount(ctx context.Context, acc *models.Credit
 	if acc.MinPaymentRate <= 0 {
 		acc.MinPaymentRate = 5.0
 	}
-	if acc.MinPaymentFloor <= 0 {
-		acc.MinPaymentFloor = 500.0
+	if acc.MinPaymentFloor < 0 {
+		acc.MinPaymentFloor = 0
 	}
 	acc.CreatedAt = time.Now().UTC()
 	acc.UpdatedAt = time.Now().UTC()

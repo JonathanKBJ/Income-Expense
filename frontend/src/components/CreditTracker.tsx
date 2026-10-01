@@ -73,7 +73,7 @@ export default function CreditTracker() {
   const [accDueDay, setAccDueDay] = useState<number | undefined>(5);
   const [accInterestRate, setAccInterestRate] = useState<number>(16);
   const [accMinRate, setAccMinRate] = useState<number>(5);
-  const [accMinFloor, setAccMinFloor] = useState<number>(500);
+  const [accMinFloor, setAccMinFloor] = useState<number>(0);
   const [accNotes, setAccNotes] = useState("");
 
   // Form states: Installment
@@ -166,7 +166,7 @@ export default function CreditTracker() {
     setAccDueDay(5);
     setAccInterestRate(16);
     setAccMinRate(5);
-    setAccMinFloor(500);
+    setAccMinFloor(0);
     setAccNotes("");
     setShowAccountModal(true);
   }
@@ -951,12 +951,15 @@ export default function CreditTracker() {
               />
             </Col>
             <Col span={8}>
-              <label style={{ display: "block", marginBottom: 4, fontWeight: 500 }}>{t.creditPage.minPaymentFloor}</label>
+              <label style={{ display: "block", marginBottom: 4, fontWeight: 500 }}>
+                {t.creditPage.minPaymentFloor} (ใส่ 0 ได้)
+              </label>
               <InputNumber
                 value={accMinFloor}
-                onChange={(v) => setAccMinFloor(v || 500)}
+                onChange={(v) => setAccMinFloor(v ?? 0)}
                 style={{ width: "100%" }}
                 min={0}
+                placeholder="0"
               />
             </Col>
           </Row>
