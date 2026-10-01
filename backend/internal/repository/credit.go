@@ -208,17 +208,21 @@ func (r *CreditRepository) AddInstallment(ctx context.Context, inst *models.Cred
 	if inst.Status == "" {
 		inst.Status = models.InstallmentStatusActive
 	}
+	if inst.InterestType == "" {
+		inst.InterestType = "FLAT"
+	}
 	inst.CreatedAt = time.Now().UTC()
 	inst.UpdatedAt = time.Now().UTC()
 
 	query := `INSERT INTO credit_installments (
 		id, account_id, item_name, total_amount, monthly_amount, total_terms, paid_terms,
-		start_date, status, notes, created_at, updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		interest_rate, interest_type, remaining_balance, start_date, end_date, status, notes, created_at, updated_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	_, err := r.db.ExecContext(ctx, query,
 		inst.ID, accountID, inst.ItemName, inst.TotalAmount, inst.MonthlyAmount,
-		inst.TotalTerms, inst.PaidTerms, inst.StartDate, inst.Status, inst.Notes,
+		inst.TotalTerms, inst.PaidTerms, inst.InterestRate, inst.InterestType, inst.RemainingBalance,
+		inst.StartDate, inst.EndDate, inst.Status, inst.Notes,
 		now, now,
 	)
 	if err != nil {
@@ -226,11 +230,10 @@ func (r *CreditRepository) AddInstallment(ctx context.Context, inst *models.Cred
 	}
 	return nil
 }
-
 // ListInstallments returns all installment plans for an account.
 func (r *CreditRepository) ListInstallments(ctx context.Context, accountID string) ([]models.CreditInstallment, error) {
 	query := `SELECT id, account_id, item_name, total_amount, monthly_amount, total_terms, paid_terms,
-		start_date, status, notes, created_at, updated_at
+		interest_rate, interest_type, remaining_balance, start_date, end_date, status, notes, created_at, updated_at
 		FROM credit_installments WHERE account_id = ? ORDER BY created_at DESC`
 
 	rows, err := r.db.QueryContext(ctx, query, accountID)
@@ -245,7 +248,8 @@ func (r *CreditRepository) ListInstallments(ctx context.Context, accountID strin
 		var cAt, uAt string
 		if err := rows.Scan(
 			&item.ID, &item.AccountID, &item.ItemName, &item.TotalAmount, &item.MonthlyAmount,
-			&item.TotalTerms, &item.PaidTerms, &item.StartDate, &item.Status, &item.Notes,
+			&item.TotalTerms, &item.PaidTerms, &item.InterestRate, &item.InterestType, &item.RemainingBalance,
+			&item.StartDate, &item.EndDate, &item.Status, &item.Notes,
 			&cAt, &uAt,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan installment: %w", err)
@@ -271,7 +275,7 @@ func (r *CreditRepository) ListInstallmentsByAccountIDs(ctx context.Context, acc
 	}
 
 	query := `SELECT id, account_id, item_name, total_amount, monthly_amount, total_terms, paid_terms,
-		start_date, status, notes, created_at, updated_at
+		interest_rate, interest_type, remaining_balance, start_date, end_date, status, notes, created_at, updated_at
 		FROM credit_installments WHERE account_id IN (` + placeholders(len(accountIDs)) + `)
 		ORDER BY created_at DESC`
 
@@ -291,7 +295,8 @@ func (r *CreditRepository) ListInstallmentsByAccountIDs(ctx context.Context, acc
 		var cAt, uAt string
 		if err := rows.Scan(
 			&item.ID, &item.AccountID, &item.ItemName, &item.TotalAmount, &item.MonthlyAmount,
-			&item.TotalTerms, &item.PaidTerms, &item.StartDate, &item.Status, &item.Notes,
+			&item.TotalTerms, &item.PaidTerms, &item.InterestRate, &item.InterestType, &item.RemainingBalance,
+			&item.StartDate, &item.EndDate, &item.Status, &item.Notes,
 			&cAt, &uAt,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan installment: %w", err)
@@ -302,7 +307,6 @@ func (r *CreditRepository) ListInstallmentsByAccountIDs(ctx context.Context, acc
 	}
 	return result, nil
 }
-
 // UpdateInstallment updates an installment plan.
 func (r *CreditRepository) UpdateInstallment(ctx context.Context, id, accountID string, req models.UpdateCreditInstallmentRequest) error {
 	now := time.Now().UTC().Format(time.RFC3339)
@@ -328,6 +332,22 @@ func (r *CreditRepository) UpdateInstallment(ctx context.Context, id, accountID 
 	if req.PaidTerms != nil {
 		query += ", paid_terms = ?"
 		args = append(args, *req.PaidTerms)
+	}
+	if req.InterestRate != nil {
+		query += ", interest_rate = ?"
+		args = append(args, *req.InterestRate)
+	}
+	if req.InterestType != nil {
+		query += ", interest_type = ?"
+		args = append(args, *req.InterestType)
+	}
+	if req.RemainingBalance != nil {
+		query += ", remaining_balance = ?"
+		args = append(args, *req.RemainingBalance)
+	}
+	if req.EndDate != nil {
+		query += ", end_date = ?"
+		args = append(args, *req.EndDate)
 	}
 	if req.Status != nil {
 		query += ", status = ?"

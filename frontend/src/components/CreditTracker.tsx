@@ -84,6 +84,11 @@ export default function CreditTracker() {
   const [instPaidTerms, setInstPaidTerms] = useState<number>(0);
   const [instStartDate, setInstStartDate] = useState(dayjs());
   const [instNotes, setInstNotes] = useState("");
+  const [instInterestType, setInstInterestType] = useState<"FLAT" | "EFFECTIVE">("FLAT");
+  const [instInterestRate, setInstInterestRate] = useState<number>(0);
+  const [instRemainingBalance, setInstRemainingBalance] = useState<number>(0);
+  const [instEndDate, setInstEndDate] = useState<dayjs.Dayjs | null>(null);
+
 
   // Form states: Transaction
   const [txType, setTxType] = useState<"CHARGE" | "PAYMENT">("PAYMENT");
@@ -252,6 +257,10 @@ export default function CreditTracker() {
     setInstMonthlyAmount(0);
     setInstTotalTerms(10);
     setInstPaidTerms(0);
+    setInstInterestType("FLAT");
+    setInstInterestRate(0);
+    setInstRemainingBalance(0);
+    setInstEndDate(null);
     setInstStartDate(dayjs());
     setInstNotes("");
     setShowInstallmentModal(true);
@@ -271,7 +280,11 @@ export default function CreditTracker() {
         monthlyAmount: instMonthlyAmount,
         totalTerms: instTotalTerms,
         paidTerms: instPaidTerms,
+        interestRate: instInterestRate,
+        interestType: instInterestType,
+        remainingBalance: instRemainingBalance,
         startDate: instStartDate.format("YYYY-MM-DD"),
+        endDate: instEndDate ? instEndDate.format("YYYY-MM-DD") : undefined,
         notes: instNotes.trim(),
       };
       await api.addInstallment(selectedAccount.id, payload);
@@ -690,21 +703,39 @@ export default function CreditTracker() {
                                 key: "itemName",
                                 render: (name, record) => (
                                   <div>
-                                    <div style={{ fontWeight: 600 }}>{name}</div>
-                                    <div style={{ fontSize: 11, color: "rgba(255, 255, 255, 0.45)" }}>
-                                      {t.common.date}: {record.startDate} {record.notes ? `• ${record.notes}` : ""}
+                                    <div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+                                      {name}
+                                      {record.interestType === "EFFECTIVE" ? (
+                                        <Tag color="magenta">ลดต้นลดดอก {record.interestRate}%</Tag>
+                                      ) : (
+                                        <Tag color="blue">0% Flat</Tag>
+                                      )}
+                                    </div>
+                                    <div style={{ fontSize: 11, color: "rgba(255, 255, 255, 0.45)", marginTop: 2 }}>
+                                      เริ่ม {record.startDate}{record.endDate ? ` → สิ้นสุด ${record.endDate}` : ""} {record.notes ? `• ${record.notes}` : ""}
                                     </div>
                                   </div>
                                 ),
                               },
                               {
-                                title: t.creditPage.totalAmount,
-                                dataIndex: "totalAmount",
-                                key: "totalAmount",
-                                render: (amt) => `฿${formatMoney(amt)}`,
+                                title: "ยอดรวม / คงค้าง",
+                                key: "amounts",
+                                render: (_, record) => {
+                                  const rem = record.remainingBalance && record.remainingBalance > 0
+                                    ? record.remainingBalance
+                                    : Math.max(0, record.totalAmount - record.paidTerms * record.monthlyAmount);
+                                  return (
+                                    <div>
+                                      <div>฿{formatMoney(record.totalAmount)}</div>
+                                      <div style={{ fontSize: 11, color: "#f87171" }}>
+                                        คงเหลือ ฿{formatMoney(rem)}
+                                      </div>
+                                    </div>
+                                  );
+                                },
                               },
                               {
-                                title: t.creditPage.monthlyAmount,
+                                title: "ค่างวดรอบนี้",
                                 dataIndex: "monthlyAmount",
                                 key: "monthlyAmount",
                                 render: (amt) => <span style={{ color: "#f59e0b", fontWeight: 600 }}>฿{formatMoney(amt)}</span>,
@@ -1023,6 +1054,58 @@ export default function CreditTracker() {
               placeholder="e.g. iPhone 16 Pro 0% 10 เดือน"
             />
           </div>
+          <Row gutter={12}>
+            <Col span={12}>
+              <label style={{ display: "block", marginBottom: 4, fontWeight: 500 }}>ประเภทดอกเบี้ย</label>
+              <Select
+                value={instInterestType}
+                onChange={setInstInterestType}
+                style={{ width: "100%" }}
+                options={[
+                  { value: "FLAT", label: "0% คงที่ / แบ่งจ่ายเท่ากัน (Flat Rate)" },
+                  { value: "EFFECTIVE", label: "ลดต้นลดดอก (Effective Rate)" },
+                ]}
+              />
+            </Col>
+            <Col span={12}>
+              <label style={{ display: "block", marginBottom: 4, fontWeight: 500 }}>ดอกเบี้ย (% ต่อปี)</label>
+              <InputNumber
+                value={instInterestRate}
+                onChange={(v) => setInstInterestRate(v || 0)}
+                style={{ width: "100%" }}
+                min={0}
+                max={100}
+                suffix="%"
+                disabled={instInterestType === "FLAT"}
+              />
+            </Col>
+          </Row>
+
+          {instInterestType === "EFFECTIVE" && (
+            <Row gutter={12}>
+              <Col span={12}>
+                <label style={{ display: "block", marginBottom: 4, fontWeight: 500 }}>ยอดคงค้างปัจจุบัน (฿)</label>
+                <InputNumber
+                  value={instRemainingBalance}
+                  onChange={(v) => setInstRemainingBalance(v || 0)}
+                  style={{ width: "100%" }}
+                  min={0}
+                  placeholder="เช่น 7299.57"
+                />
+              </Col>
+              <Col span={12}>
+                <label style={{ display: "block", marginBottom: 4, fontWeight: 500 }}>วันสิ้นสุดงวดสุดท้าย</label>
+                <DatePicker
+                  value={instEndDate}
+                  onChange={(d) => setInstEndDate(d)}
+                  style={{ width: "100%" }}
+                  format="YYYY-MM-DD"
+                  placeholder="เช่น 2027-12-17"
+                />
+              </Col>
+            </Row>
+          )}
+
 
           <Row gutter={12}>
             <Col span={12}>

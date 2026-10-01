@@ -240,9 +240,18 @@ func (h *CreditHandler) AddInstallment(w http.ResponseWriter, r *http.Request) {
 		TotalTerms:    req.TotalTerms,
 		PaidTerms:     req.PaidTerms,
 		StartDate:     req.StartDate,
+		EndDate:       req.EndDate,
 		Notes:         strings.TrimSpace(req.Notes),
 	}
-
+	if req.InterestRate != nil {
+		inst.InterestRate = *req.InterestRate
+	}
+	if req.InterestType != nil {
+		inst.InterestType = *req.InterestType
+	}
+	if req.RemainingBalance != nil {
+		inst.RemainingBalance = *req.RemainingBalance
+	}
 	if err := h.creditRepo.AddInstallment(r.Context(), &inst, id); err != nil {
 		log.Printf("ERROR: AddInstallment: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to add installment")

@@ -75,9 +75,13 @@ type CreditInstallment struct {
 	MonthlyAmount float64           `json:"monthlyAmount"`
 	TotalTerms    int               `json:"totalTerms"`
 	PaidTerms     int               `json:"paidTerms"`
-	StartDate     string            `json:"startDate"`
-	Status        InstallmentStatus `json:"status"`
-	Notes         string            `json:"notes"`
+	InterestRate     float64           `json:"interestRate"`
+	InterestType     string            `json:"interestType"`
+	RemainingBalance float64           `json:"remainingBalance"`
+	StartDate        string            `json:"startDate"`
+	EndDate          *string           `json:"endDate,omitempty"`
+	Status           InstallmentStatus `json:"status"`
+	Notes            string            `json:"notes"`
 	CreatedAt     time.Time         `json:"createdAt"`
 	UpdatedAt     time.Time         `json:"updatedAt"`
 }
@@ -156,9 +160,13 @@ type CreateCreditInstallmentRequest struct {
 	TotalAmount   float64 `json:"totalAmount"`
 	MonthlyAmount float64 `json:"monthlyAmount"`
 	TotalTerms    int     `json:"totalTerms"`
-	PaidTerms     int     `json:"paidTerms"`
-	StartDate     string  `json:"startDate"`
-	Notes         string  `json:"notes"`
+	PaidTerms        int      `json:"paidTerms"`
+	InterestRate     *float64 `json:"interestRate,omitempty"`
+	InterestType     *string  `json:"interestType,omitempty"`
+	RemainingBalance *float64 `json:"remainingBalance,omitempty"`
+	StartDate        string   `json:"startDate"`
+	EndDate          *string  `json:"endDate,omitempty"`
+	Notes            string   `json:"notes"`
 }
 
 type UpdateCreditInstallmentRequest struct {
@@ -166,9 +174,13 @@ type UpdateCreditInstallmentRequest struct {
 	TotalAmount   *float64           `json:"totalAmount,omitempty"`
 	MonthlyAmount *float64           `json:"monthlyAmount,omitempty"`
 	TotalTerms    *int               `json:"totalTerms,omitempty"`
-	PaidTerms     *int               `json:"paidTerms,omitempty"`
-	Status        *InstallmentStatus `json:"status,omitempty"`
-	Notes         *string            `json:"notes,omitempty"`
+	PaidTerms        *int               `json:"paidTerms,omitempty"`
+	InterestRate     *float64           `json:"interestRate,omitempty"`
+	InterestType     *string            `json:"interestType,omitempty"`
+	RemainingBalance *float64           `json:"remainingBalance,omitempty"`
+	EndDate          *string            `json:"endDate,omitempty"`
+	Status           *InstallmentStatus `json:"status,omitempty"`
+	Notes            *string            `json:"notes,omitempty"`
 }
 
 type CreateCreditTxRequest struct {

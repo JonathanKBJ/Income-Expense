@@ -32,7 +32,11 @@ export interface CreditInstallment {
   monthlyAmount: number;
   totalTerms: number;
   paidTerms: number;
+  interestRate?: number;
+  interestType?: "FLAT" | "EFFECTIVE";
+  remainingBalance?: number;
   startDate: string;
+  endDate?: string | null;
   status: InstallmentStatus;
   notes: string;
   createdAt: string;
@@ -113,7 +117,11 @@ export interface CreateCreditInstallmentRequest {
   monthlyAmount: number;
   totalTerms: number;
   paidTerms?: number;
+  interestRate?: number;
+  interestType?: "FLAT" | "EFFECTIVE";
+  remainingBalance?: number;
   startDate: string;
+  endDate?: string;
   notes?: string;
 }
 
@@ -123,6 +131,10 @@ export interface UpdateCreditInstallmentRequest {
   monthlyAmount?: number;
   totalTerms?: number;
   paidTerms?: number;
+  interestRate?: number;
+  interestType?: "FLAT" | "EFFECTIVE";
+  remainingBalance?: number;
+  endDate?: string;
   status?: InstallmentStatus;
   notes?: string;
 }

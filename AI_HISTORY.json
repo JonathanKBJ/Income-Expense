@@ -742,4 +742,20 @@
         "logic_changed": "In computeAccountDetail, deduct monthlyInstallmentDue from currentBalance before applying minPaymentRate%, and ceiling round the sum of installment due and revolving minimum. Added a live breakdown box in CreditTracker and auto-linking active installment on minimum payment selection.",
         "ai_warning": "Ensure monthlyInstallmentDue is accurately deducted from revolving balance so installment amounts are not charged revolving interest or counted twice in the minimum payment."
     }
+    ,
+    {
+        "date": "2026-10-01",
+        "scope": "[Full-Stack]",
+        "task": "Support reducing balance (ลดต้นลดดอก) installments with interest rate, remaining balance, and end date",
+        "files_touched": [
+            "backend/internal/database/schema.go",
+            "backend/internal/models/credit.go",
+            "backend/internal/repository/credit.go",
+            "backend/internal/handlers/credit.go",
+            "frontend/src/types/credit.ts",
+            "frontend/src/components/CreditTracker.tsx"
+        ],
+        "logic_changed": "Enhanced credit_installments table and models with interest_rate, interest_type (FLAT/EFFECTIVE), remaining_balance, and end_date. Added UI options in CreditTracker to record reducing balance loans, display remaining balance, and track schedule dates.",
+        "ai_warning": "Effective rate installments can have varying monthly amounts over the loan term; users can update monthlyAmount for the current billing cycle when each statement arrives."
+    }
 ]

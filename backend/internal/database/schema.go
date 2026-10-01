@@ -212,7 +212,11 @@ CREATE TABLE IF NOT EXISTS credit_installments (
     monthly_amount REAL NOT NULL CHECK (monthly_amount > 0),
     total_terms    INTEGER NOT NULL CHECK (total_terms > 0),
     paid_terms     INTEGER NOT NULL DEFAULT 0 CHECK (paid_terms >= 0),
+    interest_rate  REAL DEFAULT 0,
+    interest_type  TEXT NOT NULL DEFAULT 'FLAT' CHECK (interest_type IN ('FLAT', 'EFFECTIVE')),
+    remaining_balance REAL DEFAULT 0,
     start_date     TEXT NOT NULL,
+    end_date       TEXT,
     status         TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'COMPLETED')),
     notes          TEXT DEFAULT '',
     created_at     TEXT NOT NULL,
@@ -413,6 +417,17 @@ func (d *DB) Migrate() error {
 			return fmt.Errorf("failed to create credit_transactions index: %w", err)
 		}
 
+
+		// Alterations for credit_installments evolution
+		creditInstAlterations := []string{
+			"ALTER TABLE credit_installments ADD COLUMN interest_rate REAL DEFAULT 0",
+			"ALTER TABLE credit_installments ADD COLUMN interest_type TEXT NOT NULL DEFAULT 'FLAT'",
+			"ALTER TABLE credit_installments ADD COLUMN remaining_balance REAL DEFAULT 0",
+			"ALTER TABLE credit_installments ADD COLUMN end_date TEXT",
+		}
+		for _, sql := range creditInstAlterations {
+			_, _ = d.ExecContext(ctx, sql)
+		}
 	// Fix orphaned transactions and categories by assigning them to their user's primary group
 	migrationSQL := []string{
 		`UPDATE transactions 
