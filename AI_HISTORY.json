@@ -772,4 +772,15 @@
         "logic_changed": "Track cycle payments against statement due in computeAccountDetail; once paid in current cycle, totalDueThisMonth becomes 0.00 and isPaidThisMonth flag is set. Computed nextCycleEstimatedMin based on remaining balance and updated CreditTracker UI to display paid badges and clear cycle estimates.",
         "ai_warning": "Cycle payments are identified by tx.Date >= cycleStartDate (computed from statementDay). Top summary cards reflect remaining due amounts so totalEstimatedDue drops to 0 when all accounts are settled for the month."
     }
+    ,
+    {
+        "date": "2026-10-01",
+        "scope": "[Frontend]",
+        "task": "Support inline editing for installment plans and prevent auto-divide overwrite for effective rate loans",
+        "files_touched": [
+            "frontend/src/components/CreditTracker.tsx"
+        ],
+        "logic_changed": "Disabled automatic flat-division (totalAmount / terms) for effective rate installments so users can specify exact monthly amounts (e.g. 486.41 instead of 484.61). Added Edit Installment modal with prefilled values and edit action button in table rows.",
+        "ai_warning": "Installment monthlyAmount can now be adjusted cycle-by-cycle via the Edit button as effective rate principal/interest evolves."
+    }
 ]

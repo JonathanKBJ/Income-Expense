@@ -61,6 +61,7 @@ export default function CreditTracker() {
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
   const [showInstallmentModal, setShowInstallmentModal] = useState(false);
+  const [editingInstallmentId, setEditingInstallmentId] = useState<string | null>(null);
   const [showTxModal, setShowTxModal] = useState(false);
 
   // Form states: Account
@@ -252,6 +253,7 @@ export default function CreditTracker() {
   // --- Handlers: Installment ---
 
   function openAddInstallmentModal() {
+    setEditingInstallmentId(null);
     setInstItemName("");
     setInstTotalAmount(0);
     setInstMonthlyAmount(0);
@@ -263,6 +265,22 @@ export default function CreditTracker() {
     setInstEndDate(null);
     setInstStartDate(dayjs());
     setInstNotes("");
+    setShowInstallmentModal(true);
+  }
+
+  function openEditInstallmentModal(inst: CreditInstallment) {
+    setEditingInstallmentId(inst.id);
+    setInstItemName(inst.itemName);
+    setInstTotalAmount(inst.totalAmount);
+    setInstMonthlyAmount(inst.monthlyAmount);
+    setInstTotalTerms(inst.totalTerms);
+    setInstPaidTerms(inst.paidTerms);
+    setInstInterestType(inst.interestType || "FLAT");
+    setInstInterestRate(inst.interestRate || 0);
+    setInstRemainingBalance(inst.remainingBalance || 0);
+    setInstEndDate(inst.endDate ? dayjs(inst.endDate) : null);
+    setInstStartDate(dayjs(inst.startDate));
+    setInstNotes(inst.notes || "");
     setShowInstallmentModal(true);
   }
 
@@ -287,12 +305,17 @@ export default function CreditTracker() {
         endDate: instEndDate ? instEndDate.format("YYYY-MM-DD") : undefined,
         notes: instNotes.trim(),
       };
-      await api.addInstallment(selectedAccount.id, payload);
-      message.success(t.creditPage.created);
+      if (editingInstallmentId) {
+        await api.updateInstallment(selectedAccount.id, editingInstallmentId, payload);
+        message.success(t.creditPage.updated);
+      } else {
+        await api.addInstallment(selectedAccount.id, payload);
+        message.success(t.creditPage.created);
+      }
       setShowInstallmentModal(false);
       fetchAccounts();
     } catch (e: unknown) {
-      message.error(getErrorMessage(e) || t.creditPage.createFailed);
+      message.error(getErrorMessage(e) || (editingInstallmentId ? t.creditPage.updateFailed : t.creditPage.createFailed));
     }
   }
 
@@ -778,7 +801,7 @@ export default function CreditTracker() {
                               {
                                 title: t.common.actions,
                                 key: "actions",
-                                width: 120,
+                                width: 160,
                                 render: (_, record) => (
                                   <Space>
                                     {record.status !== "COMPLETED" && (
@@ -790,6 +813,11 @@ export default function CreditTracker() {
                                         {t.creditPage.advanceTerm}
                                       </Button>
                                     )}
+                                    <Button
+                                      size="small"
+                                      icon={<EditOutlined />}
+                                      onClick={() => openEditInstallmentModal(record)}
+                                    />
                                     <Popconfirm
                                       title={t.creditPage.deleteInstallmentConfirm}
                                       onConfirm={() => handleDeleteInstallment(record.id)}
@@ -1055,7 +1083,7 @@ export default function CreditTracker() {
 
       {/* Modal: Add Installment */}
       <Modal
-        title={t.creditPage.newInstallment}
+        title={editingInstallmentId ? "แก้ไขรายการผ่อนชำระ" : t.creditPage.newInstallment}
         open={showInstallmentModal}
         onOk={handleSaveInstallment}
         onCancel={() => setShowInstallmentModal(false)}
@@ -1133,7 +1161,7 @@ export default function CreditTracker() {
                 onChange={(v) => {
                   const tot = v || 0;
                   setInstTotalAmount(tot);
-                  if (instTotalTerms > 0) {
+                  if (instInterestType === "FLAT" && instTotalTerms > 0 && !editingInstallmentId) {
                     setInstMonthlyAmount(Math.round((tot / instTotalTerms) * 100) / 100);
                   }
                 }}
@@ -1142,7 +1170,9 @@ export default function CreditTracker() {
               />
             </Col>
             <Col span={12}>
-              <label style={{ display: "block", marginBottom: 4, fontWeight: 500 }}>{t.creditPage.monthlyAmount} *</label>
+              <label style={{ display: "block", marginBottom: 4, fontWeight: 500 }}>
+                {instInterestType === "EFFECTIVE" ? "ค่างวดรอบปัจจุบัน *" : `${t.creditPage.monthlyAmount} *`}
+              </label>
               <InputNumber
                 value={instMonthlyAmount}
                 onChange={(v) => setInstMonthlyAmount(v || 0)}
