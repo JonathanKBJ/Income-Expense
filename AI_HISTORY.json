@@ -794,4 +794,18 @@
         "logic_changed": "Implemented full 48-month amortization schedule generator for reducing balance loans (first month 396.36, months 2-47 fixed at 486.41, last month 489.83). Added interactive Amortization Schedule modal with term highlight and principal/interest/balance columns.",
         "ai_warning": "Amortization schedule shows standard reducing balance breakdown while monthly payment for terms 2-47 is fixed at 486.41."
     }
+    ,
+    {
+        "date": "2026-10-01",
+        "scope": "[Full-Stack]",
+        "task": "Deduct unbilled installment balance from available credit to match bank credit limit locking",
+        "files_touched": [
+            "backend/internal/handlers/credit.go",
+            "backend/internal/models/credit.go",
+            "frontend/src/types/credit.ts",
+            "frontend/src/components/CreditTracker.tsx"
+        ],
+        "logic_changed": "In computeAccountDetail, sum unbilled future installment balances and deduct them alongside currentBalance from creditLimit to accurately compute available credit (e.g. 25,500 - (9,962.37 + 7,295.63) = 8,242.00). Added unbilledInstallments to models and breakdown display.",
+        "ai_warning": "Banks block the entire unbilled loan principal against the card's credit limit. availableCredit must always account for both billed currentBalance and unbilled installment principal."
+    }
 ]

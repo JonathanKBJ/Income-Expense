@@ -106,8 +106,8 @@ type CreditAccountDetail struct {
 	CreditAccount
 	AvailableCredit        float64             `json:"availableCredit"`
 	CreditUtilization      float64             `json:"creditUtilization"`
+	UnbilledInstallments   float64             `json:"unbilledInstallments"`
 	EstimatedMinPayment    float64             `json:"estimatedMinPayment"`
-	MonthlyInstallmentDue  float64             `json:"monthlyInstallmentDue"`
 	TotalDueThisMonth      float64             `json:"totalDueThisMonth"`
 	PaidThisMonth          float64             `json:"paidThisMonth"`
 	IsPaidThisMonth        bool                `json:"isPaidThisMonth"`

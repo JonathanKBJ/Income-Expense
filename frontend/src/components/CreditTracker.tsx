@@ -710,12 +710,12 @@ export default function CreditTracker() {
                     <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>฿{formatMoney(selectedAccount.creditLimit)}</div>
                   </Col>
                   <Col xs={12} sm={6}>
-                    <div style={{ fontSize: 11, color: "rgba(255, 255, 255, 0.5)" }}>{t.creditPage.currentBalance}</div>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: "#ef4444" }}>฿{formatMoney(selectedAccount.currentBalance)}</div>
+                    <div style={{ fontSize: 11, color: "rgba(255, 255, 255, 0.5)" }}>{t.creditPage.availableCredit}</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: "#10b981" }}>฿{formatMoney(selectedAccount.availableCredit)}</div>
                   </Col>
                   <Col xs={12} sm={6}>
-                    <div style={{ fontSize: 11, color: "rgba(255, 255, 255, 0.5)" }}>ประมาณการขั้นต่ำรอบถัดไป</div>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: "#f59e0b" }}>฿{formatMoney(selectedAccount.nextCycleEstimatedMin)}</div>
+                    <div style={{ fontSize: 11, color: "rgba(255, 255, 255, 0.5)" }}>{t.creditPage.currentBalance}</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: "#ef4444" }}>฿{formatMoney(selectedAccount.currentBalance)}</div>
                   </Col>
                   <Col xs={12} sm={6}>
                     <div style={{ fontSize: 11, color: "rgba(255, 255, 255, 0.5)" }}>{t.creditPage.totalDueThisMonth}</div>
@@ -729,6 +729,10 @@ export default function CreditTracker() {
                     )}
                   </Col>
                   <Col xs={12} sm={6}>
+                    <div style={{ fontSize: 11, color: "rgba(255, 255, 255, 0.5)" }}>ประมาณการขั้นต่ำรอบถัดไป</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: "#f59e0b" }}>฿{formatMoney(selectedAccount.nextCycleEstimatedMin)}</div>
+                  </Col>
+                  <Col xs={12} sm={6}>
                     <div style={{ fontSize: 11, color: "rgba(255, 255, 255, 0.5)" }}>{t.creditPage.statementDay}</div>
                     <div style={{ fontSize: 14, color: "#fff" }}>{selectedAccount.statementDay ? `วันที่ ${selectedAccount.statementDay}` : "-"}</div>
                   </Col>
@@ -738,11 +742,7 @@ export default function CreditTracker() {
                   </Col>
                   <Col xs={12} sm={6}>
                     <div style={{ fontSize: 11, color: "rgba(255, 255, 255, 0.5)" }}>{t.creditPage.interestRate}</div>
-                    <div style={{ fontSize: 14, color: "#fff" }}>{selectedAccount.interestRate}% APR</div>
-                  </Col>
-                  <Col xs={12} sm={6}>
-                    <div style={{ fontSize: 11, color: "rgba(255, 255, 255, 0.5)" }}>{t.creditPage.minPaymentRate}</div>
-                    <div style={{ fontSize: 14, color: "#fff" }}>{selectedAccount.minPaymentRate}% (min ฿{formatMoney(selectedAccount.minPaymentFloor)})</div>
+                    <div style={{ fontSize: 14, color: "#fff" }}>{selectedAccount.interestRate}% ({selectedAccount.minPaymentRate}%)</div>
                   </Col>
                 </Row>
                 {/* Breakdown explanation card */}
@@ -759,15 +759,21 @@ export default function CreditTracker() {
                       )}
                     </div>
                     <div style={{ color: "rgba(255, 255, 255, 0.85)", lineHeight: 1.7 }}>
-                      • ยอดหนี้คงค้างปัจจุบัน: <strong>฿{formatMoney(selectedAccount.currentBalance)}</strong>
+                      • วงเงินอนุมัติเต็ม: <strong>฿{formatMoney(selectedAccount.creditLimit)}</strong>
                       <br />
-                      • ค่างวดผ่อนประจำเดือนนี้: <strong>฿{formatMoney(selectedAccount.monthlyInstallmentDue)}</strong>
+                      • ยอดหนี้รอบบิลนี้ (Billed): <strong>฿{formatMoney(selectedAccount.currentBalance)}</strong>
+                      {selectedAccount.unbilledInstallments > 0 && (
+                        <>
+                          <br />
+                          • ยอดเงินต้นสัญญาผ่อนที่ยังไม่ถึงกำหนด (กันวงเงินไว้): <strong style={{ color: "#f59e0b" }}>฿{formatMoney(selectedAccount.unbilledInstallments)}</strong>
+                          <br />
+                          • รวมวงเงินที่ถูกใช้/กันไว้ทั้งสิ้น: <strong>฿{formatMoney(selectedAccount.currentBalance + selectedAccount.unbilledInstallments)}</strong>
+                        </>
+                      )}
                       <br />
-                      • ยอดชำระในรอบบิลนี้แล้ว: <strong style={{ color: "#10b981" }}>฿{formatMoney(selectedAccount.paidThisMonth)}</strong>
+                      • <strong>วงเงินคงเหลือที่กดใช้ได้จริง (Available Credit) = ฿{formatMoney(selectedAccount.availableCredit)}</strong>
                       <br />
-                      • <strong>ยอดที่ต้องชำระรอบนี้คงเหลือ: <span style={{ color: selectedAccount.isPaidThisMonth ? "#10b981" : "#ef4444", fontWeight: 700 }}>฿{formatMoney(selectedAccount.totalDueThisMonth)}</span></strong>
-                      <br />
-                      • <span style={{ color: "rgba(255, 255, 255, 0.65)" }}>ประมาณการยอดชำระขั้นต่ำของรอบบิลถัดไป (คำนวณจากยอดคงเหลือปัจจุบัน): <strong>฿{formatMoney(selectedAccount.nextCycleEstimatedMin)}</strong></span>
+                      • <span style={{ color: "rgba(255, 255, 255, 0.65)" }}>ประมาณการยอดชำระขั้นต่ำของรอบบิลถัดไป: <strong>฿{formatMoney(selectedAccount.nextCycleEstimatedMin)}</strong></span>
                     </div>
                   </div>
                 )}

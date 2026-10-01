@@ -423,9 +423,31 @@ func getBillingCycleStartDate(statementDay *int) string {
 
 
 func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstallment, txs []models.CreditTransaction) models.CreditAccountDetail {
+	// Active installments monthly sum and unbilled future installments blocking credit limit
+	var monthlyInstDue float64
+	var unbilledInstallments float64
+	activeInstCount := 0
+	for _, inst := range insts {
+		if inst.Status == models.InstallmentStatusActive && inst.PaidTerms < inst.TotalTerms {
+			monthlyInstDue += inst.MonthlyAmount
+			activeInstCount++
+
+			// In banking practice, unbilled future installments block the credit line
+			if inst.RemainingBalance > 0 {
+				unbilledInstallments += inst.RemainingBalance
+			} else {
+				remTerms := inst.TotalTerms - (inst.PaidTerms + 1)
+				if remTerms > 0 {
+					unbilledInstallments += float64(remTerms) * inst.MonthlyAmount
+				}
+			}
+		}
+	}
+
 	var availableCredit float64
+	totalCreditUsed := acc.CurrentBalance + unbilledInstallments
 	if acc.CreditLimit > 0 {
-		availableCredit = acc.CreditLimit - acc.CurrentBalance
+		availableCredit = acc.CreditLimit - totalCreditUsed
 		if availableCredit < 0 {
 			availableCredit = 0
 		}
@@ -433,16 +455,9 @@ func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstall
 
 	var utilization float64
 	if acc.CreditLimit > 0 {
-		utilization = (acc.CurrentBalance / acc.CreditLimit) * 100
-	}
-
-	// Active installments monthly sum
-	var monthlyInstDue float64
-	activeInstCount := 0
-	for _, inst := range insts {
-		if inst.Status == models.InstallmentStatusActive && inst.PaidTerms < inst.TotalTerms {
-			monthlyInstDue += inst.MonthlyAmount
-			activeInstCount++
+		utilization = (totalCreditUsed / acc.CreditLimit) * 100
+		if utilization > 100 {
+			utilization = 100
 		}
 	}
 
@@ -536,8 +551,8 @@ func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstall
 		CreditAccount:          acc,
 		AvailableCredit:        availableCredit,
 		CreditUtilization:      utilization,
+		UnbilledInstallments:   unbilledInstallments,
 		EstimatedMinPayment:    minPayForCycle,
-		MonthlyInstallmentDue:  monthlyInstDue,
 		TotalDueThisMonth:      totalDue,
 		PaidThisMonth:          paidThisCycle,
 		IsPaidThisMonth:        isPaidThisMonth,

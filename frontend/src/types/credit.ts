@@ -60,8 +60,9 @@ export interface CreditTransaction {
 export interface CreditAccountDetail extends CreditAccount {
   availableCredit: number;
   creditUtilization: number;
-  estimatedMinPayment: number;
+  unbilledInstallments: number;
   monthlyInstallmentDue: number;
+  estimatedMinPayment: number;
   totalDueThisMonth: number;
   paidThisMonth: number;
   isPaidThisMonth: boolean;
