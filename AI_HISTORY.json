@@ -808,4 +808,17 @@
         "logic_changed": "In computeAccountDetail, sum unbilled future installment balances and deduct them alongside currentBalance from creditLimit to accurately compute available credit (e.g. 25,500 - (9,962.37 + 7,295.63) = 8,242.00). Added unbilledInstallments to models and breakdown display.",
         "ai_warning": "Banks block the entire unbilled loan principal against the card's credit limit. availableCredit must always account for both billed currentBalance and unbilled installment principal."
     }
+    ,
+    {
+        "date": "2026-10-01",
+        "scope": "[Full-Stack]",
+        "task": "Fix undefined toLocaleString crash: guard formatMoney with null-safety and restore monthlyInstallmentDue in backend model",
+        "files_touched": [
+            "backend/internal/handlers/credit.go",
+            "backend/internal/models/credit.go",
+            "frontend/src/components/CreditTracker.tsx"
+        ],
+        "logic_changed": "Protected formatMoney against undefined, null, and NaN. Restored monthlyInstallmentDue and totalDueThisMonth in CreditAccountDetail struct and computeAccountDetail mapping to eliminate runtime render exceptions.",
+        "ai_warning": "Always ensure formatMoney handles missing numbers gracefully and all CreditAccountDetail struct fields are mapped in handler responses."
+    }
 ]
