@@ -65,7 +65,10 @@ func main() {
 	loanRepo := repository.NewLoanRepository(db.DB)
 	loanHandler := handlers.NewLoanHandler(loanRepo, groupRepo)
 
-	httpRouter := router.New(authService, authHandler, adminHandler, txHandler, catHandler, groupHandler, loanHandler)
+	creditRepo := repository.NewCreditRepository(db.DB)
+	creditHandler := handlers.NewCreditHandler(creditRepo, groupRepo)
+
+	httpRouter := router.New(authService, authHandler, adminHandler, txHandler, catHandler, groupHandler, loanHandler, creditHandler)
 
 	// Configure HTTP server
 	srv := &http.Server{

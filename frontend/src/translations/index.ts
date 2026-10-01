@@ -16,6 +16,7 @@ export interface TranslationKeys {
     register: string;
     myGroup: string;
     loans: string;
+    creditCards: string;
     copyright: string;
     save: string;
     cancel: string;
@@ -197,6 +198,67 @@ export interface TranslationKeys {
     totalPaid: string;
     totalRemaining: string;
   };
+  creditPage: {
+    title: string;
+    subtitle: string;
+    newAccount: string;
+    accountDetails: string;
+    accountName: string;
+    accountType: string;
+    creditCard: string;
+    cashCard: string;
+    personalLoan: string;
+    bank: string;
+    creditLimit: string;
+    currentBalance: string;
+    availableCredit: string;
+    creditUtilization: string;
+    statementDay: string;
+    dueDay: string;
+    interestRate: string;
+    minPaymentRate: string;
+    minPaymentFloor: string;
+    estimatedMinPayment: string;
+    monthlyInstallmentDue: string;
+    totalDueThisMonth: string;
+    activeInstallmentCount: string;
+    installments: string;
+    newInstallment: string;
+    itemName: string;
+    totalAmount: string;
+    monthlyAmount: string;
+    totalTerms: string;
+    paidTerms: string;
+    termsProgress: string;
+    advanceTerm: string;
+    transactions: string;
+    newTransaction: string;
+    charge: string;
+    payment: string;
+    paymentType: string;
+    payFull: string;
+    payMinimum: string;
+    payInstallment: string;
+    payCustom: string;
+    receipt: string;
+    noAccounts: string;
+    noInstallments: string;
+    noTransactions: string;
+    deleteAccountConfirm: string;
+    deleteInstallmentConfirm: string;
+    deleteTransactionConfirm: string;
+    created: string;
+    createFailed: string;
+    updated: string;
+    updateFailed: string;
+    deleted: string;
+    deleteFailed: string;
+    loadFailed: string;
+    totalCreditLimit: string;
+    totalOutstanding: string;
+    totalAvailable: string;
+    totalDueEstimated: string;
+  };
   auth: {
     welcomeBack: string;
     loginSubtitle: string;
@@ -262,6 +324,7 @@ export const translations: Record<Language, TranslationKeys> = {
       register: "Register",
       myGroup: "My Group",
       loans: "Loans & Debts",
+      creditCards: "Credit & Loans",
       copyright: "Monthly Expense Tracker",
       save: "Save",
       cancel: "Cancel",
@@ -443,6 +506,67 @@ export const translations: Record<Language, TranslationKeys> = {
       totalPaid: "Total Paid",
       totalRemaining: "Remaining",
     },
+    creditPage: {
+      title: "Credit Cards & Loans",
+      subtitle: "Track credit cards, cash lines, and personal loans with installment or revolving payments",
+      newAccount: "Add Account",
+      accountDetails: "Account Details",
+      accountName: "Account / Card Name",
+      accountType: "Account Type",
+      creditCard: "Credit Card",
+      cashCard: "Cash Card",
+      personalLoan: "Personal Loan",
+      bank: "Bank / Issuer",
+      creditLimit: "Credit Limit",
+      currentBalance: "Outstanding Balance",
+      availableCredit: "Available Credit",
+      creditUtilization: "Utilization",
+      statementDay: "Statement Day",
+      dueDay: "Due Day",
+      interestRate: "Interest Rate (% APR)",
+      minPaymentRate: "Min Payment (% Rate)",
+      minPaymentFloor: "Min Payment Floor (฿)",
+      estimatedMinPayment: "Est. Min Payment",
+      monthlyInstallmentDue: "Installments Due",
+      totalDueThisMonth: "Est. Due This Month",
+      activeInstallmentCount: "Active Installments",
+      installments: "Installment Plans",
+      newInstallment: "Add Installment",
+      itemName: "Item / Service",
+      totalAmount: "Total Amount",
+      monthlyAmount: "Monthly Amount",
+      totalTerms: "Total Terms",
+      paidTerms: "Paid Terms",
+      termsProgress: "Terms Progress",
+      advanceTerm: "Pay 1 Term",
+      transactions: "Transactions & Payments",
+      newTransaction: "Record Usage / Payment",
+      charge: "Charge / Withdrawal",
+      payment: "Payment / Settlement",
+      paymentType: "Payment Option",
+      payFull: "Pay Full Balance",
+      payMinimum: "Pay Minimum",
+      payInstallment: "Pay Installment",
+      payCustom: "Custom Amount",
+      receipt: "Slip / Receipt",
+      noAccounts: "No credit cards or personal loans yet",
+      noInstallments: "No installment plans for this account",
+      noTransactions: "No transactions recorded yet",
+      deleteAccountConfirm: "Are you sure you want to delete this credit account?",
+      deleteInstallmentConfirm: "Are you sure you want to delete this installment plan?",
+      deleteTransactionConfirm: "Are you sure you want to delete this transaction?",
+      created: "Account created successfully",
+      createFailed: "Failed to create account",
+      updated: "Updated successfully",
+      updateFailed: "Failed to update",
+      deleted: "Deleted successfully",
+      deleteFailed: "Failed to delete",
+      loadFailed: "Failed to load credit accounts",
+      totalCreditLimit: "Total Credit Limit",
+      totalOutstanding: "Total Outstanding",
+      totalAvailable: "Total Available",
+      totalDueEstimated: "Est. Due This Month",
+    },
     auth: {
       welcomeBack: "Welcome Back",
       loginSubtitle: "Manage your expenses with ease",
@@ -509,6 +633,7 @@ export const translations: Record<Language, TranslationKeys> = {
       register: "สมัครสมาชิก",
       myGroup: "กลุ่มของฉัน",
       loans: "เงินกู้และหนี้สิน",
+      creditCards: "บัตรเครดิต & สินเชื่อ",
       copyright: "ระบบบันทึกรายรับ-รายจ่ายรายเดือน",
       save: "บันทึก",
       cancel: "ยกเลิก",
@@ -689,6 +814,67 @@ export const translations: Record<Language, TranslationKeys> = {
       totalPrincipal: "เงินต้นทั้งหมด",
       totalPaid: "จ่ายแล้วทั้งหมด",
       totalRemaining: "คงเหลือทั้งหมด",
+    },
+    creditPage: {
+      title: "บัตรเครดิต & สินเชื่อส่วนบุคคล",
+      subtitle: "บันทึกและติดตามบัตรเครดิต บัตรกดเงินสด และสินเชื่อ ทั้งแบบผ่อนงวดคงที่และชำระขั้นต่ำ",
+      newAccount: "เพิ่มบัญชีบัตร/สินเชื่อ",
+      accountDetails: "รายละเอียดบัญชี",
+      accountName: "ชื่อบัตร / บัญชีสินเชื่อ",
+      accountType: "ประเภทสินเชื่อ/บัตร",
+      creditCard: "บัตรเครดิต",
+      cashCard: "บัตรกดเงินสด",
+      personalLoan: "สินเชื่อส่วนบุคคล",
+      bank: "ธนาคาร / สถาบันการเงิน",
+      creditLimit: "วงเงินอนุมัติ",
+      currentBalance: "ยอดหนี้คงค้าง",
+      availableCredit: "วงเงินคงเหลือ",
+      creditUtilization: "สัดส่วนการใช้วงเงิน",
+      statementDay: "วันสรุปยอดรอบบิล",
+      dueDay: "วันครบกำหนดชำระ",
+      interestRate: "ดอกเบี้ย (% ต่อปี)",
+      minPaymentRate: "อัตราจ่ายขั้นต่ำ (% Rate)",
+      minPaymentFloor: "ยอดขั้นต่ำพื้นฐาน (บาท)",
+      estimatedMinPayment: "ประมาณการจ่ายขั้นต่ำ",
+      monthlyInstallmentDue: "ค่างวดผ่อนประจำเดือน",
+      totalDueThisMonth: "ยอดที่ต้องจ่ายเดือนนี้",
+      activeInstallmentCount: "รายการผ่อนที่ยังดำเนินอยู่",
+      installments: "รายการผ่อนชำระ (Installments)",
+      newInstallment: "เพิ่มรายการผ่อน",
+      itemName: "สินค้า / รายการที่ผ่อน",
+      totalAmount: "ยอดรวมทั้งสิ้น",
+      monthlyAmount: "ค่างวดต่องวด",
+      totalTerms: "จำนวนงวดทั้งหมด",
+      paidTerms: "งวดที่จ่ายแล้ว",
+      termsProgress: "ความคืบหน้างวด",
+      advanceTerm: "บันทึกจ่าย 1 งวด",
+      transactions: "รายการใช้จ่าย & การชำระเงิน",
+      newTransaction: "บันทึกการใช้จ่าย / ชำระเงิน",
+      charge: "รูดใช้จ่าย / เบิกถอน",
+      payment: "ชำระเงินคืน",
+      paymentType: "รูปแบบการชำระ",
+      payFull: "จ่ายเต็มจำนวนคงค้าง",
+      payMinimum: "จ่ายขั้นต่ำ (ตามเกณฑ์)",
+      payInstallment: "จ่ายค่างวดผ่อน",
+      payCustom: "ระบุยอดเอง",
+      receipt: "สลิป / หลักฐานการโอน",
+      noAccounts: "ยังไม่มีรายการบัตรเครดิตหรือสินเชื่อ",
+      noInstallments: "ยังไม่มีรายการผ่อนชำระในบัญชีนี้",
+      noTransactions: "ยังไม่มีประวัติการใช้จ่ายหรือชำระเงิน",
+      deleteAccountConfirm: "ยืนยันการลบบัญชีบัตร/สินเชื่อนี้หรือไม่?",
+      deleteInstallmentConfirm: "ยืนยันการลบรายการผ่อนชำระนี้หรือไม่?",
+      deleteTransactionConfirm: "ยืนยันการลบรายการนี้หรือไม่?",
+      created: "สร้างบัญชีสำเร็จ",
+      createFailed: "สร้างบัญชีไม่สำเร็จ",
+      updated: "อัปเดตข้อมูลสำเร็จ",
+      updateFailed: "อัปเดตไม่สำเร็จ",
+      deleted: "ลบสำเร็จ",
+      deleteFailed: "ลบไม่สำเร็จ",
+      loadFailed: "โหลดข้อมูลบัตรเครดิต/สินเชื่อไม่สำเร็จ",
+      totalCreditLimit: "วงเงินรวมทั้งหมด",
+      totalOutstanding: "ยอดหนี้คงค้างรวม",
+      totalAvailable: "วงเงินคงเหลือรวม",
+      totalDueEstimated: "ยอดที่ต้องจ่ายเดือนนี้ (ประมาณการ)",
     },
     auth: {
       welcomeBack: "ยินดีต้อนรับกลับ",

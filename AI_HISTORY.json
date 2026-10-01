@@ -695,4 +695,26 @@
         "logic_changed": "Removed compiled Go binary backend/main and ignored main/server/executables and .vscode in .gitignore and backend/.gitignore. Tracked graft MCP and Claude tooling configurations (.mcp.json, .claude/, .ignore) along with multi-group and loan design/test specifications.",
         "ai_warning": "Ensure Go builds do not output unignored binaries into repo root. Keep root .gitignore and backend/.gitignore synchronized for binary patterns."
     }
+    ,
+    {
+        "date": "2026-10-01",
+        "scope": "[Full-Stack]",
+        "task": "Implement Phase 1 of Credit Cards & Personal Loans (fixed installments & revolving minimum payments)",
+        "files_touched": [
+            "backend/internal/database/schema.go",
+            "backend/internal/models/credit.go",
+            "backend/internal/repository/credit.go",
+            "backend/internal/handlers/credit.go",
+            "backend/internal/router/router.go",
+            "backend/cmd/server/main.go",
+            "frontend/src/types/credit.ts",
+            "frontend/src/api/credit.ts",
+            "frontend/src/translations/index.ts",
+            "frontend/src/components/CreditTracker.tsx",
+            "frontend/src/components/Sidebar.tsx",
+            "frontend/src/App.tsx"
+        ],
+        "logic_changed": "Created credit_accounts, credit_installments, and credit_transactions tables in schema.go. Implemented full CRUD, atomic balance updates, installment term advancement, and minimum payment calculations in backend repository/handlers. Added CreditTracker UI with dashboard summary cards, account utilization bars, installment tracking, and flexible payment recording with receipt slips.",
+        "ai_warning": "Credit balance adjustments occur inside database transactions in AddTransaction/DeleteTransaction. When linking a payment to an installment (installmentId), paidTerms advances automatically. Ensure payment calculations respect minPaymentRate and minPaymentFloor when balance is below the floor."
+    }
 ]
