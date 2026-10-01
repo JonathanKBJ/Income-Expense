@@ -547,13 +547,17 @@ export default function CreditTracker() {
                       </div>
                     )}
 
-                    <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(255, 255, 255, 0.06)", display: "flex", justifyContent: "space-between", fontSize: 12, color: "rgba(255, 255, 255, 0.6)" }}>
+                    <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(255, 255, 255, 0.06)", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "rgba(255, 255, 255, 0.6)" }}>
                       <span>
                         {acc.paymentDueDay ? `${t.creditPage.dueDay}: ${acc.paymentDueDay}` : ""}
                       </span>
-                      <span style={{ color: "#f59e0b", fontWeight: 500 }}>
-                        {t.creditPage.totalDueThisMonth}: ฿{formatMoney(acc.totalDueThisMonth)}
-                      </span>
+                      {acc.isPaidThisMonth ? (
+                        <Tag color="success" style={{ margin: 0 }}>ชำระรอบนี้แล้ว ✓</Tag>
+                      ) : (
+                        <span style={{ color: "#f59e0b", fontWeight: 500 }}>
+                          {t.creditPage.totalDueThisMonth}: ฿{formatMoney(acc.totalDueThisMonth)}
+                        </span>
+                      )}
                     </div>
                   </Card>
                 );
@@ -624,12 +628,19 @@ export default function CreditTracker() {
                     <div style={{ fontSize: 15, fontWeight: 600, color: "#ef4444" }}>฿{formatMoney(selectedAccount.currentBalance)}</div>
                   </Col>
                   <Col xs={12} sm={6}>
-                    <div style={{ fontSize: 11, color: "rgba(255, 255, 255, 0.5)" }}>{t.creditPage.estimatedMinPayment}</div>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: "#f59e0b" }}>฿{formatMoney(selectedAccount.estimatedMinPayment)}</div>
+                    <div style={{ fontSize: 11, color: "rgba(255, 255, 255, 0.5)" }}>ประมาณการขั้นต่ำรอบถัดไป</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: "#f59e0b" }}>฿{formatMoney(selectedAccount.nextCycleEstimatedMin)}</div>
                   </Col>
                   <Col xs={12} sm={6}>
                     <div style={{ fontSize: 11, color: "rgba(255, 255, 255, 0.5)" }}>{t.creditPage.totalDueThisMonth}</div>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: "#10b981" }}>฿{formatMoney(selectedAccount.totalDueThisMonth)}</div>
+                    {selectedAccount.isPaidThisMonth ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <Tag color="success" style={{ margin: 0 }}>ชำระแล้ว ✓</Tag>
+                        <span style={{ fontSize: 15, fontWeight: 700, color: "#10b981" }}>฿0.00</span>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 15, fontWeight: 600, color: "#ef4444" }}>฿{formatMoney(selectedAccount.totalDueThisMonth)}</div>
+                    )}
                   </Col>
                   <Col xs={12} sm={6}>
                     <div style={{ fontSize: 11, color: "rgba(255, 255, 255, 0.5)" }}>{t.creditPage.statementDay}</div>
@@ -650,20 +661,27 @@ export default function CreditTracker() {
                 </Row>
                 {/* Breakdown explanation card */}
                 {selectedAccount.activeInstallmentCount > 0 && (
-                  <div style={{ marginBottom: 20, padding: "12px 16px", background: "rgba(59, 130, 246, 0.08)", border: "1px solid rgba(59, 130, 246, 0.2)", borderRadius: 10, fontSize: 13 }}>
-                    <div style={{ fontWeight: 600, color: "#93c5fd", marginBottom: 6 }}>
-                      💡 แจกแจงการคำนวณยอดชำระขั้นต่ำ (สูตรคิดขั้นต่ำของธนาคาร):
+                  <div style={{ marginBottom: 20, padding: "12px 16px", background: selectedAccount.isPaidThisMonth ? "rgba(16, 185, 129, 0.08)" : "rgba(59, 130, 246, 0.08)", border: selectedAccount.isPaidThisMonth ? "1px solid rgba(16, 185, 129, 0.25)" : "1px solid rgba(59, 130, 246, 0.2)", borderRadius: 10, fontSize: 13 }}>
+                    <div style={{ fontWeight: 600, color: selectedAccount.isPaidThisMonth ? "#6ee7b7" : "#93c5fd", marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
+                      <span>💡 แจกแจงการคำนวณยอดชำระของบัตร:</span>
+                      {selectedAccount.isPaidThisMonth ? (
+                        <Tag color="success">รอบบิลนี้ชำระครบแล้ว ✓ (ชำระแล้ว ฿{formatMoney(selectedAccount.paidThisMonth)})</Tag>
+                      ) : (
+                        selectedAccount.paidThisMonth > 0 && (
+                          <Tag color="warning">ชำระแล้วบางส่วน ฿{formatMoney(selectedAccount.paidThisMonth)}</Tag>
+                        )
+                      )}
                     </div>
                     <div style={{ color: "rgba(255, 255, 255, 0.85)", lineHeight: 1.7 }}>
-                      • ยอดหนี้รวมตามใบแจ้งยอด: <strong>฿{formatMoney(selectedAccount.currentBalance)}</strong>
+                      • ยอดหนี้คงค้างปัจจุบัน: <strong>฿{formatMoney(selectedAccount.currentBalance)}</strong>
                       <br />
                       • ค่างวดผ่อนประจำเดือนนี้: <strong>฿{formatMoney(selectedAccount.monthlyInstallmentDue)}</strong>
                       <br />
-                      • ยอดหมุนเวียน/กดเงินสดคงเหลือ: ฿{formatMoney(Math.max(0, selectedAccount.currentBalance - selectedAccount.monthlyInstallmentDue))}
+                      • ยอดชำระในรอบบิลนี้แล้ว: <strong style={{ color: "#10b981" }}>฿{formatMoney(selectedAccount.paidThisMonth)}</strong>
                       <br />
-                      • ยอดขั้นต่ำหมุนเวียน ({selectedAccount.minPaymentRate}%): ฿{formatMoney(Math.max(0, selectedAccount.currentBalance - selectedAccount.monthlyInstallmentDue) * (selectedAccount.minPaymentRate / 100))}
+                      • <strong>ยอดที่ต้องชำระรอบนี้คงเหลือ: <span style={{ color: selectedAccount.isPaidThisMonth ? "#10b981" : "#ef4444", fontWeight: 700 }}>฿{formatMoney(selectedAccount.totalDueThisMonth)}</span></strong>
                       <br />
-                      • <strong>ยอดชำระขั้นต่ำที่ต้องจ่ายรอบนี้ = ค่างวดผ่อน + ขั้นต่ำหมุนเวียน = ฿{formatMoney(selectedAccount.estimatedMinPayment)}</strong>
+                      • <span style={{ color: "rgba(255, 255, 255, 0.65)" }}>ประมาณการยอดชำระขั้นต่ำของรอบบิลถัดไป (คำนวณจากยอดคงเหลือปัจจุบัน): <strong>฿{formatMoney(selectedAccount.nextCycleEstimatedMin)}</strong></span>
                     </div>
                   </div>
                 )}

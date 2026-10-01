@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/http"
 	"strings"
+	"time"
 	"expense-tracker/internal/middleware"
 	"expense-tracker/internal/models"
 	"expense-tracker/internal/repository"
@@ -389,6 +390,37 @@ func (h *CreditHandler) DeleteTransaction(w http.ResponseWriter, r *http.Request
 }
 
 // --- Computation Helper ---
+func getBillingCycleStartDate(statementDay *int) string {
+	today := time.Now().UTC()
+	if statementDay == nil || *statementDay < 1 || *statementDay > 31 {
+		return time.Date(today.Year(), today.Month(), 1, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
+	}
+
+	stmtDay := *statementDay
+	var year int
+	var month time.Month
+
+	if today.Day() >= stmtDay {
+		year = today.Year()
+		month = today.Month()
+	} else {
+		year = today.Year()
+		month = today.Month() - 1
+		if month < 1 {
+			month = 12
+			year--
+		}
+	}
+
+	lastDay := time.Date(year, month+1, 0, 0, 0, 0, 0, time.UTC).Day()
+	day := stmtDay
+	if day > lastDay {
+		day = lastDay
+	}
+
+	return time.Date(year, month, day, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
+}
+
 
 func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstallment, txs []models.CreditTransaction) models.CreditAccountDetail {
 	var availableCredit float64
@@ -414,35 +446,73 @@ func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstall
 		}
 	}
 
-	// Estimated minimum payment:
-	// In Thai banking practice (e.g. Bank of Thailand regulations & UOB Cash Plus / credit cards):
-	// Total Balance = Revolving Balance + Current Month Installments
-	// Minimum Payment = Current Month Installments + ceil(Revolving Balance * MinPaymentRate%)
-	var minPay float64
+	// Cycle payments & charges
+	cycleStart := getBillingCycleStartDate(acc.StatementDay)
+	var paidThisCycle float64
+	var chargesThisCycle float64
+	for _, tx := range txs {
+		if tx.Date >= cycleStart {
+			if tx.Type == models.CreditTxPayment {
+				paidThisCycle += tx.Amount
+			} else if tx.Type == models.CreditTxCharge {
+				chargesThisCycle += tx.Amount
+			}
+		}
+	}
+
+	// 1. Calculate original statement balance before cycle payments
+	statementBal := acc.CurrentBalance + paidThisCycle - chargesThisCycle
+	if statementBal < 0 {
+		statementBal = 0
+	}
+
+	// 2. Minimum payment required for the current statement cycle
+	rate := acc.MinPaymentRate
+	if rate <= 0 {
+		rate = 2.5
+	}
+	floor := acc.MinPaymentFloor
+	if floor < 0 {
+		floor = 0
+	}
+
+	var minPayForCycle float64
+	if statementBal > 0 {
+		revolvingBalStmt := statementBal - monthlyInstDue
+		if revolvingBalStmt < 0 {
+			revolvingBalStmt = 0
+		}
+		revMinStmt := revolvingBalStmt * (rate / 100.0)
+		if floor > 0 && revMinStmt < floor && revolvingBalStmt > 0 {
+			revMinStmt = floor
+		}
+		minPayForCycle = math.Ceil(monthlyInstDue + revMinStmt)
+		if minPayForCycle > statementBal {
+			minPayForCycle = statementBal
+		}
+	}
+
+	// 3. Remaining due for the current cycle
+	remainingDue := minPayForCycle - paidThisCycle
+	if remainingDue < 0 {
+		remainingDue = 0
+	}
+	isPaidThisMonth := (minPayForCycle > 0 && paidThisCycle >= minPayForCycle) || (acc.CurrentBalance == 0 && statementBal == 0)
+
+	// 4. Estimated minimum payment for NEXT cycle (based on remaining current balance)
+	var nextCycleMin float64
 	if acc.CurrentBalance > 0 {
-		rate := acc.MinPaymentRate
-		if rate <= 0 {
-			rate = 2.5
+		revolvingBalCurr := acc.CurrentBalance - monthlyInstDue
+		if revolvingBalCurr < 0 {
+			revolvingBalCurr = 0
 		}
-		floor := acc.MinPaymentFloor
-		if floor < 0 {
-			floor = 0
+		revMinCurr := revolvingBalCurr * (rate / 100.0)
+		if floor > 0 && revMinCurr < floor && revolvingBalCurr > 0 {
+			revMinCurr = floor
 		}
-
-		revolvingBal := acc.CurrentBalance - monthlyInstDue
-		if revolvingBal < 0 {
-			revolvingBal = 0
-		}
-
-		revMin := revolvingBal * (rate / 100.0)
-		if floor > 0 && revMin < floor && revolvingBal > 0 {
-			revMin = floor
-		}
-
-		// Banks round up minimum payment to whole baht (e.g. 741.86 -> 742)
-		minPay = math.Ceil(monthlyInstDue + revMin)
-		if minPay > acc.CurrentBalance {
-			minPay = acc.CurrentBalance
+		nextCycleMin = math.Ceil(monthlyInstDue + revMinCurr)
+		if nextCycleMin > acc.CurrentBalance {
+			nextCycleMin = acc.CurrentBalance
 		}
 	}
 
@@ -450,22 +520,28 @@ func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstall
 	var totalDue float64
 	if acc.Type == models.CreditAccountPersonalLoan {
 		if monthlyInstDue > 0 {
-			totalDue = monthlyInstDue
+			remInst := monthlyInstDue - paidThisCycle
+			if remInst < 0 {
+				remInst = 0
+			}
+			totalDue = remInst
 		} else {
-			totalDue = minPay
+			totalDue = remainingDue
 		}
 	} else {
-		// For cards with revolving lines, Total Due is either minimum payment or statement balance
-		totalDue = minPay
+		totalDue = remainingDue
 	}
 
 	return models.CreditAccountDetail{
 		CreditAccount:          acc,
 		AvailableCredit:        availableCredit,
 		CreditUtilization:      utilization,
-		EstimatedMinPayment:    minPay,
+		EstimatedMinPayment:    minPayForCycle,
 		MonthlyInstallmentDue:  monthlyInstDue,
 		TotalDueThisMonth:      totalDue,
+		PaidThisMonth:          paidThisCycle,
+		IsPaidThisMonth:        isPaidThisMonth,
+		NextCycleEstimatedMin:  nextCycleMin,
 		ActiveInstallmentCount: activeInstCount,
 		Installments:           insts,
 		Transactions:           txs,

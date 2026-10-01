@@ -63,6 +63,9 @@ export interface CreditAccountDetail extends CreditAccount {
   estimatedMinPayment: number;
   monthlyInstallmentDue: number;
   totalDueThisMonth: number;
+  paidThisMonth: number;
+  isPaidThisMonth: boolean;
+  nextCycleEstimatedMin: number;
   activeInstallmentCount: number;
   installments: CreditInstallment[];
   transactions: CreditTransaction[];

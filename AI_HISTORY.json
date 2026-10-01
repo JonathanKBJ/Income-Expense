@@ -758,4 +758,18 @@
         "logic_changed": "Enhanced credit_installments table and models with interest_rate, interest_type (FLAT/EFFECTIVE), remaining_balance, and end_date. Added UI options in CreditTracker to record reducing balance loans, display remaining balance, and track schedule dates.",
         "ai_warning": "Effective rate installments can have varying monthly amounts over the loan term; users can update monthlyAmount for the current billing cycle when each statement arrives."
     }
+    ,
+    {
+        "date": "2026-10-01",
+        "scope": "[Full-Stack]",
+        "task": "Reflect paid status (0.00 due) after recording cycle payments and separate next cycle minimum estimate",
+        "files_touched": [
+            "backend/internal/handlers/credit.go",
+            "backend/internal/models/credit.go",
+            "frontend/src/types/credit.ts",
+            "frontend/src/components/CreditTracker.tsx"
+        ],
+        "logic_changed": "Track cycle payments against statement due in computeAccountDetail; once paid in current cycle, totalDueThisMonth becomes 0.00 and isPaidThisMonth flag is set. Computed nextCycleEstimatedMin based on remaining balance and updated CreditTracker UI to display paid badges and clear cycle estimates.",
+        "ai_warning": "Cycle payments are identified by tx.Date >= cycleStartDate (computed from statementDay). Top summary cards reflect remaining due amounts so totalEstimatedDue drops to 0 when all accounts are settled for the month."
+    }
 ]
