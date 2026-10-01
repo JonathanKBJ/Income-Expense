@@ -4,7 +4,23 @@
       "Bash(grep \":$\")",
       "Bash(Get-ChildItem -Path \"D:\\\\PERSONAL\\\\Income-Expense\" -Recurse -Force)",
       "Bash(Select-Object -Property FullName)",
-      "Bash(Sort-Object FullName)"
+      "Bash(Sort-Object FullName)",
+      "Bash(go build *)",
+      "Bash(xxd backend/internal/models/transaction.go)",
+      "Bash(curl -s http://localhost:8080/health)",
+      "Bash(curl -s -X POST http://localhost:8080/auth/register -H \"Content-Type: application/json\" -d '{\"username\":\"testuser1\",\"password\":\"test123\"}')",
+      "Bash(curl -s -X POST http://localhost:8080/auth/register -H \"Content-Type: application/json\" -d '{\"username\":\"testuser2\",\"password\":\"test123\"}')",
+      "Bash(npx tsc *)",
+      "Bash(go run *)",
+      "Bash(npx vite *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8080/api/health)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5173)",
+      "Bash(curl *)",
+      "Bash(TASKKILL /F /FI \"WINDOWTITLE eq *server*\")",
+      "Bash(TASKKILL /F /IM \"server.exe\")",
+      "Bash(npm run *)",
+      "PowerShell(Get-Content \"d:\\\\PERSONAL\\\\Income-Expense\\\\backend\\\\internal\\\\repository\\\\transaction.go\" | Select-Object -Skip 65 -First 15 | ForEach-Object { $_.Replace\\(\"`t\", \"[TAB]\"\\) })",
+      "PowerShell($content = Get-Content \"d:\\\\PERSONAL\\\\Income-Expense\\\\backend\\\\internal\\\\repository\\\\transaction.go\" -Raw; $lines = $content -split \"`r`n\"; for \\($i = 75; $i -le 84; $i++\\) { Write-Output \"$\\($i\\): $\\([System.Text.Encoding]::UTF8.GetBytes\\($lines[$i-1]\\) | ForEach-Object { '{0:X2}' -f $_ }\\)\" })"
     ]
   }
 }

@@ -671,4 +671,28 @@
         "logic_changed": "Resolved activeGroup jumping back to 'Main' (groups[0]) on page refresh while token was still set to the previously selected group: (1) In AuthContext, lazy initialize activeGroup and user/token directly from localStorage on initial render to prevent null state flicker. (2) Added getGroupIdFromToken helper to decode groupId from JWT claims as a fallback source of truth. (3) In refreshMyGroups, resolve target group by activeGroupRef.current?.id || savedGroupId || tokenGroupId instead of blindly resetting to groups[0] when activeGroup is not yet set. If group is valid, persist active_group and active_group_id to localStorage; if group was deleted/inaccessible, fallback to groups[0] and call apiSwitchGroup to resync token. (4) Updated switchGroupFn, logout, and apiFetch 401 handler to maintain active_group and active_group_id. (5) In LoanTracker, reset selectedLoan(null) when activeGroup?.id changes. (6) In GroupPage, persist new token/groupId on join/leave and refreshMyGroups on rename.",
         "ai_warning": "activeGroup is now persisted under 'active_group' and 'active_group_id' in localStorage and synchronized with the JWT's embedded groupId. When modifying AuthContext or group switching logic, always ensure the JWT token (auth_token) and the active group (active_group / activeGroup state) remain in lockstep so backend queries filter by the matching group ID."
     }
+    ,
+    {
+        "date": "2026-10-01",
+        "scope": "[DevOps/Config]",
+        "task": "Clean untracked files: remove backend binary, setup root and backend gitignore, track graft tooling and design docs",
+        "files_touched": [
+            ".gitignore",
+            "backend/.gitignore",
+            ".ignore",
+            ".mcp.json",
+            ".claude/settings.json",
+            ".claude/settings.local.json",
+            ".claude/helpers/graft-hooks.cjs",
+            ".claude/helpers/graft-statusline.cjs",
+            ".claude/skills/graft/SKILL.md",
+            "GROUP_COLLABORATION_PLAN.md",
+            "REDESIGN_PLAN.md",
+            "SESSION_2026-05-20.md",
+            "TEST_PLAN.md",
+            "TEST_REPORT.md"
+        ],
+        "logic_changed": "Removed compiled Go binary backend/main and ignored main/server/executables and .vscode in .gitignore and backend/.gitignore. Tracked graft MCP and Claude tooling configurations (.mcp.json, .claude/, .ignore) along with multi-group and loan design/test specifications.",
+        "ai_warning": "Ensure Go builds do not output unignored binaries into repo root. Keep root .gitignore and backend/.gitignore synchronized for binary patterns."
+    }
 ]

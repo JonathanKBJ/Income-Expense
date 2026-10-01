@@ -1,0 +1,15 @@
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE & Editor
+.vscode/
+.idea/
+
+# Binaries & executables
+*.exe
+main
+server

@@ -8,3 +8,5 @@
 *.out
 vendor/
 tmp/
+main
+server
