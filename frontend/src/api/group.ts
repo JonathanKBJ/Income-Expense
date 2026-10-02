@@ -7,12 +7,21 @@ export interface GroupMember {
   joinedAt: string;
 }
 
+export interface GroupSettings {
+  groupId: string;
+  shareCredit: boolean;
+  shareLoans: boolean;
+  shareAnnual: boolean;
+  updatedAt?: string;
+}
+
 export interface GroupInfo {
   id: string;
   name: string;
   memberCount: number;
   members: GroupMember[];
   myRole: "OWNER" | "EDITOR" | "VIEWER";
+  settings?: GroupSettings;
 }
 
 export interface ActivityLogEntry {
@@ -63,6 +72,17 @@ export async function joinGroup(inviteCode: string) {
 export async function leaveGroup() {
   return apiFetch("/api/me/group/leave", {
     method: "POST",
+  });
+}
+
+export async function getGroupSettings(): Promise<GroupSettings> {
+  return apiFetch("/api/me/group/settings");
+}
+
+export async function updateGroupSettings(settings: Partial<GroupSettings>): Promise<GroupSettings> {
+  return apiFetch("/api/me/group/settings", {
+    method: "PATCH",
+    body: JSON.stringify(settings),
   });
 }
 

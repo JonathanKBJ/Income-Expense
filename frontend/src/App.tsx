@@ -55,6 +55,8 @@ function AuthenticatedApp() {
     return saved ? parseInt(saved, 10) : new Date().getFullYear();
   });
 
+
+
   const {
     transactions,
     summary,

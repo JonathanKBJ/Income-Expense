@@ -33,7 +33,7 @@ export interface CreditInstallment {
   totalTerms: number;
   paidTerms: number;
   interestRate?: number;
-  interestType?: "FLAT" | "EFFECTIVE";
+  interestType?: "FLAT" | "EFFECTIVE" | "RECURRING";
   remainingBalance?: number;
   startDate: string;
   endDate?: string | null;
@@ -67,6 +67,8 @@ export interface CreditAccountDetail extends CreditAccount {
   paidThisMonth: number;
   isPaidThisMonth: boolean;
   nextCycleEstimatedMin: number;
+  nextCycleEstimatedInterest?: number;
+  nextCycleEstimatedStatement?: number;
   activeInstallmentCount: number;
   installments: CreditInstallment[];
   transactions: CreditTransaction[];
@@ -77,6 +79,8 @@ export interface CreditDashboardSummary {
   totalCurrentBalance: number;
   totalAvailableCredit: number;
   totalEstimatedDue: number;
+  totalNextCycleOutstanding?: number;
+  totalNextCycleEstimatedDue?: number;
   totalAccounts: number;
   activeAccounts: number;
 }
@@ -122,7 +126,7 @@ export interface CreateCreditInstallmentRequest {
   totalTerms: number;
   paidTerms?: number;
   interestRate?: number;
-  interestType?: "FLAT" | "EFFECTIVE";
+  interestType?: "FLAT" | "EFFECTIVE" | "RECURRING";
   remainingBalance?: number;
   startDate: string;
   endDate?: string;
@@ -136,7 +140,7 @@ export interface UpdateCreditInstallmentRequest {
   totalTerms?: number;
   paidTerms?: number;
   interestRate?: number;
-  interestType?: "FLAT" | "EFFECTIVE";
+  interestType?: "FLAT" | "EFFECTIVE" | "RECURRING";
   remainingBalance?: number;
   endDate?: string;
   status?: InstallmentStatus;

@@ -89,6 +89,8 @@ func New(
 			r.Route("/me", func(r chi.Router) {
 				r.Get("/group", groupHandler.GetMyGroup)
 				r.Patch("/group", groupHandler.UpdateGroupName)
+				r.Get("/group/settings", groupHandler.GetGroupSettings)
+				r.Patch("/group/settings", groupHandler.UpdateGroupSettings)
 				r.Get("/groups", groupHandler.ListMyGroups)
 				r.Post("/groups", groupHandler.CreateMyGroup)
 				r.Delete("/groups/{id}", groupHandler.DeleteMyGroup)

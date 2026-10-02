@@ -20,7 +20,8 @@ function formatMoney(n: number): string {
 const MOBILE_BP = 768;
 
 export default function LoanTracker() {
-  const { activeGroup } = useAuth();
+  const { activeGroup, groupInfo } = useAuth();
+  const isLoansShared = groupInfo?.settings?.shareLoans ?? true;
   const { t } = useLanguage();
   const { message } = App.useApp();
   const [loans, setLoans] = useState<LoanDetail[]>([]);
@@ -536,7 +537,12 @@ export default function LoanTracker() {
     <div className="loan-tracker-container" style={{ padding: isMobile ? 12 : 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, gap: 8 }}>
         <div>
-          <h2 className="loan-tracker-title" style={{ margin: 0, fontSize: isMobile ? 20 : 24 }}>{t.loansPage.title}</h2>
+          <h2 className="loan-tracker-title" style={{ margin: 0, fontSize: isMobile ? 20 : 24, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            {t.loansPage.title}
+            <Tag color={isLoansShared ? "blue" : "default"} style={{ fontSize: 12, fontWeight: 400, margin: 0 }}>
+              {isLoansShared ? `👥 ${t.group.sharedModeBadge}` : `🔒 ${t.group.personalModeBadge}`}
+            </Tag>
+          </h2>
           <div className="loan-tracker-subtitle" style={{ color: "var(--text-secondary)", fontSize: 13 }}>
             {activeGroup?.name || t.common.currentGroup}
           </div>

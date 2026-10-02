@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"math"
@@ -25,16 +26,24 @@ func NewCreditHandler(creditRepo *repository.CreditRepository, groupRepo *reposi
 		groupRepo:  groupRepo,
 	}
 }
+func (h *CreditHandler) getScopedUserID(ctx context.Context, groupID, userID string) string {
+	settings, err := h.groupRepo.GetGroupSettings(ctx, groupID)
+	if err == nil && !settings.ShareCredit {
+		return userID
+	}
+	return ""
+}
 
 // ListAccounts handles GET /api/credit-accounts
 func (h *CreditHandler) ListAccounts(w http.ResponseWriter, r *http.Request) {
 	groupID := middleware.GetGroupID(r.Context())
-	if groupID == "" {
+	userID := middleware.GetUserID(r.Context())
+	if groupID == "" || userID == "" {
 		writeError(w, http.StatusForbidden, "group identification required")
 		return
 	}
-
-	accounts, err := h.creditRepo.ListAccountsByGroup(r.Context(), groupID)
+	scopedUser := h.getScopedUserID(r.Context(), groupID, userID)
+	accounts, err := h.creditRepo.ListAccountsByGroup(r.Context(), groupID, scopedUser)
 	if err != nil {
 		log.Printf("ERROR: ListAccounts: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to fetch credit accounts")
@@ -79,6 +88,8 @@ func (h *CreditHandler) ListAccounts(w http.ResponseWriter, r *http.Request) {
 			summary.TotalCurrentBalance += acc.CurrentBalance
 			summary.TotalAvailableCredit += detail.AvailableCredit
 			summary.TotalEstimatedDue += detail.TotalDueThisMonth
+			summary.TotalNextCycleOutstanding += detail.NextCycleEstimatedStatement
+			summary.TotalNextCycleEstimatedDue += detail.NextCycleEstimatedMin
 		}
 	}
 
@@ -96,6 +107,7 @@ func (h *CreditHandler) CreateAccount(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "user and group identification required")
 		return
 	}
+	// Creation is allowed; account is saved with creator's userID and groupID
 
 	var req models.CreateCreditAccountRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -144,9 +156,14 @@ func (h *CreditHandler) CreateAccount(w http.ResponseWriter, r *http.Request) {
 // GetAccountDetail handles GET /api/credit-accounts/{id}
 func (h *CreditHandler) GetAccountDetail(w http.ResponseWriter, r *http.Request) {
 	groupID := middleware.GetGroupID(r.Context())
+	userID := middleware.GetUserID(r.Context())
 	id := chi.URLParam(r, "id")
-
-	acc, err := h.creditRepo.GetAccountByID(r.Context(), id, groupID)
+	if groupID == "" || userID == "" {
+		writeError(w, http.StatusForbidden, "group identification required")
+		return
+	}
+	scopedUser := h.getScopedUserID(r.Context(), groupID, userID)
+	acc, err := h.creditRepo.GetAccountByID(r.Context(), id, groupID, scopedUser)
 	if err != nil {
 		log.Printf("ERROR: GetAccountDetail: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to get credit account")
@@ -167,21 +184,26 @@ func (h *CreditHandler) GetAccountDetail(w http.ResponseWriter, r *http.Request)
 // UpdateAccount handles PATCH /api/credit-accounts/{id}
 func (h *CreditHandler) UpdateAccount(w http.ResponseWriter, r *http.Request) {
 	groupID := middleware.GetGroupID(r.Context())
+	userID := middleware.GetUserID(r.Context())
 	id := chi.URLParam(r, "id")
-
+	if groupID == "" || userID == "" {
+		writeError(w, http.StatusForbidden, "group identification required")
+		return
+	}
+	scopedUser := h.getScopedUserID(r.Context(), groupID, userID)
 	var req models.UpdateCreditAccountRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
-	if err := h.creditRepo.UpdateAccount(r.Context(), id, groupID, req); err != nil {
+	if err := h.creditRepo.UpdateAccount(r.Context(), id, groupID, req, scopedUser); err != nil {
 		log.Printf("ERROR: UpdateAccount: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to update credit account")
 		return
 	}
 
-	acc, _ := h.creditRepo.GetAccountByID(r.Context(), id, groupID)
+	acc, _ := h.creditRepo.GetAccountByID(r.Context(), id, groupID, scopedUser)
 	if acc == nil {
 		writeError(w, http.StatusNotFound, "credit account not found")
 		return
@@ -197,9 +219,14 @@ func (h *CreditHandler) UpdateAccount(w http.ResponseWriter, r *http.Request) {
 // DeleteAccount handles DELETE /api/credit-accounts/{id}
 func (h *CreditHandler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 	groupID := middleware.GetGroupID(r.Context())
+	userID := middleware.GetUserID(r.Context())
 	id := chi.URLParam(r, "id")
-
-	if err := h.creditRepo.DeleteAccount(r.Context(), id, groupID); err != nil {
+	if groupID == "" || userID == "" {
+		writeError(w, http.StatusForbidden, "group identification required")
+		return
+	}
+	scopedUser := h.getScopedUserID(r.Context(), groupID, userID)
+	if err := h.creditRepo.DeleteAccount(r.Context(), id, groupID, scopedUser); err != nil {
 		log.Printf("ERROR: DeleteAccount: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to delete credit account")
 		return
@@ -213,9 +240,14 @@ func (h *CreditHandler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 // AddInstallment handles POST /api/credit-accounts/{id}/installments
 func (h *CreditHandler) AddInstallment(w http.ResponseWriter, r *http.Request) {
 	groupID := middleware.GetGroupID(r.Context())
+	userID := middleware.GetUserID(r.Context())
 	id := chi.URLParam(r, "id")
-
-	acc, err := h.creditRepo.GetAccountByID(r.Context(), id, groupID)
+	if groupID == "" || userID == "" {
+		writeError(w, http.StatusForbidden, "group identification required")
+		return
+	}
+	scopedUser := h.getScopedUserID(r.Context(), groupID, userID)
+	acc, err := h.creditRepo.GetAccountByID(r.Context(), id, groupID, scopedUser)
 	if err != nil || acc == nil {
 		writeError(w, http.StatusNotFound, "credit account not found")
 		return
@@ -265,10 +297,15 @@ func (h *CreditHandler) AddInstallment(w http.ResponseWriter, r *http.Request) {
 // UpdateInstallment handles PATCH /api/credit-accounts/{id}/installments/{iid}
 func (h *CreditHandler) UpdateInstallment(w http.ResponseWriter, r *http.Request) {
 	groupID := middleware.GetGroupID(r.Context())
+	userID := middleware.GetUserID(r.Context())
 	id := chi.URLParam(r, "id")
 	iid := chi.URLParam(r, "iid")
-
-	acc, err := h.creditRepo.GetAccountByID(r.Context(), id, groupID)
+	if groupID == "" || userID == "" {
+		writeError(w, http.StatusForbidden, "group identification required")
+		return
+	}
+	scopedUser := h.getScopedUserID(r.Context(), groupID, userID)
+	acc, err := h.creditRepo.GetAccountByID(r.Context(), id, groupID, scopedUser)
 	if err != nil || acc == nil {
 		writeError(w, http.StatusNotFound, "credit account not found")
 		return
@@ -292,10 +329,15 @@ func (h *CreditHandler) UpdateInstallment(w http.ResponseWriter, r *http.Request
 // DeleteInstallment handles DELETE /api/credit-accounts/{id}/installments/{iid}
 func (h *CreditHandler) DeleteInstallment(w http.ResponseWriter, r *http.Request) {
 	groupID := middleware.GetGroupID(r.Context())
+	userID := middleware.GetUserID(r.Context())
 	id := chi.URLParam(r, "id")
 	iid := chi.URLParam(r, "iid")
-
-	acc, err := h.creditRepo.GetAccountByID(r.Context(), id, groupID)
+	if groupID == "" || userID == "" {
+		writeError(w, http.StatusForbidden, "group identification required")
+		return
+	}
+	scopedUser := h.getScopedUserID(r.Context(), groupID, userID)
+	acc, err := h.creditRepo.GetAccountByID(r.Context(), id, groupID, scopedUser)
 	if err != nil || acc == nil {
 		writeError(w, http.StatusNotFound, "credit account not found")
 		return
@@ -315,9 +357,14 @@ func (h *CreditHandler) DeleteInstallment(w http.ResponseWriter, r *http.Request
 // AddTransaction handles POST /api/credit-accounts/{id}/transactions
 func (h *CreditHandler) AddTransaction(w http.ResponseWriter, r *http.Request) {
 	groupID := middleware.GetGroupID(r.Context())
+	userID := middleware.GetUserID(r.Context())
 	id := chi.URLParam(r, "id")
-
-	acc, err := h.creditRepo.GetAccountByID(r.Context(), id, groupID)
+	if groupID == "" || userID == "" {
+		writeError(w, http.StatusForbidden, "group identification required")
+		return
+	}
+	scopedUser := h.getScopedUserID(r.Context(), groupID, userID)
+	acc, err := h.creditRepo.GetAccountByID(r.Context(), id, groupID, scopedUser)
 	if err != nil || acc == nil {
 		writeError(w, http.StatusNotFound, "credit account not found")
 		return
@@ -371,10 +418,15 @@ func (h *CreditHandler) AddTransaction(w http.ResponseWriter, r *http.Request) {
 // DeleteTransaction handles DELETE /api/credit-accounts/{id}/transactions/{tid}
 func (h *CreditHandler) DeleteTransaction(w http.ResponseWriter, r *http.Request) {
 	groupID := middleware.GetGroupID(r.Context())
+	userID := middleware.GetUserID(r.Context())
 	id := chi.URLParam(r, "id")
 	tid := chi.URLParam(r, "tid")
-
-	acc, err := h.creditRepo.GetAccountByID(r.Context(), id, groupID)
+	if groupID == "" || userID == "" {
+		writeError(w, http.StatusForbidden, "group identification required")
+		return
+	}
+	scopedUser := h.getScopedUserID(r.Context(), groupID, userID)
+	acc, err := h.creditRepo.GetAccountByID(r.Context(), id, groupID, scopedUser)
 	if err != nil || acc == nil {
 		writeError(w, http.StatusNotFound, "credit account not found")
 		return
@@ -433,12 +485,15 @@ func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstall
 			activeInstCount++
 
 			// In banking practice, unbilled future installments block the credit line
-			if inst.RemainingBalance > 0 {
-				unbilledInstallments += inst.RemainingBalance
-			} else {
-				remTerms := inst.TotalTerms - (inst.PaidTerms + 1)
-				if remTerms > 0 {
-					unbilledInstallments += float64(remTerms) * inst.MonthlyAmount
+			// But RECURRING charges (like insurance, subscriptions) are billed monthly and do not block future credit limits
+			if inst.InterestType != "RECURRING" {
+				if inst.RemainingBalance > 0 {
+					unbilledInstallments += inst.RemainingBalance
+				} else {
+					remTerms := inst.TotalTerms - (inst.PaidTerms + 1)
+					if remTerms > 0 {
+						unbilledInstallments += float64(remTerms) * inst.MonthlyAmount
+					}
 				}
 			}
 		}
@@ -483,8 +538,8 @@ func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstall
 
 	// 2. Minimum payment required for the current statement cycle
 	rate := acc.MinPaymentRate
-	if rate <= 0 {
-		rate = 2.5
+	if rate < 0 {
+		rate = 0
 	}
 	floor := acc.MinPaymentFloor
 	if floor < 0 {
@@ -497,7 +552,16 @@ func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstall
 		if revolvingBalStmt < 0 {
 			revolvingBalStmt = 0
 		}
-		revMinStmt := revolvingBalStmt * (rate / 100.0)
+		var revMinStmt float64
+		if rate > 0 {
+			revMinStmt = revolvingBalStmt * (rate / 100.0)
+		} else {
+			// rate == 0: Interest-only payment (จ่ายเฉพาะดอกเบี้ย เช่น Finnix)
+			if acc.InterestRate > 0 {
+				rawInterest := revolvingBalStmt * (acc.InterestRate / 100.0) * (30.0 / 365.0)
+				revMinStmt = math.Round(rawInterest * 100) / 100
+			}
+		}
 		if floor > 0 && revMinStmt < floor && revolvingBalStmt > 0 {
 			revMinStmt = floor
 		}
@@ -508,44 +572,70 @@ func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstall
 	}
 
 	// 3. Remaining due for the current cycle
+	hasMinOrFullPayment := false
+	for _, tx := range txs {
+		if tx.Date >= cycleStart && tx.Type == models.CreditTxPayment {
+			if tx.PaymentType != nil && (*tx.PaymentType == models.CreditPayMinimum || *tx.PaymentType == models.CreditPayFull) {
+				hasMinOrFullPayment = true
+				break
+			}
+		}
+	}
+
 	remainingDue := minPayForCycle - paidThisCycle
-	if remainingDue < 0 {
+	if remainingDue <= 0 || hasMinOrFullPayment || (paidThisCycle > 0 && minPayForCycle-paidThisCycle <= 20.0) {
 		remainingDue = 0
 	}
-	isPaidThisMonth := (minPayForCycle > 0 && paidThisCycle >= minPayForCycle) || (acc.CurrentBalance == 0 && statementBal == 0)
+	isPaidThisMonth := (minPayForCycle > 0 && (paidThisCycle >= minPayForCycle || hasMinOrFullPayment || remainingDue == 0)) || (acc.CurrentBalance == 0 && statementBal == 0)
 
-	// 4. Estimated minimum payment for NEXT cycle (based on remaining current balance)
+	// 4. Estimated minimum payment for NEXT cycle (based on remaining current balance and interest accrued to next statement date)
 	var nextCycleMin float64
+	var nextCycleInterest float64
+	var nextCycleEstimatedStmt float64
+
 	if acc.CurrentBalance > 0 {
-		revolvingBalCurr := acc.CurrentBalance - monthlyInstDue
-		if revolvingBalCurr < 0 {
-			revolvingBalCurr = 0
+		revolvingBalCurr := acc.CurrentBalance
+		unpaidInstThisCycle := monthlyInstDue - paidThisCycle
+		if unpaidInstThisCycle > 0 {
+			revolvingBalCurr = acc.CurrentBalance - unpaidInstThisCycle
+			if revolvingBalCurr < 0 {
+				revolvingBalCurr = 0
+			}
 		}
-		revMinCurr := revolvingBalCurr * (rate / 100.0)
-		if floor > 0 && revMinCurr < floor && revolvingBalCurr > 0 {
+		// Calculate estimated interest accrued to next statement date (every statementDay)
+		// Standard billing cycle is ~30 days. Daily interest = revolvingBal * (ir / 100) / 365
+		if acc.InterestRate > 0 && revolvingBalCurr > 0 {
+			rawInterest := revolvingBalCurr * (acc.InterestRate / 100.0) * (30.0 / 365.0)
+			if acc.Type == models.CreditAccountCreditCard {
+				// Thai banks add 7% VAT on credit card interest
+				nextCycleInterest = math.Round(rawInterest * 1.07 * 100) / 100
+			} else {
+				// Personal loans / nano finance: interest is exempt from VAT
+				nextCycleInterest = math.Round(rawInterest * 100) / 100
+			}
+		}
+
+		nextCycleEstimatedStmt = math.Round((acc.CurrentBalance + nextCycleInterest) * 100) / 100
+
+		// Next cycle minimum calculation includes revolving balance plus accrued interest
+		revolvingBaseNext := revolvingBalCurr + nextCycleInterest
+		var revMinCurr float64
+		if rate > 0 {
+			revMinCurr = revolvingBaseNext * (rate / 100.0)
+		} else {
+			// rate == 0: Interest-only payment (จ่ายเฉพาะดอกเบี้ย)
+			revMinCurr = nextCycleInterest
+		}
+		if floor > 0 && revMinCurr < floor && revolvingBaseNext > 0 {
 			revMinCurr = floor
 		}
 		nextCycleMin = math.Ceil(monthlyInstDue + revMinCurr)
-		if nextCycleMin > acc.CurrentBalance {
-			nextCycleMin = acc.CurrentBalance
+		if nextCycleMin > nextCycleEstimatedStmt {
+			nextCycleMin = nextCycleEstimatedStmt
 		}
 	}
-
 	// Total due this month:
-	var totalDue float64
-	if acc.Type == models.CreditAccountPersonalLoan {
-		if monthlyInstDue > 0 {
-			remInst := monthlyInstDue - paidThisCycle
-			if remInst < 0 {
-				remInst = 0
-			}
-			totalDue = remInst
-		} else {
-			totalDue = remainingDue
-		}
-	} else {
-		totalDue = remainingDue
-	}
+	totalDue := remainingDue
 
 	return models.CreditAccountDetail{
 		CreditAccount:          acc,
@@ -554,10 +644,13 @@ func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstall
 		UnbilledInstallments:   unbilledInstallments,
 		MonthlyInstallmentDue:  monthlyInstDue,
 		TotalDueThisMonth:      totalDue,
-		EstimatedMinPayment:    minPayForCycle,
-		IsPaidThisMonth:        isPaidThisMonth,
-		NextCycleEstimatedMin:  nextCycleMin,
-		ActiveInstallmentCount: activeInstCount,
+		EstimatedMinPayment:         minPayForCycle,
+		PaidThisMonth:               paidThisCycle,
+		IsPaidThisMonth:             isPaidThisMonth,
+		NextCycleEstimatedMin:       nextCycleMin,
+		NextCycleEstimatedInterest:  nextCycleInterest,
+		NextCycleEstimatedStatement: nextCycleEstimatedStmt,
+		ActiveInstallmentCount:      activeInstCount,
 		Installments:           insts,
 		Transactions:           txs,
 	}

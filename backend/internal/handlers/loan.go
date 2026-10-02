@@ -23,15 +23,24 @@ func NewLoanHandler(loanRepo *repository.LoanRepository, groupRepo *repository.G
 	return &LoanHandler{loanRepo: loanRepo, groupRepo: groupRepo}
 }
 
+func (h *LoanHandler) getScopedUserID(ctx context.Context, groupID, userID string) string {
+	settings, err := h.groupRepo.GetGroupSettings(ctx, groupID)
+	if err == nil && !settings.ShareLoans {
+		return userID
+	}
+	return ""
+}
+
 // ListLoans handles GET /api/loans
 func (h *LoanHandler) ListLoans(w http.ResponseWriter, r *http.Request) {
 	groupID := middleware.GetGroupID(r.Context())
-	if groupID == "" {
+	userID := middleware.GetUserID(r.Context())
+	if groupID == "" || userID == "" {
 		writeError(w, http.StatusForbidden, "group identification required")
 		return
 	}
-
-	loans, err := h.loanRepo.ListByGroup(r.Context(), groupID)
+	scopedUser := h.getScopedUserID(r.Context(), groupID, userID)
+	loans, err := h.loanRepo.ListByGroup(r.Context(), groupID, scopedUser)
 	if err != nil {
 		log.Printf("ERROR: ListLoans: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to fetch loans")
@@ -65,8 +74,13 @@ func (h *LoanHandler) ListLoans(w http.ResponseWriter, r *http.Request) {
 func (h *LoanHandler) GetLoanDetail(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	groupID := middleware.GetGroupID(r.Context())
-
-	loan, err := h.loanRepo.GetByID(r.Context(), id, groupID)
+	userID := middleware.GetUserID(r.Context())
+	if groupID == "" || userID == "" {
+		writeError(w, http.StatusForbidden, "group identification required")
+		return
+	}
+	scopedUser := h.getScopedUserID(r.Context(), groupID, userID)
+	loan, err := h.loanRepo.GetByID(r.Context(), id, groupID, scopedUser)
 	if err != nil || loan == nil {
 		writeError(w, http.StatusNotFound, "loan not found")
 		return
@@ -80,7 +94,11 @@ func (h *LoanHandler) GetLoanDetail(w http.ResponseWriter, r *http.Request) {
 func (h *LoanHandler) CreateLoan(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	groupID := middleware.GetGroupID(r.Context())
-
+	if groupID == "" || userID == "" {
+		writeError(w, http.StatusForbidden, "group identification required")
+		return
+	}
+	// Creation is allowed; loan is saved with creator's userID and groupID
 	var req models.CreateLoanRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON payload: "+err.Error())
@@ -131,14 +149,19 @@ func (h *LoanHandler) CreateLoan(w http.ResponseWriter, r *http.Request) {
 func (h *LoanHandler) UpdateLoan(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	groupID := middleware.GetGroupID(r.Context())
-
+	userID := middleware.GetUserID(r.Context())
+	if groupID == "" || userID == "" {
+		writeError(w, http.StatusForbidden, "group identification required")
+		return
+	}
+	scopedUser := h.getScopedUserID(r.Context(), groupID, userID)
 	var req models.UpdateLoanRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON payload: "+err.Error())
 		return
 	}
 
-	if err := h.loanRepo.Update(r.Context(), id, groupID, req); err != nil {
+	if err := h.loanRepo.Update(r.Context(), id, groupID, req, scopedUser); err != nil {
 		log.Printf("ERROR: UpdateLoan: %v", err)
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -151,9 +174,13 @@ func (h *LoanHandler) UpdateLoan(w http.ResponseWriter, r *http.Request) {
 func (h *LoanHandler) DeleteLoan(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	groupID := middleware.GetGroupID(r.Context())
-
-	if err := h.loanRepo.Delete(r.Context(), id, groupID); err != nil {
-		log.Printf("ERROR: DeleteLoan: %v", err)
+	userID := middleware.GetUserID(r.Context())
+	if groupID == "" || userID == "" {
+		writeError(w, http.StatusForbidden, "group identification required")
+		return
+	}
+	scopedUser := h.getScopedUserID(r.Context(), groupID, userID)
+	if err := h.loanRepo.Delete(r.Context(), id, groupID, scopedUser); err != nil {
 		writeError(w, http.StatusNotFound, err.Error())
 		return
 	}
@@ -167,9 +194,14 @@ func (h *LoanHandler) DeleteLoan(w http.ResponseWriter, r *http.Request) {
 func (h *LoanHandler) ListEntries(w http.ResponseWriter, r *http.Request) {
 	loanID := chi.URLParam(r, "id")
 	groupID := middleware.GetGroupID(r.Context())
-
-	// Verify loan belongs to this group
-	_, err := h.loanRepo.GetByID(r.Context(), loanID, groupID)
+	userID := middleware.GetUserID(r.Context())
+	if groupID == "" || userID == "" {
+		writeError(w, http.StatusForbidden, "group identification required")
+		return
+	}
+	scopedUser := h.getScopedUserID(r.Context(), groupID, userID)
+	// Verify loan belongs to this group and user (if scoped)
+	_, err := h.loanRepo.GetByID(r.Context(), loanID, groupID, scopedUser)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "loan not found")
 		return
@@ -189,9 +221,14 @@ func (h *LoanHandler) ListEntries(w http.ResponseWriter, r *http.Request) {
 func (h *LoanHandler) AddEntry(w http.ResponseWriter, r *http.Request) {
 	loanID := chi.URLParam(r, "id")
 	groupID := middleware.GetGroupID(r.Context())
-
-	// Verify loan belongs to this group
-	_, err := h.loanRepo.GetByID(r.Context(), loanID, groupID)
+	userID := middleware.GetUserID(r.Context())
+	if groupID == "" || userID == "" {
+		writeError(w, http.StatusForbidden, "group identification required")
+		return
+	}
+	scopedUser := h.getScopedUserID(r.Context(), groupID, userID)
+	// Verify loan belongs to this group and user (if scoped)
+	_, err := h.loanRepo.GetByID(r.Context(), loanID, groupID, scopedUser)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "loan not found")
 		return
@@ -233,7 +270,18 @@ func (h *LoanHandler) AddEntry(w http.ResponseWriter, r *http.Request) {
 // DeleteEntry handles DELETE /api/loans/{id}/entries/{eid}
 func (h *LoanHandler) DeleteEntry(w http.ResponseWriter, r *http.Request) {
 	entryID := chi.URLParam(r, "eid")
-
+	loanID := chi.URLParam(r, "id")
+	groupID := middleware.GetGroupID(r.Context())
+	userID := middleware.GetUserID(r.Context())
+	if groupID == "" || userID == "" {
+		writeError(w, http.StatusForbidden, "group identification required")
+		return
+	}
+	scopedUser := h.getScopedUserID(r.Context(), groupID, userID)
+	if _, err := h.loanRepo.GetByID(r.Context(), loanID, groupID, scopedUser); err != nil {
+		writeError(w, http.StatusNotFound, "loan not found")
+		return
+	}
 	if err := h.loanRepo.DeleteEntry(r.Context(), entryID); err != nil {
 		log.Printf("ERROR: DeleteEntry: %v", err)
 		writeError(w, http.StatusNotFound, err.Error())

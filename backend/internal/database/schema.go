@@ -37,6 +37,17 @@ CREATE TABLE IF NOT EXISTS group_members (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 `
+const createGroupSettingsTable = `
+CREATE TABLE IF NOT EXISTS group_settings (
+    group_id     TEXT PRIMARY KEY,
+    share_credit INTEGER NOT NULL DEFAULT 1,
+    share_loans  INTEGER NOT NULL DEFAULT 1,
+    share_annual INTEGER NOT NULL DEFAULT 1,
+    updated_at   TEXT NOT NULL,
+    FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE
+);
+`
+
 
 // createTransactionsTable is the DDL for the transactions table.
 const createTransactionsTable = `
@@ -300,6 +311,7 @@ func (d *DB) Migrate() error {
 		{"credit_accounts", createCreditAccountsTable},
 		{"credit_installments", createCreditInstallmentsTable},
 		{"credit_transactions", createCreditTransactionsTable},
+		{"group_settings", createGroupSettingsTable},
 	}
 
 	for _, t := range tables {

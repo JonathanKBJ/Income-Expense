@@ -508,8 +508,8 @@ func (r *TransactionRepository) DeleteBatch(ctx context.Context, ids []string, g
 	return nil
 }
 
-// GetAnnualSummary retrieves and aggregates all transactions for a given year and group.
-func (r *TransactionRepository) GetAnnualSummary(ctx context.Context, year int, groupID string) (*models.AnnualSummaryResponse, error) {
+// GetAnnualSummary retrieves and aggregates all transactions for a given year and group, optionally scoped to a user.
+func (r *TransactionRepository) GetAnnualSummary(ctx context.Context, year int, groupID string, filterUserID ...string) (*models.AnnualSummaryResponse, error) {
 	startDate := fmt.Sprintf("%04d-01-01", year)
 	endDate := fmt.Sprintf("%04d-01-01", year+1)
 
@@ -518,8 +518,13 @@ func (r *TransactionRepository) GetAnnualSummary(ctx context.Context, year int, 
 		FROM transactions
 		WHERE date >= ? AND date < ? AND group_id = ?
 	`
+	args := []interface{}{startDate, endDate, groupID}
+	if len(filterUserID) > 0 && filterUserID[0] != "" {
+		query += " AND (user_id = ? OR created_by = ?)"
+		args = append(args, filterUserID[0], filterUserID[0])
+	}
 
-	rows, err := r.db.QueryContext(ctx, query, startDate, endDate, groupID)
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query annual transactions: %w", err)
 	}

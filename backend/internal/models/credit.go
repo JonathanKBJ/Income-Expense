@@ -109,9 +109,12 @@ type CreditAccountDetail struct {
 	UnbilledInstallments   float64             `json:"unbilledInstallments"`
 	MonthlyInstallmentDue  float64             `json:"monthlyInstallmentDue"`
 	TotalDueThisMonth      float64             `json:"totalDueThisMonth"`
-	EstimatedMinPayment    float64             `json:"estimatedMinPayment"`
-	IsPaidThisMonth        bool                `json:"isPaidThisMonth"`
-	NextCycleEstimatedMin  float64             `json:"nextCycleEstimatedMin"`
+	EstimatedMinPayment         float64             `json:"estimatedMinPayment"`
+	PaidThisMonth               float64             `json:"paidThisMonth"`
+	IsPaidThisMonth             bool                `json:"isPaidThisMonth"`
+	NextCycleEstimatedMin       float64             `json:"nextCycleEstimatedMin"`
+	NextCycleEstimatedInterest  float64             `json:"nextCycleEstimatedInterest"`
+	NextCycleEstimatedStatement float64             `json:"nextCycleEstimatedStatement"`
 	ActiveInstallmentCount int                 `json:"activeInstallmentCount"`
 	Installments           []CreditInstallment `json:"installments"`
 	Transactions           []CreditTransaction `json:"transactions"`
@@ -122,9 +125,11 @@ type CreditDashboardSummary struct {
 	TotalCreditLimit     float64 `json:"totalCreditLimit"`
 	TotalCurrentBalance  float64 `json:"totalCurrentBalance"`
 	TotalAvailableCredit float64 `json:"totalAvailableCredit"`
-	TotalEstimatedDue    float64 `json:"totalEstimatedDue"`
-	TotalAccounts        int     `json:"totalAccounts"`
-	ActiveAccounts       int     `json:"activeAccounts"`
+	TotalEstimatedDue           float64 `json:"totalEstimatedDue"`
+	TotalNextCycleOutstanding   float64 `json:"totalNextCycleOutstanding"`
+	TotalNextCycleEstimatedDue  float64 `json:"totalNextCycleEstimatedDue"`
+	TotalAccounts               int     `json:"totalAccounts"`
+	ActiveAccounts              int     `json:"activeAccounts"`
 }
 
 // --- Request DTOs ---

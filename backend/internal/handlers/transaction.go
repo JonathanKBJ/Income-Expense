@@ -144,12 +144,19 @@ func (h *TransactionHandler) GetAnnualSummary(w http.ResponseWriter, r *http.Req
 
 	// Injected by AuthMiddleware
 	groupID := middleware.GetGroupID(r.Context())
-	if groupID == "" {
+	userID := middleware.GetUserID(r.Context())
+	if groupID == "" || userID == "" {
 		writeError(w, http.StatusForbidden, "group identification required for this operation")
 		return
 	}
 
-	result, err := h.repo.GetAnnualSummary(r.Context(), year, groupID)
+	var filterUserID string
+	settings, sErr := h.groupRepo.GetGroupSettings(r.Context(), groupID)
+	if sErr == nil && !settings.ShareAnnual {
+		filterUserID = userID
+	}
+
+	result, err := h.repo.GetAnnualSummary(r.Context(), year, groupID, filterUserID)
 	if err != nil {
 		log.Printf("ERROR: GetAnnualSummary: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to fetch annual summary")

@@ -18,11 +18,12 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
   const [creatingGroup, setCreatingGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
 
+
+
   function handleNavigate(page: Page) {
     onNavigate(page);
     setIsOpen(false);
   }
-
   return (
     <>
       {/* Hamburger Button */}
@@ -200,6 +201,7 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
             </svg>
             <span>{t.common.annual}</span>
           </button>
+
           {/* Credit Cards & Personal Loans */}
           <button
             className={`sidebar-item ${activePage === "credit" ? "active" : ""}`}
@@ -213,7 +215,6 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
             <span>{t.common.creditCards}</span>
           </button>
 
-
           {/* Loans & Debts */}
           <button
             className={`sidebar-item ${activePage === "loans" ? "active" : ""}`}
@@ -226,7 +227,6 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
             </svg>
             <span>{t.common.loans}</span>
           </button>
-
           <div className="sidebar-section-title">
             <span>{t.common.settings}</span>
           </div>

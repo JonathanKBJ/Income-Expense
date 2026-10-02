@@ -29,8 +29,8 @@ func (r *CreditRepository) CreateAccount(ctx context.Context, acc *models.Credit
 	if acc.Status == "" {
 		acc.Status = models.CreditStatusActive
 	}
-	if acc.MinPaymentRate <= 0 {
-		acc.MinPaymentRate = 5.0
+	if acc.MinPaymentRate < 0 {
+		acc.MinPaymentRate = 0
 	}
 	if acc.MinPaymentFloor < 0 {
 		acc.MinPaymentFloor = 0
@@ -56,13 +56,19 @@ func (r *CreditRepository) CreateAccount(ctx context.Context, acc *models.Credit
 }
 
 // GetAccountByID retrieves a single credit account belonging to groupID.
-func (r *CreditRepository) GetAccountByID(ctx context.Context, id, groupID string) (*models.CreditAccount, error) {
+// GetAccountByID retrieves a single credit account belonging to groupID, optionally scoped to a user.
+func (r *CreditRepository) GetAccountByID(ctx context.Context, id, groupID string, filterUserID ...string) (*models.CreditAccount, error) {
 	query := `SELECT id, name, type, bank, credit_limit, current_balance, statement_day, payment_due_day,
 		interest_rate, min_payment_rate, min_payment_floor, status, notes, group_id, user_id,
 		created_at, updated_at
 		FROM credit_accounts WHERE id = ? AND group_id = ?`
+	args := []interface{}{id, groupID}
+	if len(filterUserID) > 0 && filterUserID[0] != "" {
+		query += " AND user_id = ?"
+		args = append(args, filterUserID[0])
+	}
 
-	row := r.db.QueryRowContext(ctx, query, id, groupID)
+	row := r.db.QueryRowContext(ctx, query, args...)
 
 	var a models.CreditAccount
 	var cAt, uAt string
@@ -83,13 +89,20 @@ func (r *CreditRepository) GetAccountByID(ctx context.Context, id, groupID strin
 }
 
 // ListAccountsByGroup retrieves all credit accounts in a group.
-func (r *CreditRepository) ListAccountsByGroup(ctx context.Context, groupID string) ([]models.CreditAccount, error) {
+// ListAccountsByGroup retrieves all credit accounts in a group, optionally filtered by user.
+func (r *CreditRepository) ListAccountsByGroup(ctx context.Context, groupID string, filterUserID ...string) ([]models.CreditAccount, error) {
 	query := `SELECT id, name, type, bank, credit_limit, current_balance, statement_day, payment_due_day,
 		interest_rate, min_payment_rate, min_payment_floor, status, notes, group_id, user_id,
 		created_at, updated_at
-		FROM credit_accounts WHERE group_id = ? ORDER BY created_at DESC`
+		FROM credit_accounts WHERE group_id = ?`
+	args := []interface{}{groupID}
+	if len(filterUserID) > 0 && filterUserID[0] != "" {
+		query += " AND user_id = ?"
+		args = append(args, filterUserID[0])
+	}
+	query += " ORDER BY created_at DESC"
 
-	rows, err := r.db.QueryContext(ctx, query, groupID)
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list credit accounts: %w", err)
 	}
@@ -117,7 +130,7 @@ func (r *CreditRepository) ListAccountsByGroup(ctx context.Context, groupID stri
 }
 
 // UpdateAccount updates specified fields of a credit account.
-func (r *CreditRepository) UpdateAccount(ctx context.Context, id, groupID string, req models.UpdateCreditAccountRequest) error {
+func (r *CreditRepository) UpdateAccount(ctx context.Context, id, groupID string, req models.UpdateCreditAccountRequest, filterUserID ...string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	query := "UPDATE credit_accounts SET updated_at = ?"
 	args := []interface{}{now}
@@ -173,6 +186,10 @@ func (r *CreditRepository) UpdateAccount(ctx context.Context, id, groupID string
 
 	query += " WHERE id = ? AND group_id = ?"
 	args = append(args, id, groupID)
+	if len(filterUserID) > 0 && filterUserID[0] != "" {
+		query += " AND user_id = ?"
+		args = append(args, filterUserID[0])
+	}
 
 	res, err := r.db.ExecContext(ctx, query, args...)
 	if err != nil {
@@ -186,8 +203,14 @@ func (r *CreditRepository) UpdateAccount(ctx context.Context, id, groupID string
 }
 
 // DeleteAccount deletes a credit account and cascades to installments and transactions.
-func (r *CreditRepository) DeleteAccount(ctx context.Context, id, groupID string) error {
-	res, err := r.db.ExecContext(ctx, `DELETE FROM credit_accounts WHERE id = ? AND group_id = ?`, id, groupID)
+func (r *CreditRepository) DeleteAccount(ctx context.Context, id, groupID string, filterUserID ...string) error {
+	query := `DELETE FROM credit_accounts WHERE id = ? AND group_id = ?`
+	args := []interface{}{id, groupID}
+	if len(filterUserID) > 0 && filterUserID[0] != "" {
+		query += " AND user_id = ?"
+		args = append(args, filterUserID[0])
+	}
+	res, err := r.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("failed to delete credit account: %w", err)
 	}

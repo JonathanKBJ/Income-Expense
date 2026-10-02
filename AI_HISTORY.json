@@ -821,4 +821,60 @@
         "logic_changed": "Protected formatMoney against undefined, null, and NaN. Restored monthlyInstallmentDue and totalDueThisMonth in CreditAccountDetail struct and computeAccountDetail mapping to eliminate runtime render exceptions.",
         "ai_warning": "Always ensure formatMoney handles missing numbers gracefully and all CreditAccountDetail struct fields are mapped in handler responses."
     }
+    ,
+    {
+        "date": "2026-10-02",
+        "scope": "[Full-Stack]",
+        "task": "Support interest-only minimum payment (0% rate) for loans like Finnix and VAT differentiation",
+        "files_touched": [
+            "backend/internal/handlers/credit.go",
+            "backend/internal/models/credit.go",
+            "backend/internal/repository/credit.go",
+            "frontend/src/types/credit.ts",
+            "frontend/src/translations/index.ts",
+            "frontend/src/components/CreditTracker.tsx"
+        ],
+        "logic_changed": "Allowed minPaymentRate to be 0 for interest-only revolving credit (e.g. Finnix จ่ายเฉพาะดอกเบี้ย). When rate is 0, computeAccountDetail automatically charges only the accrued cycle interest with 0% principal. Handled date-adjusted calculations for interest-only loans. Fixed repository to allow 0 min_payment_rate and updated UI to allow 0% input with 'จ่ายเฉพาะดอก' label.",
+        "ai_warning": "When minPaymentRate is 0, minimum payment strictly equals the accrued cycle interest. Do not default rate to 2.5 or 5 when 0 is explicitly configured."
+    }
+    ,
+    {
+        "date": "2026-10-02",
+        "scope": "[Frontend]",
+        "task": "Fix dark/light theme text contrast and implement responsive mobile view in Credit Cards & Loans",
+        "files_touched": [
+            "frontend/src/App.css",
+            "frontend/src/components/CreditTracker.tsx"
+        ],
+        "logic_changed": "Replaced hardcoded #fff and white rgba colors in CreditTracker with CSS theme variables (var(--text-primary), var(--text-secondary), var(--border-subtle), var(--bg-card)) and isDark conditionals to eliminate dark-on-dark title blending in dark mode and invisible white-on-white text in light mode. Added .credit-tracker-* classes with !important text colors in App.css. Implemented full mobile responsiveness (MOBILE_BP=768): 2x3 overview grid, full-width single-column list vs. detail drilldown with Back button on mobile, horizontal scroll for tables (x: 650/550), and responsive modal widths.",
+        "ai_warning": "On mobile (<=768px), selecting an account switches the view to the detail panel via showDetailMobile state; deleting or unselecting resets this state. All future text elements in CreditTracker must use CSS theme variables or .credit-tracker-* classes rather than hardcoded white (#fff) to avoid regressions in light mode."
+    }
+    ,
+    {
+        "date": "2026-10-02",
+        "scope": "[Full-Stack]",
+        "task": "Group Menu Data Scoping: keep Sidebar menus always accessible while scoping data to personal-only (user_id) when sharing is disabled vs. group-shared (group_id) when enabled",
+        "files_touched": [
+            "backend/internal/database/schema.go",
+            "backend/internal/models/group.go",
+            "backend/internal/repository/group.go",
+            "backend/internal/repository/credit.go",
+            "backend/internal/repository/loan.go",
+            "backend/internal/repository/transaction.go",
+            "backend/internal/handlers/group.go",
+            "backend/internal/handlers/credit.go",
+            "backend/internal/handlers/loan.go",
+            "backend/internal/handlers/transaction.go",
+            "backend/internal/router/router.go",
+            "frontend/src/api/group.ts",
+            "frontend/src/translations/index.ts",
+            "frontend/src/components/Sidebar.tsx",
+            "frontend/src/components/GroupPage.tsx",
+            "frontend/src/components/CreditTracker.tsx",
+            "frontend/src/components/LoanTracker.tsx",
+            "frontend/src/App.tsx"
+        ],
+        "logic_changed": "Instead of hiding Sidebar menus or throwing 403 Forbidden errors when sharing is turned off, menus remain universally accessible. Added filterUserID support across creditRepo, loanRepo, and transactionRepo. When shareCredit/shareLoans/shareAnnual is disabled in group_settings, handlers scope queries and mutations to the requester's own records (WHERE group_id = ? AND user_id = ?). When enabled, queries return group-wide data. Added sharing badges (👥 แชร์ในกลุ่ม vs 🔒 ส่วนตัว) to CreditTracker and LoanTracker headers, and interactive Group Menu Permissions switches in GroupPage.tsx.",
+        "ai_warning": "When sharing is disabled, credit accounts and loans created by users remain saved under their user_id within the group. Enabling sharing immediately includes those records in group views without database migration."
+    }
 ]

@@ -38,11 +38,28 @@ type GroupMember struct {
 
 // GroupInfo is returned by GET /api/me/group (the user's current group context).
 type GroupInfo struct {
-	ID          string        `json:"id"`
-	Name        string        `json:"name"`
-	MemberCount int           `json:"memberCount"`
-	Members     []GroupMember `json:"members"`
-	MyRole      GroupRole     `json:"myRole"`
+	ID          string         `json:"id"`
+	Name        string         `json:"name"`
+	MemberCount int            `json:"memberCount"`
+	Members     []GroupMember  `json:"members"`
+	MyRole      GroupRole      `json:"myRole"`
+	Settings    *GroupSettings `json:"settings,omitempty"`
+}
+
+// GroupSettings defines menu-level sharing configuration for a group.
+type GroupSettings struct {
+	GroupID     string `json:"groupId"`
+	ShareCredit bool   `json:"shareCredit"`
+	ShareLoans  bool   `json:"shareLoans"`
+	ShareAnnual bool   `json:"shareAnnual"`
+	UpdatedAt   string `json:"updatedAt"`
+}
+
+// UpdateGroupSettingsRequest is the payload for updating group sharing settings.
+type UpdateGroupSettingsRequest struct {
+	ShareCredit *bool `json:"shareCredit"`
+	ShareLoans  *bool `json:"shareLoans"`
+	ShareAnnual *bool `json:"shareAnnual"`
 }
 
 // ActivityLogEntry represents one activity record.

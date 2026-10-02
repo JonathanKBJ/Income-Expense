@@ -293,6 +293,8 @@ func (r *GroupRepository) GetGroupInfo(ctx context.Context, groupID, userID stri
 	if info.Members == nil {
 		info.Members = []models.GroupMember{}
 	}
+	settings, _ := r.GetGroupSettings(ctx, groupID)
+	info.Settings = settings
 
 	return &info, nil
 }
@@ -348,4 +350,60 @@ func (r *GroupRepository) GroupHasMultipleMembers(ctx context.Context, groupID s
 		return false, fmt.Errorf("failed to count group members: %w", err)
 	}
 	return count > 1, nil
+}
+
+// GetGroupSettings retrieves sharing settings for a group, returning defaults if not yet set.
+func (r *GroupRepository) GetGroupSettings(ctx context.Context, groupID string) (*models.GroupSettings, error) {
+	query := `SELECT group_id, share_credit, share_loans, share_annual, updated_at FROM group_settings WHERE group_id = ?`
+	var s models.GroupSettings
+	var sc, sl, sa int
+	err := r.db.QueryRowContext(ctx, query, groupID).Scan(&s.GroupID, &sc, &sl, &sa, &s.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return &models.GroupSettings{
+				GroupID:     groupID,
+				ShareCredit: true,
+				ShareLoans:  true,
+				ShareAnnual: true,
+			}, nil
+		}
+		return nil, fmt.Errorf("failed to get group settings: %w", err)
+	}
+	s.ShareCredit = sc == 1
+	s.ShareLoans = sl == 1
+	s.ShareAnnual = sa == 1
+	return &s, nil
+}
+
+// UpdateGroupSettings upserts sharing settings for a group.
+func (r *GroupRepository) UpdateGroupSettings(ctx context.Context, groupID string, settings *models.GroupSettings) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	sc := 0
+	if settings.ShareCredit {
+		sc = 1
+	}
+	sl := 0
+	if settings.ShareLoans {
+		sl = 1
+	}
+	sa := 0
+	if settings.ShareAnnual {
+		sa = 1
+	}
+
+	query := `INSERT INTO group_settings (group_id, share_credit, share_loans, share_annual, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(group_id) DO UPDATE SET
+			share_credit = excluded.share_credit,
+			share_loans = excluded.share_loans,
+			share_annual = excluded.share_annual,
+			updated_at = excluded.updated_at`
+
+	_, err := r.db.ExecContext(ctx, query, groupID, sc, sl, sa, now)
+	if err != nil {
+		return fmt.Errorf("failed to update group settings: %w", err)
+	}
+	settings.GroupID = groupID
+	settings.UpdatedAt = now
+	return nil
 }

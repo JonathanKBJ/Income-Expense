@@ -145,6 +145,22 @@ export interface TranslationKeys {
     walletCreated: string;
     walletCreateFailed: string;
     createWallet: string;
+    menuSharingTitle: string;
+    menuSharingSubtitle: string;
+    shareCreditTitle: string;
+    shareCreditDesc: string;
+    shareLoansTitle: string;
+    shareLoansDesc: string;
+    shareAnnualTitle: string;
+    shareAnnualDesc: string;
+    ownerOnlyNote: string;
+    menuDisabledForMembers: string;
+    menuSharingUpdated: string;
+    sharedWithGroup: string;
+    personalOnly: string;
+    sharedModeBadge: string;
+    personalModeBadge: string;
+    ownerOnlyAccess: string;
   };
   loansPage: {
     title: string;
@@ -258,6 +274,8 @@ export interface TranslationKeys {
     totalOutstanding: string;
     totalAvailable: string;
     totalDueEstimated: string;
+    totalNextCycleOutstanding: string;
+    totalNextCycleEstimatedDue: string;
   };
   auth: {
     welcomeBack: string;
@@ -453,6 +471,22 @@ export const translations: Record<Language, TranslationKeys> = {
       walletCreated: "Wallet created",
       walletCreateFailed: "Failed to create wallet",
       createWallet: "Create New Wallet",
+      menuSharingTitle: "Menu Sharing Permissions",
+      menuSharingSubtitle: "Configure which menus and data are shared with group members",
+      shareCreditTitle: "Credit Cards & Loans",
+      shareCreditDesc: "When enabled, members share credit cards and loans. When disabled, each member only sees their own cards.",
+      shareLoansTitle: "Loans & Debts",
+      shareLoansDesc: "When enabled, members share loan records. When disabled, each member only sees their own loans.",
+      shareAnnualTitle: "Annual Dashboard",
+      shareAnnualDesc: "When enabled, annual overview aggregates all group transactions. When disabled, members see only their own annual stats.",
+      ownerOnlyNote: "Only group owner can modify menu sharing permissions",
+      menuDisabledForMembers: "This feature is restricted by the group owner",
+      menuSharingUpdated: "Sharing permissions updated successfully",
+      sharedWithGroup: "Shared with Group",
+      personalOnly: "Personal Only",
+      sharedModeBadge: "Group Shared",
+      personalModeBadge: "Personal",
+      ownerOnlyAccess: "Owner Only",
     },
     loansPage: {
       title: "Loans & Debts",
@@ -566,6 +600,8 @@ export const translations: Record<Language, TranslationKeys> = {
       totalOutstanding: "Total Outstanding",
       totalAvailable: "Total Available",
       totalDueEstimated: "Est. Due This Month",
+      totalNextCycleOutstanding: "Est. Next Month Debt",
+      totalNextCycleEstimatedDue: "Est. Next Month Due",
     },
     auth: {
       welcomeBack: "Welcome Back",
@@ -762,6 +798,22 @@ export const translations: Record<Language, TranslationKeys> = {
       walletCreated: "สร้างกระเป๋าแล้ว",
       walletCreateFailed: "สร้างกระเป๋าไม่สำเร็จ",
       createWallet: "สร้างกระเป๋าใหม่",
+      menuSharingTitle: "สิทธิ์การแชร์เมนูในกลุ่ม",
+      menuSharingSubtitle: "เลือกเปิด/ปิดเมนูที่ต้องการแชร์ให้สมาชิกในกลุ่มเข้าถึงและใช้งานร่วมกัน",
+      shareCreditTitle: "บัตรเครดิต & สินเชื่อส่วนบุคคล",
+      shareCreditDesc: "เมื่อเปิดแชร์ สมาชิกทุกคนจะเห็นบัตรเครดิตร่วมกัน หากปิด สมาชิกแต่ละคนจะเห็นเฉพาะบัตรส่วนตัวของตนเอง",
+      shareLoansTitle: "เงินกู้ & หนี้สิน",
+      shareLoansDesc: "เมื่อเปิดแชร์ สมาชิกทุกคนจะเห็นรายการเงินกู้ร่วมกัน หากปิด สมาชิกแต่ละคนจะเห็นเฉพาะรายการของตนเอง",
+      shareAnnualTitle: "แดชบอร์ดสรุปรายปี",
+      shareAnnualDesc: "เมื่อเปิดแชร์ จะสรุปภาพรวมรายปีทั้งกลุ่ม หากปิด สมาชิกแต่ละคนจะเห็นเฉพาะสถิติส่วนบุคคลของตนเอง",
+      ownerOnlyNote: "เฉพาะเจ้าของกลุ่ม (Owner) เท่านั้นที่สามารถเปลี่ยนการตั้งค่าการแชร์เมนูได้",
+      menuDisabledForMembers: "เมนูนี้ถูกจำกัดการเข้าถึงโดยเจ้าของกลุ่ม",
+      menuSharingUpdated: "อัปเดตสิทธิ์การแชร์เมนูเรียบร้อยแล้ว",
+      sharedWithGroup: "แชร์ให้สมาชิกในกลุ่ม",
+      personalOnly: "ส่วนตัว (เห็นเฉพาะของตนเอง)",
+      sharedModeBadge: "แชร์ในกลุ่ม",
+      personalModeBadge: "ส่วนตัว",
+      ownerOnlyAccess: "เฉพาะเจ้าของกลุ่ม",
     },
     loansPage: {
       title: "เงินกู้และหนี้สิน",
@@ -875,6 +927,8 @@ export const translations: Record<Language, TranslationKeys> = {
       totalOutstanding: "ยอดหนี้คงค้างรวม",
       totalAvailable: "วงเงินคงเหลือรวม",
       totalDueEstimated: "ยอดที่ต้องจ่ายเดือนนี้ (ประมาณการ)",
+      totalNextCycleOutstanding: "ยอดหนี้คงค้างรวมเดือนถัดไป (ประมาณการ)",
+      totalNextCycleEstimatedDue: "ยอดที่ต้องจ่ายเดือนถัดไป (ประมาณการ)",
     },
     auth: {
       welcomeBack: "ยินดีต้อนรับกลับ",
