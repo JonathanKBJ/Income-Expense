@@ -20,12 +20,13 @@ import Login from "./components/Login";
 import Register from "./components/Register";
 import AdminPanel from "./components/AdminPanel";
 import AnnualDashboard from "./components/AnnualDashboard";
+import CreditTracker from "./components/CreditTracker";
 import { Analytics } from "@vercel/analytics/react";
 import { AUTH_EXPIRED_EVENT } from "./api/client";
 import * as api from "./api/transactions";
 import "./App.css";
 
-type Page = "dashboard" | "annual" | "categories" | "admin" | "group" | "loans";
+type Page = "dashboard" | "annual" | "credit" | "loans" | "categories" | "admin" | "group";
 
 const getAntdTheme = (isDark: boolean) => ({
   algorithm: isDark ? theme.darkAlgorithm : theme.defaultAlgorithm,
@@ -53,6 +54,8 @@ function AuthenticatedApp() {
     const saved = localStorage.getItem("annual_year");
     return saved ? parseInt(saved, 10) : new Date().getFullYear();
   });
+
+
 
   const {
     transactions,
@@ -235,6 +238,7 @@ function AuthenticatedApp() {
         {activePage === "admin" && <AdminPanel />}
         {activePage === "group" && <GroupPage />}
         {activePage === "loans" && <LoanTracker />}
+        {activePage === "credit" && <CreditTracker />}
       </main>
 
       <footer className="app-footer">

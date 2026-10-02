@@ -37,6 +37,17 @@ CREATE TABLE IF NOT EXISTS group_members (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 `
+const createGroupSettingsTable = `
+CREATE TABLE IF NOT EXISTS group_settings (
+    group_id     TEXT PRIMARY KEY,
+    share_credit INTEGER NOT NULL DEFAULT 1,
+    share_loans  INTEGER NOT NULL DEFAULT 1,
+    share_annual INTEGER NOT NULL DEFAULT 1,
+    updated_at   TEXT NOT NULL,
+    FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE
+);
+`
+
 
 // createTransactionsTable is the DDL for the transactions table.
 const createTransactionsTable = `
@@ -172,6 +183,85 @@ CREATE TABLE IF NOT EXISTS loan_entries (
 const createLoanEntriesIndex = `
 CREATE INDEX IF NOT EXISTS idx_loan_entries_loan ON loan_entries(loan_id, date);
 `
+// createCreditAccountsTable is the DDL for credit cards, cash cards, and personal loans.
+const createCreditAccountsTable = `
+CREATE TABLE IF NOT EXISTS credit_accounts (
+    id                TEXT PRIMARY KEY,
+    name              TEXT NOT NULL,
+    type              TEXT NOT NULL CHECK (type IN ('CREDIT_CARD', 'CASH_CARD', 'PERSONAL_LOAN')),
+    bank              TEXT NOT NULL DEFAULT '',
+    credit_limit      REAL NOT NULL DEFAULT 0 CHECK (credit_limit >= 0),
+    current_balance   REAL NOT NULL DEFAULT 0 CHECK (current_balance >= 0),
+    statement_day     INTEGER CHECK (statement_day IS NULL OR (statement_day >= 1 AND statement_day <= 31)),
+    payment_due_day   INTEGER CHECK (payment_due_day IS NULL OR (payment_due_day >= 1 AND payment_due_day <= 31)),
+    interest_rate     REAL DEFAULT 0,
+    min_payment_rate  REAL DEFAULT 5.0,
+    min_payment_floor REAL DEFAULT 500.0,
+    status            TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'CLOSED')),
+    notes             TEXT DEFAULT '',
+    group_id          TEXT NOT NULL,
+    user_id           TEXT NOT NULL,
+    created_at        TEXT NOT NULL,
+    updated_at        TEXT NOT NULL,
+    FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+`
+
+const createCreditAccountsIndex = `
+CREATE INDEX IF NOT EXISTS idx_credit_accounts_group ON credit_accounts(group_id);
+CREATE INDEX IF NOT EXISTS idx_credit_accounts_user ON credit_accounts(user_id);
+`
+
+// createCreditInstallmentsTable is the DDL for fixed installment plans (e.g. 0% 10 months, loan terms).
+const createCreditInstallmentsTable = `
+CREATE TABLE IF NOT EXISTS credit_installments (
+    id             TEXT PRIMARY KEY,
+    account_id     TEXT NOT NULL,
+    item_name      TEXT NOT NULL,
+    total_amount   REAL NOT NULL CHECK (total_amount > 0),
+    monthly_amount REAL NOT NULL CHECK (monthly_amount > 0),
+    total_terms    INTEGER NOT NULL CHECK (total_terms > 0),
+    paid_terms     INTEGER NOT NULL DEFAULT 0 CHECK (paid_terms >= 0),
+    interest_rate  REAL DEFAULT 0,
+    interest_type  TEXT NOT NULL DEFAULT 'FLAT' CHECK (interest_type IN ('FLAT', 'EFFECTIVE')),
+    remaining_balance REAL DEFAULT 0,
+    start_date     TEXT NOT NULL,
+    end_date       TEXT,
+    status         TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'COMPLETED')),
+    notes          TEXT DEFAULT '',
+    created_at     TEXT NOT NULL,
+    updated_at     TEXT NOT NULL,
+    FOREIGN KEY (account_id) REFERENCES credit_accounts(id) ON DELETE CASCADE
+);
+`
+
+const createCreditInstallmentsIndex = `
+CREATE INDEX IF NOT EXISTS idx_credit_installments_account ON credit_installments(account_id);
+`
+
+// createCreditTransactionsTable records charges/withdrawals and bill payments.
+const createCreditTransactionsTable = `
+CREATE TABLE IF NOT EXISTS credit_transactions (
+    id             TEXT PRIMARY KEY,
+    account_id     TEXT NOT NULL,
+    type           TEXT NOT NULL CHECK (type IN ('CHARGE', 'PAYMENT')),
+    amount         REAL NOT NULL CHECK (amount > 0),
+    date           TEXT NOT NULL,
+    description    TEXT DEFAULT '',
+    payment_type   TEXT CHECK (payment_type IS NULL OR payment_type IN ('FULL', 'MINIMUM', 'CUSTOM', 'INSTALLMENT')),
+    installment_id TEXT,
+    receipt_image  TEXT,
+    created_at     TEXT NOT NULL,
+    updated_at     TEXT NOT NULL,
+    FOREIGN KEY (account_id) REFERENCES credit_accounts(id) ON DELETE CASCADE,
+    FOREIGN KEY (installment_id) REFERENCES credit_installments(id) ON DELETE SET NULL
+);
+`
+
+const createCreditTransactionsIndex = `
+CREATE INDEX IF NOT EXISTS idx_credit_transactions_account ON credit_transactions(account_id, date);
+`
 
 // defaultCategories are seeded on first migration using INSERT OR IGNORE.
 var defaultCategories = map[string][]string{
@@ -218,6 +308,10 @@ func (d *DB) Migrate() error {
 		{"group_invites", createGroupInvitesTable},
 		{"loans", createLoansTable},
 		{"loan_entries", createLoanEntriesTable},
+		{"credit_accounts", createCreditAccountsTable},
+		{"credit_installments", createCreditInstallmentsTable},
+		{"credit_transactions", createCreditTransactionsTable},
+		{"group_settings", createGroupSettingsTable},
 	}
 
 	for _, t := range tables {
@@ -325,7 +419,27 @@ func (d *DB) Migrate() error {
 		if _, err := d.ExecContext(ctx, createLoanEntriesIndex); err != nil {
 			return fmt.Errorf("failed to create loan_entries index: %w", err)
 		}
+		if _, err := d.ExecContext(ctx, createCreditAccountsIndex); err != nil {
+			return fmt.Errorf("failed to create credit_accounts index: %w", err)
+		}
+		if _, err := d.ExecContext(ctx, createCreditInstallmentsIndex); err != nil {
+			return fmt.Errorf("failed to create credit_installments index: %w", err)
+		}
+		if _, err := d.ExecContext(ctx, createCreditTransactionsIndex); err != nil {
+			return fmt.Errorf("failed to create credit_transactions index: %w", err)
+		}
 
+
+		// Alterations for credit_installments evolution
+		creditInstAlterations := []string{
+			"ALTER TABLE credit_installments ADD COLUMN interest_rate REAL DEFAULT 0",
+			"ALTER TABLE credit_installments ADD COLUMN interest_type TEXT NOT NULL DEFAULT 'FLAT'",
+			"ALTER TABLE credit_installments ADD COLUMN remaining_balance REAL DEFAULT 0",
+			"ALTER TABLE credit_installments ADD COLUMN end_date TEXT",
+		}
+		for _, sql := range creditInstAlterations {
+			_, _ = d.ExecContext(ctx, sql)
+		}
 	// Fix orphaned transactions and categories by assigning them to their user's primary group
 	migrationSQL := []string{
 		`UPDATE transactions 

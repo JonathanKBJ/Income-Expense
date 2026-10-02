@@ -4,7 +4,7 @@ import { PlusOutlined } from "@ant-design/icons";
 import { useAuth } from "../contexts/AuthContext";
 import { useLanguage } from "../contexts/LanguageContext";
 
-type Page = "dashboard" | "annual" | "categories" | "admin" | "group" | "loans";
+type Page = "dashboard" | "annual" | "credit" | "loans" | "categories" | "admin" | "group";
 
 interface SidebarProps {
   activePage: Page;
@@ -18,11 +18,12 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
   const [creatingGroup, setCreatingGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
 
+
+
   function handleNavigate(page: Page) {
     onNavigate(page);
     setIsOpen(false);
   }
-
   return (
     <>
       {/* Hamburger Button */}
@@ -201,6 +202,19 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
             <span>{t.common.annual}</span>
           </button>
 
+          {/* Credit Cards & Personal Loans */}
+          <button
+            className={`sidebar-item ${activePage === "credit" ? "active" : ""}`}
+            onClick={() => handleNavigate("credit")}
+            id="nav-credit"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="5" width="20" height="14" rx="2" />
+              <line x1="2" y1="10" x2="22" y2="10" />
+            </svg>
+            <span>{t.common.creditCards}</span>
+          </button>
+
           {/* Loans & Debts */}
           <button
             className={`sidebar-item ${activePage === "loans" ? "active" : ""}`}
@@ -213,7 +227,6 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
             </svg>
             <span>{t.common.loans}</span>
           </button>
-
           <div className="sidebar-section-title">
             <span>{t.common.settings}</span>
           </div>

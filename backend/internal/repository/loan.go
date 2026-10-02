@@ -42,10 +42,15 @@ func (r *LoanRepository) Create(ctx context.Context, loan *models.Loan, userID, 
 }
 
 // GetByID retrieves a single loan (must belong to the given group).
-func (r *LoanRepository) GetByID(ctx context.Context, id, groupID string) (*models.Loan, error) {
+func (r *LoanRepository) GetByID(ctx context.Context, id, groupID string, filterUserID ...string) (*models.Loan, error) {
 	query := `SELECT id, type, name, counterparty, principal, term_months, installment_amount, payment_day, interest_rate, start_date, end_date, status, notes, group_id, user_id, created_at, updated_at
 		FROM loans WHERE id = ? AND group_id = ?`
-	row := r.db.QueryRowContext(ctx, query, id, groupID)
+	args := []interface{}{id, groupID}
+	if len(filterUserID) > 0 && filterUserID[0] != "" {
+		query += " AND user_id = ?"
+		args = append(args, filterUserID[0])
+	}
+	row := r.db.QueryRowContext(ctx, query, args...)
 
 	var l models.Loan
 	var cAt, uAt string
@@ -65,10 +70,16 @@ func (r *LoanRepository) GetByID(ctx context.Context, id, groupID string) (*mode
 }
 
 // ListByGroup returns all loans in a group.
-func (r *LoanRepository) ListByGroup(ctx context.Context, groupID string) ([]models.Loan, error) {
+func (r *LoanRepository) ListByGroup(ctx context.Context, groupID string, filterUserID ...string) ([]models.Loan, error) {
 	query := `SELECT id, type, name, counterparty, principal, term_months, installment_amount, payment_day, interest_rate, start_date, end_date, status, notes, group_id, user_id, created_at, updated_at
-		FROM loans WHERE group_id = ? ORDER BY created_at DESC`
-	rows, err := r.db.QueryContext(ctx, query, groupID)
+		FROM loans WHERE group_id = ?`
+	args := []interface{}{groupID}
+	if len(filterUserID) > 0 && filterUserID[0] != "" {
+		query += " AND user_id = ?"
+		args = append(args, filterUserID[0])
+	}
+	query += " ORDER BY created_at DESC"
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list loans: %w", err)
 	}
@@ -95,11 +106,11 @@ func (r *LoanRepository) ListByGroup(ctx context.Context, groupID string) ([]mod
 }
 
 // Update applies partial updates to a loan.
-func (r *LoanRepository) Update(ctx context.Context, id, groupID string, req models.UpdateLoanRequest) error {
+func (r *LoanRepository) Update(ctx context.Context, id, groupID string, req models.UpdateLoanRequest, filterUserID ...string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 
 	// Get existing loan to merge
-	existing, err := r.GetByID(ctx, id, groupID)
+	existing, err := r.GetByID(ctx, id, groupID, filterUserID...)
 	if err != nil || existing == nil {
 		return fmt.Errorf("loan not found")
 	}
@@ -122,6 +133,10 @@ func (r *LoanRepository) Update(ctx context.Context, id, groupID string, req mod
 
 	query += " WHERE id = ? AND group_id = ?"
 	args = append(args, id, groupID)
+	if len(filterUserID) > 0 && filterUserID[0] != "" {
+		query += " AND user_id = ?"
+		args = append(args, filterUserID[0])
+	}
 
 	_, err = r.db.ExecContext(ctx, query, args...)
 	if err != nil {
@@ -131,8 +146,14 @@ func (r *LoanRepository) Update(ctx context.Context, id, groupID string, req mod
 }
 
 // Delete removes a loan (CASCADE deletes entries via FK).
-func (r *LoanRepository) Delete(ctx context.Context, id, groupID string) error {
-	result, err := r.db.ExecContext(ctx, `DELETE FROM loans WHERE id = ? AND group_id = ?`, id, groupID)
+func (r *LoanRepository) Delete(ctx context.Context, id, groupID string, filterUserID ...string) error {
+	query := `DELETE FROM loans WHERE id = ? AND group_id = ?`
+	args := []interface{}{id, groupID}
+	if len(filterUserID) > 0 && filterUserID[0] != "" {
+		query += " AND user_id = ?"
+		args = append(args, filterUserID[0])
+	}
+	result, err := r.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("failed to delete loan: %w", err)
 	}

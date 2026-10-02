@@ -22,6 +22,7 @@ func New(
 	catHandler *handlers.CategoryHandler,
 	groupHandler *handlers.GroupHandler,
 	loanHandler *handlers.LoanHandler,
+	creditHandler *handlers.CreditHandler,
 ) http.Handler {
 	r := chi.NewRouter()
 
@@ -88,6 +89,8 @@ func New(
 			r.Route("/me", func(r chi.Router) {
 				r.Get("/group", groupHandler.GetMyGroup)
 				r.Patch("/group", groupHandler.UpdateGroupName)
+				r.Get("/group/settings", groupHandler.GetGroupSettings)
+				r.Patch("/group/settings", groupHandler.UpdateGroupSettings)
 				r.Get("/groups", groupHandler.ListMyGroups)
 				r.Post("/groups", groupHandler.CreateMyGroup)
 				r.Delete("/groups/{id}", groupHandler.DeleteMyGroup)
@@ -108,6 +111,22 @@ func New(
 				r.Get("/{id}/entries", loanHandler.ListEntries)
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Post("/{id}/entries", loanHandler.AddEntry)
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Delete("/{id}/entries/{eid}", loanHandler.DeleteEntry)
+			})
+
+			// Credit Accounts & Loans routes (EDITOR+)
+			r.Route("/credit-accounts", func(r chi.Router) {
+				r.Get("/", creditHandler.ListAccounts)
+				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Post("/", creditHandler.CreateAccount)
+				r.Get("/{id}", creditHandler.GetAccountDetail)
+				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Patch("/{id}", creditHandler.UpdateAccount)
+				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Delete("/{id}", creditHandler.DeleteAccount)
+
+				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Post("/{id}/installments", creditHandler.AddInstallment)
+				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Patch("/{id}/installments/{iid}", creditHandler.UpdateInstallment)
+				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Delete("/{id}/installments/{iid}", creditHandler.DeleteInstallment)
+
+				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Post("/{id}/transactions", creditHandler.AddTransaction)
+				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Delete("/{id}/transactions/{tid}", creditHandler.DeleteTransaction)
 			})
 
 			// Admin routes (Protected by Auth + AdminOnly)

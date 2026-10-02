@@ -428,3 +428,70 @@ func (h *GroupHandler) logActivity(ctx context.Context, groupID, userID, action,
 		log.Printf("WARN: failed to log activity: %v", err)
 	}
 }
+
+// GetGroupSettings handles GET /api/me/group/settings
+func (h *GroupHandler) GetGroupSettings(w http.ResponseWriter, r *http.Request) {
+	groupID := middleware.GetGroupID(r.Context())
+	if groupID == "" {
+		writeError(w, http.StatusBadRequest, "no group associated with this user")
+		return
+	}
+
+	settings, err := h.groupRepo.GetGroupSettings(r.Context(), groupID)
+	if err != nil {
+		log.Printf("ERROR: GetGroupSettings: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to fetch group settings")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, settings)
+}
+
+// UpdateGroupSettings handles PATCH /api/me/group/settings (OWNER only)
+func (h *GroupHandler) UpdateGroupSettings(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := middleware.GetUserID(ctx)
+	groupID := middleware.GetGroupID(ctx)
+
+	if groupID == "" {
+		writeError(w, http.StatusBadRequest, "no group associated with this user")
+		return
+	}
+
+	role, err := h.groupRepo.GetMemberRole(ctx, groupID, userID)
+	if err != nil || role != models.RoleOwner {
+		writeError(w, http.StatusForbidden, "only group owner can update menu sharing settings")
+		return
+	}
+
+	var req models.UpdateGroupSettingsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	current, err := h.groupRepo.GetGroupSettings(ctx, groupID)
+	if err != nil {
+		log.Printf("ERROR: UpdateGroupSettings get: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to get current settings")
+		return
+	}
+
+	if req.ShareCredit != nil {
+		current.ShareCredit = *req.ShareCredit
+	}
+	if req.ShareLoans != nil {
+		current.ShareLoans = *req.ShareLoans
+	}
+	if req.ShareAnnual != nil {
+		current.ShareAnnual = *req.ShareAnnual
+	}
+
+	if err := h.groupRepo.UpdateGroupSettings(ctx, groupID, current); err != nil {
+		log.Printf("ERROR: UpdateGroupSettings save: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to update group settings")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, current)
+}

@@ -2432,6 +2432,34 @@
   color: var(--text-primary) !important;
 }
 
+/* =============================================================================
+   CREDIT TRACKER SECTION
+   ============================================================================= */
+.credit-tracker-container {
+  color: var(--text-primary) !important;
+}
+
+.credit-tracker-title {
+  color: var(--text-primary) !important;
+}
+
+.credit-tracker-subtitle {
+  color: var(--text-secondary) !important;
+}
+
+.credit-card-item {
+  color: var(--text-primary) !important;
+}
+
+.credit-detail-card {
+  color: var(--text-primary) !important;
+}
+
+@media (max-width: 768px) {
+  .credit-tracker-container {
+    padding: 12px 6px !important;
+  }
+}
 
 /* =============================================================================
    WALLET VIEW — Per-member balance cards (compact)
