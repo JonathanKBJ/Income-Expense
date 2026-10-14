@@ -161,6 +161,18 @@ export interface TranslationKeys {
     sharedModeBadge: string;
     personalModeBadge: string;
     ownerOnlyAccess: string;
+    telegramTitle: string;
+    telegramSubtitle: string;
+    telegramGenerateKey: string;
+    telegramKeyGenerated: string;
+    telegramKeyInstruction: string;
+    telegramKeyExpires: string;
+    telegramLinked: string;
+    telegramNotLinked: string;
+    telegramGroupStatus: string;
+    telegramUserStatus: string;
+    telegramCopyKey: string;
+    telegramCopied: string;
   };
   loansPage: {
     title: string;
@@ -491,6 +503,18 @@ export const translations: Record<Language, TranslationKeys> = {
       sharedModeBadge: "Group Shared",
       personalModeBadge: "Personal",
       ownerOnlyAccess: "Owner Only",
+      telegramTitle: "Telegram Bot Integration",
+      telegramSubtitle: "Link with Telegram Bot to submit slips and receive notifications in group chat",
+      telegramGenerateKey: "Generate Link Key",
+      telegramKeyGenerated: "Link key generated successfully",
+      telegramKeyInstruction: "Send this command into your Telegram group chat containing the bot:",
+      telegramKeyExpires: "Expires in 15 minutes",
+      telegramLinked: "Connected",
+      telegramNotLinked: "Not connected",
+      telegramGroupStatus: "Group Chat:",
+      telegramUserStatus: "Your Account:",
+      telegramCopyKey: "Copy Link Command",
+      telegramCopied: "Command copied to clipboard",
     },
     loansPage: {
       title: "Loans & Debts",
@@ -822,6 +846,18 @@ export const translations: Record<Language, TranslationKeys> = {
       sharedModeBadge: "แชร์ในกลุ่ม",
       personalModeBadge: "ส่วนตัว",
       ownerOnlyAccess: "เฉพาะเจ้าของกลุ่ม",
+      telegramTitle: "เชื่อมต่อ Telegram Bot",
+      telegramSubtitle: "ผูกกลุ่มและบัญชีของคุณกับ Telegram Bot เพื่อส่งสลิปตัดบิลและรับการแจ้งเตือนในแชทกลุ่ม",
+      telegramGenerateKey: "สร้างรหัสเชื่อมต่อ Telegram",
+      telegramKeyGenerated: "สร้างรหัสเชื่อมต่อสำเร็จ",
+      telegramKeyInstruction: "คัดลอกคำสั่งนี้ไปส่งในแชทกลุ่ม Telegram ที่มีบอทอยู่:",
+      telegramKeyExpires: "รหัสมีอายุ 15 นาที",
+      telegramLinked: "เชื่อมต่อแล้ว",
+      telegramNotLinked: "ยังไม่เชื่อมต่อ",
+      telegramGroupStatus: "แชทกลุ่ม:",
+      telegramUserStatus: "บัญชีของคุณ:",
+      telegramCopyKey: "คัดลอกคำสั่งเชื่อมต่อ",
+      telegramCopied: "คัดลอกคำสั่งเรียบร้อยแล้ว",
     },
     loansPage: {
       title: "เงินกู้และหนี้สิน",

@@ -13,9 +13,10 @@ const (
 
 // UserGroup defines a collection of users who share transactions and categories.
 type UserGroup struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"createdAt"`
+	ID             string    `json:"id"`
+	Name           string    `json:"name"`
+	TelegramChatID *string   `json:"telegramChatId,omitempty"`
+	CreatedAt      time.Time `json:"createdAt"`
 }
 
 // CreateGroupRequest is used by Admins to manually create a new group.
@@ -39,11 +40,12 @@ type GroupMember struct {
 // GroupInfo is returned by GET /api/me/group (the user's current group context).
 type GroupInfo struct {
 	ID          string         `json:"id"`
-	Name        string         `json:"name"`
-	MemberCount int            `json:"memberCount"`
-	Members     []GroupMember  `json:"members"`
-	MyRole      GroupRole      `json:"myRole"`
-	Settings    *GroupSettings `json:"settings,omitempty"`
+	Name           string         `json:"name"`
+	TelegramChatID *string        `json:"telegramChatId,omitempty"`
+	MemberCount    int            `json:"memberCount"`
+	Members        []GroupMember  `json:"members"`
+	MyRole         GroupRole      `json:"myRole"`
+	Settings       *GroupSettings `json:"settings,omitempty"`
 }
 
 // GroupSettings defines menu-level sharing configuration for a group.

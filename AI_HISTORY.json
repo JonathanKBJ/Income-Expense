@@ -893,5 +893,34 @@
         ],
         "logic_changed": "Introduced MinPaymentCalcMode ('BALANCE_PERCENT', 'PRINCIPAL_PERCENT_PLUS_INTEREST', 'INTEREST_ONLY') per account in schema, models, repo, and UI. BALANCE_PERCENT maintains existing balance-based percentage (UOB Cash Plus stays at 741.00, First Choice at 4707.00, UOB TMRW at 1265.00). PRINCIPAL_PERCENT_PLUS_INTEREST calculates minimum payment as (principal * rate%) + full cycle interest (Money Thunder matches 3015.95 with available credit 3294.56). INTEREST_ONLY charges 100% cycle interest (Finnix 686.00). Added mode selector in Account Modal, mode badges in UI, and interest preset buttons.",
         "ai_warning": "Default calculation mode is BALANCE_PERCENT. Do not hardcode calculations based only on account.type; always branch on acc.MinPaymentCalcMode to prevent cross-account calculation regressions."
+    },
+    {
+        "date": "2026-10-14",
+        "scope": "[Full-Stack]",
+        "task": "Telegram Bot Integration with Cloudflare Worker and Gemini Slip Parser",
+        "files_touched": [
+            "backend/internal/database/schema.go",
+            "backend/internal/config/config.go",
+            "backend/internal/models/telegram.go",
+            "backend/internal/models/user.go",
+            "backend/internal/models/group.go",
+            "backend/internal/repository/telegram.go",
+            "backend/internal/repository/group.go",
+            "backend/internal/repository/user.go",
+            "backend/internal/handlers/telegram.go",
+            "backend/internal/handlers/transaction.go",
+            "backend/internal/handlers/telegram_test.go",
+            "backend/internal/router/router.go",
+            "backend/cmd/server/main.go",
+            "frontend/src/api/telegram.ts",
+            "frontend/src/translations/index.ts",
+            "frontend/src/components/GroupPage.tsx",
+            "telegram-bot-worker/src/index.ts",
+            "telegram-bot-worker/wrangler.toml",
+            "telegram-bot-worker/package.json",
+            "telegram-bot-worker/README.md"
+        ],
+        "logic_changed": "Implemented full Telegram Bot integration: 1) One-time pairing tokens (telegram_link_codes) generated via web UI and verified in Telegram group chat (/link TG-XXXXXX) to bind telegram_user_id to users and telegram_chat_id to groups. 2) Endpoints for pending bills query and payment with receipt slip. 3) Automatic asynchronous Telegram notification broadcasts on web transaction creation. 4) Cloudflare Worker edge service handling Telegram Webhooks with Gemini 2.0 Flash vision parsing, interactive inline buttons for smart bill matching, and callback query processing.",
+        "ai_warning": "In Telegram groups, /setprivacy must be disabled via @BotFather for the bot to observe photos and messages without direct mention tags. Telegram callback_data has a 64-byte limit; use compact encodings (e.g. pay:<txId> or new:<amount>:<catIdx>) to avoid Telegram API payload rejection."
     }
 ]

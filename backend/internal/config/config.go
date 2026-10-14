@@ -8,11 +8,12 @@ import (
 
 // Config holds all application configuration values.
 type Config struct {
-	TursoDatabaseURL string
-	TursoAuthToken   string
-	ServerPort       string
+	TursoDatabaseURL  string
+	TursoAuthToken    string
+	ServerPort        string
+	TelegramBotSecret string
+	TelegramBotToken  string
 }
-
 // Load reads environment variables and returns a validated Config.
 // It loads from a .env file if present, then overrides with actual env vars.
 func Load() (*Config, error) {
@@ -20,9 +21,11 @@ func Load() (*Config, error) {
 	loadDotEnv(".env")
 
 	cfg := &Config{
-		TursoDatabaseURL: getEnv("TURSO_DATABASE_URL", ""),
-		TursoAuthToken:   getEnv("TURSO_AUTH_TOKEN", ""),
-		ServerPort:       getEnv("PORT", getEnv("SERVER_PORT", "10000")),
+		TursoDatabaseURL:  getEnv("TURSO_DATABASE_URL", ""),
+		TursoAuthToken:    getEnv("TURSO_AUTH_TOKEN", ""),
+		ServerPort:        getEnv("PORT", getEnv("SERVER_PORT", "10000")),
+		TelegramBotSecret: getEnv("TELEGRAM_BOT_SECRET", ""),
+		TelegramBotToken:  getEnv("TELEGRAM_BOT_TOKEN", ""),
 	}
 
 	if err := cfg.validate(); err != nil {

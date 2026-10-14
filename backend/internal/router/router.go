@@ -23,6 +23,7 @@ func New(
 	groupHandler *handlers.GroupHandler,
 	loanHandler *handlers.LoanHandler,
 	creditHandler *handlers.CreditHandler,
+	telegramHandler *handlers.TelegramHandler,
 ) http.Handler {
 	r := chi.NewRouter()
 
@@ -52,6 +53,14 @@ func New(
 	r.Route("/auth", func(r chi.Router) {
 		r.Post("/register", authHandler.Register)
 		r.Post("/login", authHandler.Login)
+	})
+
+	// --- Telegram Bot API Routes (Protected by X-Telegram-Bot-Secret) ---
+	r.Route("/api/telegram", func(r chi.Router) {
+		r.Post("/verify-link", telegramHandler.VerifyLink)
+		r.Get("/pending-bills", telegramHandler.GetPendingBills)
+		r.Post("/pay-bill", telegramHandler.PayPendingBill)
+		r.Post("/transactions", telegramHandler.CreateTransaction)
 	})
 
 	// --- Protected API Routes ---
@@ -99,6 +108,10 @@ func New(
 				r.Post("/group/invite", groupHandler.CreateInvite)
 				r.Post("/group/join", groupHandler.JoinGroup)
 				r.Post("/group/leave", groupHandler.LeaveGroup)
+				r.Route("/telegram", func(r chi.Router) {
+					r.Get("/status", telegramHandler.GetStatus)
+					r.Post("/link-code", telegramHandler.GenerateLinkCode)
+				})
 			})
 
 			// Loan routes (EDITOR+)

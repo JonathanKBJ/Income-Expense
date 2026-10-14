@@ -3,6 +3,7 @@ import { Button, Input, message, Modal, Table, Tag, Tooltip, Switch } from "antd
 import {
   CopyOutlined, UserAddOutlined, LogoutOutlined,
   CreditCardOutlined, DollarOutlined, LineChartOutlined, LockOutlined, ShareAltOutlined,
+  SendOutlined, CheckCircleOutlined, InfoCircleOutlined,
 } from "@ant-design/icons";
 import { useAuth } from "../contexts/AuthContext";
 import {
@@ -16,6 +17,12 @@ import {
   type ActivityLogEntry,
   type CreateInviteResponse,
 } from "../api/group";
+import {
+  getTelegramStatus,
+  generateTelegramLinkCode,
+  type TelegramStatus,
+  type GenerateLinkCodeResponse,
+} from "../api/telegram";
 import { useLanguage } from "../contexts/LanguageContext";
 
 function formatTime(iso: string): string {
@@ -40,6 +47,9 @@ export default function GroupPage() {
   const [shareLoans, setShareLoans] = useState(true);
   const [shareAnnual, setShareAnnual] = useState(true);
   const [updatingSettings, setUpdatingSettings] = useState(false);
+  const [telegramStatus, setTelegramStatus] = useState<TelegramStatus | null>(null);
+  const [telegramCode, setTelegramCode] = useState<GenerateLinkCodeResponse | null>(null);
+  const [generatingCode, setGeneratingCode] = useState(false);
 
   useEffect(() => {
     if (groupInfo?.settings) {
@@ -68,6 +78,31 @@ export default function GroupPage() {
     } finally {
       setUpdatingSettings(false);
     }
+  }
+
+  useEffect(() => {
+    if (groupInfo) {
+      getTelegramStatus().then(setTelegramStatus).catch(() => {});
+    }
+  }, [groupInfo]);
+
+  async function handleGenerateTelegramCode() {
+    setGeneratingCode(true);
+    try {
+      const res = await generateTelegramLinkCode();
+      setTelegramCode(res);
+      message.success(t.group.telegramKeyGenerated);
+    } catch (e: unknown) {
+      message.error(e instanceof Error ? e.message : "Failed to generate Telegram code");
+    } finally {
+      setGeneratingCode(false);
+    }
+  }
+
+  function copyTelegramCommand() {
+    if (!telegramCode) return;
+    navigator.clipboard.writeText(`/link ${telegramCode.code}`);
+    message.success(t.group.telegramCopied);
   }
   useEffect(() => {
     if (groupInfo) {
@@ -99,8 +134,8 @@ export default function GroupPage() {
     try {
       const resp = await createInvite();
       setInvite(resp);
-    } catch (e: any) {
-      message.error(e.message || t.group.inviteFailed);
+    } catch (e: unknown) {
+      message.error(e instanceof Error ? e.message : t.group.inviteFailed);
     }
   }
 
@@ -432,6 +467,90 @@ export default function GroupPage() {
               )}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Telegram Bot Integration Section */}
+      <div className="group-section" style={{ marginTop: 20 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
+          <h3 style={{ margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
+            <SendOutlined style={{ color: "#0ea5e9" }} />
+            {t.group.telegramTitle}
+          </h3>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>{t.group.telegramGroupStatus}</span>
+            {telegramStatus?.isGroupLinked ? (
+              <Tag color="success" icon={<CheckCircleOutlined />}>{t.group.telegramLinked}</Tag>
+            ) : (
+              <Tag color="default">{t.group.telegramNotLinked}</Tag>
+            )}
+            <span style={{ fontSize: 13, color: "var(--text-secondary)", marginLeft: 6 }}>{t.group.telegramUserStatus}</span>
+            {telegramStatus?.isUserLinked ? (
+              <Tag color="cyan">@{telegramStatus.telegramUsername || t.group.telegramLinked}</Tag>
+            ) : (
+              <Tag color="default">{t.group.telegramNotLinked}</Tag>
+            )}
+          </div>
+        </div>
+        <p style={{ color: "var(--text-secondary)", fontSize: 13, marginBottom: 16 }}>
+          {t.group.telegramSubtitle}
+        </p>
+
+        <div
+          style={{
+            padding: "16px 20px",
+            background: "var(--bg-card)",
+            border: "1px solid var(--border-subtle)",
+            borderRadius: 12,
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+          }}
+        >
+          {telegramCode ? (
+            <div>
+              <p style={{ fontSize: 13, color: "var(--text-primary)", marginBottom: 8 }}>
+                {t.group.telegramKeyInstruction}
+              </p>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", maxWidth: 450 }}>
+                <Input
+                  value={`/link ${telegramCode.code}`}
+                  readOnly
+                  style={{ fontFamily: "monospace", fontWeight: 600, fontSize: 15 }}
+                />
+                <Tooltip title={t.group.telegramCopyKey}>
+                  <Button type="primary" icon={<CopyOutlined />} onClick={copyTelegramCommand}>
+                    {t.group.copyCode}
+                  </Button>
+                </Tooltip>
+              </div>
+              <div style={{ color: "#f59e0b", fontSize: 12, marginTop: 8, display: "flex", alignItems: "center", gap: 4 }}>
+                <InfoCircleOutlined />
+                {t.group.telegramKeyExpires} ({formatTime(telegramCode.expiresAt)})
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+              <div>
+                <div style={{ fontWeight: 500, fontSize: 14, color: "var(--text-primary)" }}>
+                  {telegramStatus?.isUserLinked && telegramStatus?.isGroupLinked
+                    ? "สถานะ: เชื่อมต่อ Telegram Bot พร้อมใช้งานแล้ว"
+                    : "สร้างรหัสเพื่อเชื่อมต่อแชทกลุ่ม Telegram กับระบบนี้"}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
+                  นำคำสั่งที่ได้ไปส่งในแชทกลุ่ม Telegram ที่ดึงบอทเข้าไปอยู่แล้ว
+                </div>
+              </div>
+              <Button
+                type="primary"
+                icon={<SendOutlined />}
+                onClick={handleGenerateTelegramCode}
+                loading={generatingCode}
+              >
+                {t.group.telegramGenerateKey}
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 

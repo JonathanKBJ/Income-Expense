@@ -54,9 +54,11 @@ func main() {
 	authHandler := handlers.NewAuthHandler(authService)
 	adminHandler := handlers.NewAdminHandler(userRepo, groupRepo, activityRepo, authService)
 
-	txRepo := repository.NewTransactionRepository(db)
-	txHandler := handlers.NewTransactionHandler(txRepo, groupRepo, activityRepo)
+	telegramRepo := repository.NewTelegramRepository(db.DB)
+	telegramHandler := handlers.NewTelegramHandler(telegramRepo, cfg.TelegramBotSecret)
 
+	txRepo := repository.NewTransactionRepository(db)
+	txHandler := handlers.NewTransactionHandler(txRepo, groupRepo, activityRepo).WithTelegram(telegramRepo, cfg.TelegramBotToken)
 	catRepo := repository.NewCategoryRepository(db)
 	catHandler := handlers.NewCategoryHandler(catRepo, groupRepo, activityRepo)
 
@@ -68,8 +70,7 @@ func main() {
 	creditRepo := repository.NewCreditRepository(db.DB)
 	creditHandler := handlers.NewCreditHandler(creditRepo, groupRepo)
 
-	httpRouter := router.New(authService, authHandler, adminHandler, txHandler, catHandler, groupHandler, loanHandler, creditHandler)
-
+	httpRouter := router.New(authService, authHandler, adminHandler, txHandler, catHandler, groupHandler, loanHandler, creditHandler, telegramHandler)
 	// Configure HTTP server
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%s", cfg.ServerPort),
