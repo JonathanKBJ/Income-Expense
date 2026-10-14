@@ -158,6 +158,16 @@ const createTelegramIndexes = `
 CREATE INDEX IF NOT EXISTS idx_users_telegram_user_id ON users(telegram_user_id);
 CREATE INDEX IF NOT EXISTS idx_groups_telegram_chat_id ON groups(telegram_chat_id);
 `
+// createDailyUsageStatsTable is the DDL for tracking daily API and worker usage.
+const createDailyUsageStatsTable = `
+CREATE TABLE IF NOT EXISTS daily_usage_stats (
+    date             TEXT PRIMARY KEY,
+    gemini_calls     INTEGER NOT NULL DEFAULT 0,
+    worker_requests  INTEGER NOT NULL DEFAULT 0,
+    bot_transactions INTEGER NOT NULL DEFAULT 0,
+    updated_at       TEXT NOT NULL
+);
+`
 
 
 // createLoansTable is the DDL for the loans (debt tracking) table.
@@ -339,6 +349,7 @@ func (d *DB) Migrate() error {
 		{"credit_transactions", createCreditTransactionsTable},
 		{"group_settings", createGroupSettingsTable},
 		{"telegram_link_codes", createTelegramLinkCodesTable},
+		{"daily_usage_stats", createDailyUsageStatsTable},
 	}
 
 	for _, t := range tables {

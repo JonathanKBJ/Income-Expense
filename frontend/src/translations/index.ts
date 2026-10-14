@@ -173,6 +173,8 @@ export interface TranslationKeys {
     telegramUserStatus: string;
     telegramCopyKey: string;
     telegramCopied: string;
+    telegramUsageTitle: string;
+    telegramUsageBtn: string;
   };
   loansPage: {
     title: string;
@@ -515,6 +517,8 @@ export const translations: Record<Language, TranslationKeys> = {
       telegramUserStatus: "Your Account:",
       telegramCopyKey: "Copy Link Command",
       telegramCopied: "Command copied to clipboard",
+      telegramUsageTitle: "Free Tier Quotas & Usage Remaining",
+      telegramUsageBtn: "Check Quotas",
     },
     loansPage: {
       title: "Loans & Debts",
@@ -858,6 +862,8 @@ export const translations: Record<Language, TranslationKeys> = {
       telegramUserStatus: "บัญชีของคุณ:",
       telegramCopyKey: "คัดลอกคำสั่งเชื่อมต่อ",
       telegramCopied: "คัดลอกคำสั่งเรียบร้อยแล้ว",
+      telegramUsageTitle: "โควต้าบริการฟรีคงเหลือ",
+      telegramUsageBtn: "เช็คโควต้าคงเหลือ",
     },
     loansPage: {
       title: "เงินกู้และหนี้สิน",

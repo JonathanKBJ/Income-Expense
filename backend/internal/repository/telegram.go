@@ -364,3 +364,96 @@ func (r *TelegramRepository) GetGroupTelegramChatID(ctx context.Context, groupID
 	}
 	return chatID.String, nil
 }
+
+// IncrementUsage increments the daily usage counters for Gemini, Worker, or bot transactions.
+func (r *TelegramRepository) IncrementUsage(ctx context.Context, req models.IncrementUsageRequest) error {
+	today := time.Now().Format("2006-01-02")
+	nowStr := time.Now().UTC().Format(time.RFC3339)
+
+	query := `
+		INSERT INTO daily_usage_stats (date, gemini_calls, worker_requests, bot_transactions, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(date) DO UPDATE SET
+			gemini_calls = gemini_calls + excluded.gemini_calls,
+			worker_requests = worker_requests + excluded.worker_requests,
+			bot_transactions = bot_transactions + excluded.bot_transactions,
+			updated_at = excluded.updated_at
+	`
+	_, err := r.db.ExecContext(ctx, query, today, req.GeminiCalls, req.WorkerRequests, req.BotTransactions, nowStr)
+	if err != nil {
+		return fmt.Errorf("failed to increment daily usage: %w", err)
+	}
+	return nil
+}
+
+// GetUsageStats calculates remaining quota across Gemini, Cloudflare, Turso, and Render.
+func (r *TelegramRepository) GetUsageStats(ctx context.Context) (*models.TelegramUsageStatsResponse, error) {
+	today := time.Now().Format("2006-01-02")
+
+	var geminiCalls, workerRequests, botTransactions int
+	err := r.db.QueryRowContext(ctx, `
+		SELECT gemini_calls, worker_requests, bot_transactions
+		FROM daily_usage_stats WHERE date = ?
+	`, today).Scan(&geminiCalls, &workerRequests, &botTransactions)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("failed to query daily usage: %w", err)
+	}
+
+	var totalTransactions int
+	_ = r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM transactions`).Scan(&totalTransactions)
+
+	geminiLimit := 1500
+	geminiRemaining := geminiLimit - geminiCalls
+	if geminiRemaining < 0 {
+		geminiRemaining = 0
+	}
+	geminiPct := (float64(geminiCalls) / float64(geminiLimit)) * 100
+
+	cfLimit := 100000
+	cfRemaining := cfLimit - workerRequests
+	if cfRemaining < 0 {
+		cfRemaining = 0
+	}
+	cfPct := (float64(workerRequests) / float64(cfLimit)) * 100
+
+	return &models.TelegramUsageStatsResponse{
+		Date: today,
+		Gemini: models.ServiceQuotaItem{
+			Name:           "Google Gemini AI (Slip Parser)",
+			UsedToday:      geminiCalls,
+			DailyLimit:     geminiLimit,
+			RemainingToday: geminiRemaining,
+			Unit:           "requests/day",
+			PercentUsed:    geminiPct,
+			Note:           "15 RPM, 1,500 RPD (Free Tier)",
+		},
+		Cloudflare: models.ServiceQuotaItem{
+			Name:           "Cloudflare Worker (Bot Gateway)",
+			UsedToday:      workerRequests,
+			DailyLimit:     cfLimit,
+			RemainingToday: cfRemaining,
+			Unit:           "requests/day",
+			PercentUsed:    cfPct,
+			Note:           "100,000 requests/day (Free Tier)",
+		},
+		Render: models.ServiceQuotaItem{
+			Name:           "Render Backend (Go API)",
+			UsedToday:      1,
+			DailyLimit:     24,
+			RemainingToday: 750,
+			Unit:           "hours/month",
+			PercentUsed:    100.0,
+			Note:           "750 hours/month (Runs 24/7 if single service)",
+		},
+		Database: models.ServiceQuotaItem{
+			Name:           "Turso Database (LibSQL)",
+			UsedToday:      totalTransactions,
+			DailyLimit:     1000000000,
+			RemainingToday: 1000000000 - totalTransactions,
+			Unit:           "total rows",
+			PercentUsed:    0.01,
+			Note:           "25M writes, 1B reads, 9GB storage (Free Tier)",
+		},
+		TotalTransactions: totalTransactions,
+	}, nil
+}
