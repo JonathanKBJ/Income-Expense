@@ -171,24 +171,25 @@ async function handleMessage(msg: TelegramMessage, env: Env): Promise<void> {
 
   if (!user) return;
 
-  // 1. Command: /start or /help
   // 1. Command: /start or /help or Quick Menu
   if (text === "/start" || text === "/help" || text.includes("วิธีใช้งาน")) {
     const helpText =
       `🤖 *ยินดีต้อนรับสู่ Expense Tracker Bot*\n\n` +
       `📌 *คำสั่งและปุ่มลัดที่ใช้งานได้:*\n` +
-      `• \`/link <รหัส>\` - เชื่อมต่อบัญชีผู้ใช้และกลุ่ม (สร้างรหัสได้จากหน้าเว็บ เมนูกลุ่ม)\n` +
+      `• \`/bills\` หรือกดปุ่ม *[ 📋 บิลรอจ่าย ]* - ดูรายการบิลที่ยังไม่ได้ชำระในกลุ่ม\n` +
       `• \`/usage\` หรือกดปุ่ม *[ 📊 เช็คโควต้า ]* - ตรวจสอบโควต้าบริการฟรีคงเหลือ\n` +
+      `• \`/link <รหัส>\` - เชื่อมต่อบัญชีผู้ใช้และกลุ่ม (สร้างรหัสได้จากหน้าเว็บ เมนูกลุ่ม)\n` +
       `• กดปุ่ม *[ 🌐 เปิดหน้าเว็บแอป ]* - เปิดแดชบอร์ดดูสถิติและรายจ่ายใน Telegram ได้ทันที\n` +
       `• ส่งรูปภาพสลิปโอนเงินเข้ากลุ่ม - บอทจะใช้ AI ตรวจสอบยอดเงิน และให้เลือกว่าจะตัดจ่ายบิลค้างชำระ หรือบันทึกเป็นรายการใหม่ทันที!`;
 
     const quickKeyboard = {
       keyboard: [
         [
+          { text: "📋 บิลรอจ่าย" },
           { text: "📊 เช็คโควต้า" },
-          { text: "❓ วิธีใช้งาน" },
         ],
         [
+          { text: "❓ วิธีใช้งาน" },
           { text: "🌐 เปิดหน้าเว็บแอป", web_app: { url: "https://expensetracker-ashen-nu.vercel.app" } },
         ],
       ],
@@ -203,7 +204,13 @@ async function handleMessage(msg: TelegramMessage, env: Env): Promise<void> {
     return;
   }
 
-  // 2. Command: /usage or /quota or Quick Menu
+  // 2. Command: /bills or /pending or Quick Menu
+  if (text === "/bills" || text === "/pending" || text.includes("บิลรอจ่าย") || text.includes("บิลที่รอจ่าย")) {
+    await handlePendingBillsCommand(chatId, user, env);
+    return;
+  }
+
+  // 3. Command: /usage or /quota or Quick Menu
   if (text === "/usage" || text === "/quota" || text.includes("เช็คโควต้า")) {
     await handleUsageCommand(chatId, env);
     return;
@@ -610,6 +617,73 @@ async function handleUsageCommand(chatId: number, env: Env): Promise<void> {
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
     await sendTelegramMessage(env, chatId, `⚠️ ไม่สามารถดึงข้อมูลโควต้าได้: ${errMsg}`);
+  }
+}
+
+/**
+ * Handle /bills or /pending command to display pending bills waiting for payment.
+ */
+async function handlePendingBillsCommand(chatId: number, user: TelegramUser, env: Env): Promise<void> {
+  const backendUrl = env.BACKEND_URL.replace(/\/+$/, "");
+
+  try {
+    const res = await fetch(
+      `${backendUrl}/api/telegram/pending-bills?telegram_user_id=${user.id}&telegram_chat_id=${chatId}`,
+      {
+        headers: { "X-Telegram-Bot-Secret": env.TELEGRAM_BOT_SECRET },
+      }
+    );
+
+    if (!res.ok) {
+      const data = (await res.json()) as { error?: string };
+      throw new Error(data.error || `Server returned ${res.status}`);
+    }
+
+    const data = (await res.json()) as {
+      groupId: string;
+      groupName: string;
+      userId: string;
+      pendingBills: PendingBill[];
+    };
+
+    const bills = data.pendingBills || [];
+
+    if (bills.length === 0) {
+      const emptyText =
+        `🎉 *ไม่มีบิลที่รอจ่ายในกลุ่มนี้*\n\n` +
+        `ทุกรายการในกลุ่ม "${data.groupName || "ปัจจุบัน"}" ชำระครบถ้วนเรียบร้อยแล้วครับ ✨\n\n` +
+        `💡 _สามารถส่งรูปภาพสลิปเข้ามาเพื่อบันทึกรายการใหม่ได้ตลอดเวลาครับ_`;
+      await sendTelegramMessage(env, chatId, emptyText, { parse_mode: "Markdown" });
+      return;
+    }
+
+    const totalAmount = bills.reduce((sum, b) => sum + (b.amount || 0), 0);
+
+    let text =
+      `📋 *รายการบิลที่รอจ่าย (Pending Bills)*\n` +
+      `👥 กลุ่ม: *${data.groupName || "ปัจจุบัน"}*\n` +
+      `💰 ยอดรวมที่รอจ่าย: *฿${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}* (${bills.length} รายการ)\n` +
+      `───────────────────\n`;
+
+    bills.slice(0, 10).forEach((b, idx) => {
+      const desc = b.description || "ไม่ระบุรายละเอียด";
+      const cat = b.category || "General";
+      const who = b.username ? ` (โดย @${b.username})` : "";
+      text += `*${idx + 1}. ${desc}*\n`;
+      text += `   • 💰 ยอด: ฿${b.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n`;
+      text += `   • 🏷️ หมวดหมู่: ${cat} | 📅 ${b.date}${who}\n\n`;
+    });
+
+    if (bills.length > 10) {
+      text += `_...และอีก ${bills.length - 10} รายการ (ดูทั้งหมดได้ที่หน้าเว็บแอป)_\n\n`;
+    }
+
+    text += `💡 *วิธีตัดจ่าย:* เพียงแค่ส่งรูปสลิปโอนเงินที่ยอดตรงกับบิลเข้ามาในแชท บอทจะแนะนำปุ่มตัดจ่ายให้ทันทีครับ!`;
+
+    await sendTelegramMessage(env, chatId, text, { parse_mode: "Markdown" });
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    await sendTelegramMessage(env, chatId, `⚠️ ไม่สามารถดึงรายการบิลรอจ่ายได้: ${errMsg}`);
   }
 }
 
