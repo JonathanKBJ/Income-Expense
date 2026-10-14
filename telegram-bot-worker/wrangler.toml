@@ -1,0 +1,7 @@
+name = "expense-telegram-bot"
+main = "src/index.ts"
+compatibility_date = "2024-10-01"
+
+[vars]
+# Configure your backend URL and secrets in Cloudflare Dashboard or .dev.vars
+BACKEND_URL = "https://income-expense-y0wg.onrender.com"

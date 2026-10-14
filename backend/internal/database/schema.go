@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     role          TEXT NOT NULL CHECK (role IN ('ADMIN', 'USER')),
     status        TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'INACTIVE')),
+    telegram_user_id  TEXT,
+    telegram_username TEXT,
     created_at    TEXT NOT NULL,
     updated_at    TEXT NOT NULL
 );
@@ -22,9 +24,10 @@ CREATE TABLE IF NOT EXISTS users (
 
 const createGroupsTable = `
 CREATE TABLE IF NOT EXISTS groups (
-    id         TEXT PRIMARY KEY,
-    name       TEXT NOT NULL,
-    created_at TEXT NOT NULL
+    id               TEXT PRIMARY KEY,
+    name             TEXT NOT NULL,
+    telegram_chat_id TEXT,
+    created_at       TEXT NOT NULL
 );
 `
 
@@ -134,6 +137,28 @@ CREATE TABLE IF NOT EXISTS group_invites (
 const createGroupInvitesIndex = `
 CREATE INDEX IF NOT EXISTS idx_group_invites_code ON group_invites(code);
 `
+// createTelegramLinkCodesTable is the DDL for one-time Telegram pairing codes.
+const createTelegramLinkCodesTable = `
+CREATE TABLE IF NOT EXISTS telegram_link_codes (
+    code        TEXT PRIMARY KEY,
+    user_id     TEXT NOT NULL,
+    group_id    TEXT NOT NULL,
+    expires_at  TEXT NOT NULL,
+    created_at  TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE
+);
+`
+
+const createTelegramLinkCodesIndex = `
+CREATE INDEX IF NOT EXISTS idx_telegram_link_codes_user ON telegram_link_codes(user_id);
+`
+
+const createTelegramIndexes = `
+CREATE INDEX IF NOT EXISTS idx_users_telegram_user_id ON users(telegram_user_id);
+CREATE INDEX IF NOT EXISTS idx_groups_telegram_chat_id ON groups(telegram_chat_id);
+`
+
 
 // createLoansTable is the DDL for the loans (debt tracking) table.
 const createLoansTable = `
@@ -197,6 +222,7 @@ CREATE TABLE IF NOT EXISTS credit_accounts (
     interest_rate     REAL DEFAULT 0,
     min_payment_rate  REAL DEFAULT 5.0,
     min_payment_floor REAL DEFAULT 500.0,
+    min_payment_calc_mode TEXT NOT NULL DEFAULT 'BALANCE_PERCENT' CHECK (min_payment_calc_mode IN ('BALANCE_PERCENT', 'PRINCIPAL_PERCENT_PLUS_INTEREST', 'INTEREST_ONLY')),
     status            TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'CLOSED')),
     notes             TEXT DEFAULT '',
     group_id          TEXT NOT NULL,
@@ -312,6 +338,7 @@ func (d *DB) Migrate() error {
 		{"credit_installments", createCreditInstallmentsTable},
 		{"credit_transactions", createCreditTransactionsTable},
 		{"group_settings", createGroupSettingsTable},
+		{"telegram_link_codes", createTelegramLinkCodesTable},
 	}
 
 	for _, t := range tables {
@@ -328,8 +355,10 @@ func (d *DB) Migrate() error {
 		"ALTER TABLE transactions ADD COLUMN receipt_image TEXT",
 			"ALTER TABLE transactions ADD COLUMN created_by TEXT",
 		"ALTER TABLE categories ADD COLUMN group_id TEXT",
+		"ALTER TABLE users ADD COLUMN telegram_user_id TEXT",
+		"ALTER TABLE users ADD COLUMN telegram_username TEXT",
+		"ALTER TABLE groups ADD COLUMN telegram_chat_id TEXT",
 	}
-
 	for _, sql := range alterations {
 		// We ignore errors because the columns might already exist
 		_, _ = d.ExecContext(ctx, sql)
@@ -428,6 +457,12 @@ func (d *DB) Migrate() error {
 		if _, err := d.ExecContext(ctx, createCreditTransactionsIndex); err != nil {
 			return fmt.Errorf("failed to create credit_transactions index: %w", err)
 		}
+		if _, err := d.ExecContext(ctx, createTelegramLinkCodesIndex); err != nil {
+			return fmt.Errorf("failed to create telegram_link_codes index: %w", err)
+		}
+		if _, err := d.ExecContext(ctx, createTelegramIndexes); err != nil {
+			return fmt.Errorf("failed to create telegram indexes: %w", err)
+		}
 
 
 		// Alterations for credit_installments evolution
@@ -438,6 +473,14 @@ func (d *DB) Migrate() error {
 			"ALTER TABLE credit_installments ADD COLUMN end_date TEXT",
 		}
 		for _, sql := range creditInstAlterations {
+			_, _ = d.ExecContext(ctx, sql)
+		}
+
+		// Alterations for credit_accounts calculation modes
+		creditAccountAlterations := []string{
+			"ALTER TABLE credit_accounts ADD COLUMN min_payment_calc_mode TEXT NOT NULL DEFAULT 'BALANCE_PERCENT'",
+		}
+		for _, sql := range creditAccountAlterations {
 			_, _ = d.ExecContext(ctx, sql)
 		}
 	// Fix orphaned transactions and categories by assigning them to their user's primary group

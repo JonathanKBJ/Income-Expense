@@ -129,18 +129,24 @@ func (h *CreditHandler) CreateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	calcMode := models.CalcModeBalancePercent
+	if req.MinPaymentCalcMode != nil && *req.MinPaymentCalcMode != "" {
+		calcMode = *req.MinPaymentCalcMode
+	}
+
 	acc := models.CreditAccount{
-		Name:            req.Name,
-		Type:            req.Type,
-		Bank:            strings.TrimSpace(req.Bank),
-		CreditLimit:     req.CreditLimit,
-		CurrentBalance:  req.CurrentBalance,
-		StatementDay:    req.StatementDay,
-		PaymentDueDay:   req.PaymentDueDay,
-		InterestRate:    req.InterestRate,
-		MinPaymentRate:  req.MinPaymentRate,
-		MinPaymentFloor: req.MinPaymentFloor,
-		Notes:           strings.TrimSpace(req.Notes),
+		Name:               req.Name,
+		Type:               req.Type,
+		Bank:               strings.TrimSpace(req.Bank),
+		CreditLimit:        req.CreditLimit,
+		CurrentBalance:     req.CurrentBalance,
+		StatementDay:       req.StatementDay,
+		PaymentDueDay:      req.PaymentDueDay,
+		InterestRate:       req.InterestRate,
+		MinPaymentRate:     req.MinPaymentRate,
+		MinPaymentFloor:    req.MinPaymentFloor,
+		MinPaymentCalcMode: calcMode,
+		Notes:              strings.TrimSpace(req.Notes),
 	}
 
 	if err := h.creditRepo.CreateAccount(r.Context(), &acc, userID, groupID); err != nil {
@@ -520,12 +526,18 @@ func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstall
 	cycleStart := getBillingCycleStartDate(acc.StatementDay)
 	var paidThisCycle float64
 	var chargesThisCycle float64
+	var interestChargesThisCycle float64
 	for _, tx := range txs {
 		if tx.Date >= cycleStart {
 			if tx.Type == models.CreditTxPayment {
 				paidThisCycle += tx.Amount
 			} else if tx.Type == models.CreditTxCharge {
-				chargesThisCycle += tx.Amount
+				descLower := strings.ToLower(tx.Description)
+				if strings.Contains(descLower, "ดอกเบี้ย") || strings.Contains(descLower, "interest") {
+					interestChargesThisCycle += tx.Amount
+				} else {
+					chargesThisCycle += tx.Amount
+				}
 			}
 		}
 	}
@@ -546,6 +558,15 @@ func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstall
 		floor = 0
 	}
 
+	calcMode := acc.MinPaymentCalcMode
+	if calcMode == "" {
+		if rate == 0 {
+			calcMode = models.CalcModeInterestOnly
+		} else {
+			calcMode = models.CalcModeBalancePercent
+		}
+	}
+
 	var minPayForCycle float64
 	if statementBal > 0 {
 		revolvingBalStmt := statementBal - monthlyInstDue
@@ -553,21 +574,51 @@ func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstall
 			revolvingBalStmt = 0
 		}
 		var revMinStmt float64
-		if rate > 0 {
-			revMinStmt = revolvingBalStmt * (rate / 100.0)
-		} else {
-			// rate == 0: Interest-only payment (จ่ายเฉพาะดอกเบี้ย เช่น Finnix)
+		switch calcMode {
+		case models.CalcModePrincipalPlusInterest:
+			// Principal % + 100% of cycle interest (e.g. Money Thunder)
+			cycleInterest := interestChargesThisCycle
+			if cycleInterest == 0 && acc.InterestRate > 0 {
+				rawInterest := revolvingBalStmt * (acc.InterestRate / 100.0) * (30.0 / 365.0)
+				cycleInterest = math.Round(rawInterest * 100) / 100
+			}
+			revMinStmt = math.Round(((revolvingBalStmt * (rate / 100.0)) + cycleInterest) * 100) / 100
+			if floor > 0 && revMinStmt < floor && revolvingBalStmt > 0 {
+				revMinStmt = floor
+			}
+			minPayForCycle = math.Round((monthlyInstDue + revMinStmt) * 100) / 100
+
+		case models.CalcModeInterestOnly:
+			// Interest only 100% (e.g. Finnix)
 			if acc.InterestRate > 0 {
 				rawInterest := revolvingBalStmt * (acc.InterestRate / 100.0) * (30.0 / 365.0)
 				revMinStmt = math.Round(rawInterest * 100) / 100
 			}
+			if floor > 0 && revMinStmt < floor && revolvingBalStmt > 0 {
+				revMinStmt = floor
+			}
+			minPayForCycle = math.Ceil(monthlyInstDue + revMinStmt)
+
+		default:
+			// Balance % (Standard credit cards, UOB Cash Plus, First Choice)
+			if rate > 0 {
+				revMinStmt = revolvingBalStmt * (rate / 100.0)
+			} else if acc.InterestRate > 0 {
+				rawInterest := revolvingBalStmt * (acc.InterestRate / 100.0) * (30.0 / 365.0)
+				revMinStmt = math.Round(rawInterest * 100) / 100
+			}
+			if floor > 0 && revMinStmt < floor && revolvingBalStmt > 0 {
+				revMinStmt = floor
+			}
+			minPayForCycle = math.Ceil(monthlyInstDue + revMinStmt)
 		}
-		if floor > 0 && revMinStmt < floor && revolvingBalStmt > 0 {
-			revMinStmt = floor
+
+		statementTotal := statementBal
+		if calcMode == models.CalcModePrincipalPlusInterest && interestChargesThisCycle > 0 {
+			statementTotal += interestChargesThisCycle
 		}
-		minPayForCycle = math.Ceil(monthlyInstDue + revMinStmt)
-		if minPayForCycle > statementBal {
-			minPayForCycle = statementBal
+		if minPayForCycle > statementTotal {
+			minPayForCycle = statementTotal
 		}
 	}
 
@@ -620,11 +671,20 @@ func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstall
 		// Next cycle minimum calculation includes revolving balance plus accrued interest
 		revolvingBaseNext := revolvingBalCurr + nextCycleInterest
 		var revMinCurr float64
-		if rate > 0 {
-			revMinCurr = revolvingBaseNext * (rate / 100.0)
-		} else {
-			// rate == 0: Interest-only payment (จ่ายเฉพาะดอกเบี้ย)
+		switch calcMode {
+		case models.CalcModePrincipalPlusInterest:
+			// Principal % + 100% of next cycle interest
+			revMinCurr = (revolvingBalCurr * (rate / 100.0)) + nextCycleInterest
+		case models.CalcModeInterestOnly:
+			// Interest only (Finnix)
 			revMinCurr = nextCycleInterest
+		default:
+			// Balance % (Standard credit card, UOB Cash Plus, First Choice)
+			if rate > 0 {
+				revMinCurr = revolvingBaseNext * (rate / 100.0)
+			} else {
+				revMinCurr = nextCycleInterest
+			}
 		}
 		if floor > 0 && revMinCurr < floor && revolvingBaseNext > 0 {
 			revMinCurr = floor

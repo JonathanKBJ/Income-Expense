@@ -45,6 +45,15 @@ const (
 	CreditPayCustom      CreditPaymentType = "CUSTOM"
 )
 
+// CreditMinPaymentCalcMode defines how the monthly minimum payment and interest are calculated.
+type CreditMinPaymentCalcMode string
+
+const (
+	CalcModeBalancePercent          CreditMinPaymentCalcMode = "BALANCE_PERCENT"
+	CalcModePrincipalPlusInterest   CreditMinPaymentCalcMode = "PRINCIPAL_PERCENT_PLUS_INTEREST"
+	CalcModeInterestOnly            CreditMinPaymentCalcMode = "INTEREST_ONLY"
+)
+
 // CreditAccount represents a credit card or personal loan account.
 type CreditAccount struct {
 	ID              string            `json:"id"`
@@ -57,9 +66,10 @@ type CreditAccount struct {
 	PaymentDueDay   *int              `json:"paymentDueDay,omitempty"`
 	InterestRate    float64           `json:"interestRate"`
 	MinPaymentRate  float64           `json:"minPaymentRate"`
-	MinPaymentFloor float64           `json:"minPaymentFloor"`
-	Status          CreditStatus      `json:"status"`
-	Notes           string            `json:"notes"`
+	MinPaymentFloor    float64                  `json:"minPaymentFloor"`
+	MinPaymentCalcMode CreditMinPaymentCalcMode `json:"minPaymentCalcMode"`
+	Status             CreditStatus             `json:"status"`
+	Notes              string                   `json:"notes"`
 	GroupID         string            `json:"groupId"`
 	UserID          string            `json:"userId"`
 	CreatedAt       time.Time         `json:"createdAt"`
@@ -144,8 +154,9 @@ type CreateCreditAccountRequest struct {
 	PaymentDueDay   *int              `json:"paymentDueDay,omitempty"`
 	InterestRate    float64           `json:"interestRate"`
 	MinPaymentRate  float64           `json:"minPaymentRate"`
-	MinPaymentFloor float64           `json:"minPaymentFloor"`
-	Notes           string            `json:"notes"`
+	MinPaymentFloor    float64                   `json:"minPaymentFloor"`
+	MinPaymentCalcMode *CreditMinPaymentCalcMode `json:"minPaymentCalcMode,omitempty"`
+	Notes              string                    `json:"notes"`
 }
 
 type UpdateCreditAccountRequest struct {
@@ -158,9 +169,10 @@ type UpdateCreditAccountRequest struct {
 	PaymentDueDay   *int               `json:"paymentDueDay,omitempty"`
 	InterestRate    *float64           `json:"interestRate,omitempty"`
 	MinPaymentRate  *float64           `json:"minPaymentRate,omitempty"`
-	MinPaymentFloor *float64           `json:"minPaymentFloor,omitempty"`
-	Status          *CreditStatus      `json:"status,omitempty"`
-	Notes           *string            `json:"notes,omitempty"`
+	MinPaymentFloor    *float64                  `json:"minPaymentFloor,omitempty"`
+	MinPaymentCalcMode *CreditMinPaymentCalcMode `json:"minPaymentCalcMode,omitempty"`
+	Status             *CreditStatus             `json:"status,omitempty"`
+	Notes              *string                   `json:"notes,omitempty"`
 }
 
 type CreateCreditInstallmentRequest struct {

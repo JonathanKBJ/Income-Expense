@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -22,6 +23,8 @@ type TransactionHandler struct {
 	repo         *repository.TransactionRepository
 	groupRepo    *repository.GroupRepository
 	activityRepo *repository.ActivityLogRepository
+	telegramRepo *repository.TelegramRepository
+	botToken     string
 }
 
 // NewTransactionHandler creates a new handler with the given repositories.
@@ -35,6 +38,13 @@ func NewTransactionHandler(
 		groupRepo:    groupRepo,
 		activityRepo: activityRepo,
 	}
+}
+
+// WithTelegram attaches telegram repository and bot token for group notifications.
+func (h *TransactionHandler) WithTelegram(telegramRepo *repository.TelegramRepository, botToken string) *TransactionHandler {
+	h.telegramRepo = telegramRepo
+	h.botToken = botToken
+	return h
 }
 
 // GetTransactions handles GET /api/transactions?month={M}&year={Y}
@@ -221,6 +231,9 @@ func (h *TransactionHandler) CreateTransaction(w http.ResponseWriter, r *http.Re
 		fmt.Sprintf(`{"amount":%.2f,"type":"%s","category":"%s"}`, transaction.Amount, transaction.Type, transaction.Category))
 
 	writeJSON(w, http.StatusCreated, transaction)
+	// Notify linked Telegram group in the background
+	h.notifyTelegramGroup(groupID, transaction)
+
 }
 
 // CreateTransactionsBatch handles POST /api/transactions/batch
@@ -478,6 +491,66 @@ func (h *TransactionHandler) logActivity(ctx context.Context, groupID, userID, a
 	if err := h.activityRepo.CreateEntry(ctx, entry); err != nil {
 		log.Printf("WARN: failed to log activity: %v", err)
 	}
+}
+
+// notifyTelegramGroup broadcasts a transaction notification to the group's linked Telegram chat.
+func (h *TransactionHandler) notifyTelegramGroup(groupID string, tx *models.Transaction) {
+	if h.telegramRepo == nil || h.botToken == "" || tx == nil {
+		return
+	}
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		chatID, err := h.telegramRepo.GetGroupTelegramChatID(ctx, groupID)
+		if err != nil || chatID == "" {
+			return
+		}
+
+		typeEmoji := "💸"
+		typeName := "รายจ่าย"
+		if tx.Type == models.TypeIncome {
+			typeEmoji = "💰"
+			typeName = "รายรับ"
+		}
+
+		userDisplay := "สมาชิกในกลุ่ม"
+		if tx.CreatedByUsername != nil && *tx.CreatedByUsername != "" {
+			userDisplay = "@" + *tx.CreatedByUsername
+		} else if tx.OwnerUsername != nil && *tx.OwnerUsername != "" {
+			userDisplay = "@" + *tx.OwnerUsername
+		}
+
+		text := fmt.Sprintf(
+			"📢 *บันทึก%sใหม่ผ่านเว็บ*\n%s *%s*: ฿%.2f\n🏷️ หมวดหมู่: %s\n📅 วันที่: %s\n👤 โดย: %s",
+			typeName, typeEmoji, tx.Description, tx.Amount, tx.Category, tx.Date, userDisplay,
+		)
+
+		payload := map[string]string{
+			"chat_id":    chatID,
+			"text":       text,
+			"parse_mode": "Markdown",
+		}
+		jsonBody, err := json.Marshal(payload)
+		if err != nil {
+			return
+		}
+
+		url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", h.botToken)
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonBody))
+		if err != nil {
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			log.Printf("WARN: failed to send Telegram notification: %v", err)
+			return
+		}
+		defer resp.Body.Close()
+	}()
 }
 
 // GetWalletSummary handles GET /api/transactions/wallet-summary?month=M&year=Y

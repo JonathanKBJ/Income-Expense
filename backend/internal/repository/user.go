@@ -47,12 +47,12 @@ func (r *UserRepository) CreateUser(ctx context.Context, user *models.User) erro
 
 // GetByUsername finds a user by their username.
 func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*models.User, error) {
-	query := `SELECT id, username, password_hash, role, status, created_at, updated_at FROM users WHERE username = ?`
+	query := `SELECT id, username, password_hash, role, status, telegram_user_id, telegram_username, created_at, updated_at FROM users WHERE username = ?`
 	row := r.db.QueryRowContext(ctx, query, username)
 
 	var user models.User
 	var createdAtStr, updatedAtStr string
-	err := row.Scan(&user.ID, &user.Username, &user.PasswordHash, &user.Role, &user.Status, &createdAtStr, &updatedAtStr)
+	err := row.Scan(&user.ID, &user.Username, &user.PasswordHash, &user.Role, &user.Status, &user.TelegramUserID, &user.TelegramUsername, &createdAtStr, &updatedAtStr)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil // Not found
@@ -68,12 +68,12 @@ func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*m
 
 // GetByID finds a user by their ID.
 func (r *UserRepository) GetByID(ctx context.Context, id string) (*models.User, error) {
-	query := `SELECT id, username, password_hash, role, status, created_at, updated_at FROM users WHERE id = ?`
+	query := `SELECT id, username, password_hash, role, status, telegram_user_id, telegram_username, created_at, updated_at FROM users WHERE id = ?`
 	row := r.db.QueryRowContext(ctx, query, id)
 
 	var user models.User
 	var createdAtStr, updatedAtStr string
-	err := row.Scan(&user.ID, &user.Username, &user.PasswordHash, &user.Role, &user.Status, &createdAtStr, &updatedAtStr)
+	err := row.Scan(&user.ID, &user.Username, &user.PasswordHash, &user.Role, &user.Status, &user.TelegramUserID, &user.TelegramUsername, &createdAtStr, &updatedAtStr)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil

@@ -13,3 +13,9 @@ Thumbs.db
 *.exe
 main
 server
+
+# Dependencies & tool caches
+node_modules/
+.wrangler/
+.dev.vars
+dist/

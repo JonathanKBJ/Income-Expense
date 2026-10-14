@@ -23,10 +23,12 @@ type User struct {
 	ID           string     `json:"id"`
 	Username     string     `json:"username"`
 	PasswordHash string     `json:"-"` // Never expose hash in JSON
-	Role         UserRole   `json:"role"`
-	Status       UserStatus `json:"status"`
-	CreatedAt    time.Time  `json:"createdAt"`
-	UpdatedAt    time.Time  `json:"updatedAt"`
+	Role             UserRole   `json:"role"`
+	Status           UserStatus `json:"status"`
+	TelegramUserID   *string    `json:"telegramUserId,omitempty"`
+	TelegramUsername *string    `json:"telegramUsername,omitempty"`
+	CreatedAt        time.Time  `json:"createdAt"`
+	UpdatedAt        time.Time  `json:"updatedAt"`
 }
 
 // LoginRequest is the payload for authenticating a user.

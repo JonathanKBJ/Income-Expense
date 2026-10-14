@@ -250,9 +250,9 @@ func (r *GroupRepository) GetGroupInfo(ctx context.Context, groupID, userID stri
 	// Get group name and member count
 	var info models.GroupInfo
 	err := r.db.QueryRowContext(ctx, `
-		SELECT g.id, g.name, (SELECT COUNT(*) FROM group_members WHERE group_id = g.id)
+		SELECT g.id, g.name, g.telegram_chat_id, (SELECT COUNT(*) FROM group_members WHERE group_id = g.id)
 		FROM groups g WHERE g.id = ?
-	`, groupID).Scan(&info.ID, &info.Name, &info.MemberCount)
+	`, groupID).Scan(&info.ID, &info.Name, &info.TelegramChatID, &info.MemberCount)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("group not found")
