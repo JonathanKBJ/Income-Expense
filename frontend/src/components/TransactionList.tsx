@@ -525,7 +525,7 @@ export default function TransactionList({
                             setEditPaidAmount(t.amount);
                           }
                         }}
-                        style={{ width: 100 }}
+                        style={{ width: 125 }}
                         options={[
                           { label: tr.common.pending, value: "PENDING" },
                           { label: tr.common.paid, value: "PAID" },

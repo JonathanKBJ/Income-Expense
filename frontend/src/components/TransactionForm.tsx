@@ -340,8 +340,8 @@ export default function TransactionForm({
               allowClear={false}
               format="YYYY-MM-DD"
             />
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
-              <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{t.transactions.billingCycle}:</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, whiteSpace: "nowrap" }}>
+              <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{t.transactions.billingCycleCol || "รอบบัญชี"}:</span>
               <Tag color="geekblue" style={{ margin: 0, fontWeight: 500, fontSize: 12 }}>
                 {form.billingCycle || targetCycle}
               </Tag>
