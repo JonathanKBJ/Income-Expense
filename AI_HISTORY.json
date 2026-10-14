@@ -940,5 +940,28 @@
         ],
         "logic_changed": "Added daily_usage_stats table to track daily Gemini API calls and Cloudflare Worker requests. Exposed /usage and /quota commands in Telegram Bot and a 'Check Quotas' modal in GroupPage.tsx to view real-time remaining quotas across the free-tier infrastructure.",
         "ai_warning": "Usage stats upsert relies on date ('YYYY-MM-DD') PRIMARY KEY with ON CONFLICT DO UPDATE. The Gemini Flash quota is calculated against 1,500 RPD and Cloudflare against 100,000 requests/day."
+    },
+    {
+        "date": "2026-10-14",
+        "scope": "[Full-Stack]",
+        "task": "Billing cycle budgeting and group billing cutoff day configuration",
+        "files_touched": [
+            "backend/internal/database/schema.go",
+            "backend/internal/models/group.go",
+            "backend/internal/models/transaction.go",
+            "backend/internal/repository/group.go",
+            "backend/internal/repository/transaction.go",
+            "backend/internal/repository/telegram.go",
+            "backend/internal/handlers/group.go",
+            "frontend/src/types/transaction.ts",
+            "frontend/src/api/group.ts",
+            "frontend/src/translations/index.ts",
+            "frontend/src/components/TransactionForm.tsx",
+            "frontend/src/components/TransactionList.tsx",
+            "frontend/src/components/CopyTransactionsModal.tsx",
+            "frontend/src/components/GroupPage.tsx"
+        ],
+        "logic_changed": "Decoupled transaction accounting cycle (billing_cycle) from transaction physical date. Transactions in monthly and annual queries are filtered by COALESCE(billing_cycle, strftime('%Y-%m', date)) = targetCycle. Added cycle_cutoff_day (1-31) in group_settings to auto-map transactions after cutoff day into the next billing cycle. TransactionForm binds billing_cycle to currently viewed month. CopyTransactionsModal sets destination billing_cycle with PENDING status. TransactionList preserves billing_cycle on edit and renders a cycle badge when date month differs from billing cycle.",
+        "ai_warning": "Always use COALESCE(billing_cycle, strftime('%Y-%m', date)) in monthly queries to maintain backward compatibility with legacy transactions that lack billing_cycle."
     }
 ]

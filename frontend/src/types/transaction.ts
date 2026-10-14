@@ -24,6 +24,7 @@ interface BaseTransaction {
   receiptImage?: string;
   createdByUsername?: string; // recorder username (multi-member groups)
   ownerUsername?: string;     // wallet owner username (multi-member groups)
+  billingCycle?: string;      // YYYY-MM accounting/budget cycle
   createdAt: string;
   updatedAt: string;
 }
@@ -55,6 +56,7 @@ export interface CreateIncomeRequest {
   date: string;
   userId?: string;       // optional: override wallet owner
   receiptImage?: string;
+  billingCycle?: string; // YYYY-MM budget cycle
 }
 
 export interface CreateExpenseRequest {
@@ -67,12 +69,17 @@ export interface CreateExpenseRequest {
   paidAmount: number;
   userId?: string;       // optional: override wallet owner
   receiptImage?: string;
+  billingCycle?: string; // YYYY-MM budget cycle
 }
 
 export type CreateTransactionRequest = CreateIncomeRequest | CreateExpenseRequest;
 
 export interface UpdateTransactionRequest {
   amount?: number;
+  date?: string;
+  category?: string;
+  description?: string;
+  billingCycle?: string;
   status?: ExpenseStatus;
   paidAmount?: number;
   userId?: string;       // optional: change wallet owner
@@ -144,6 +151,7 @@ export interface TransactionFormState {
   paidAmount: string; // string for controlled input binding
   userId?: string;    // optional: wallet owner override
   receiptImage?: string;
+  billingCycle?: string;
 }
 
 // --- Month-over-Month Change ---

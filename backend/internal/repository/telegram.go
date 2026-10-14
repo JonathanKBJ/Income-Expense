@@ -321,11 +321,30 @@ func (r *TelegramRepository) CreateTransactionFromTelegram(ctx context.Context, 
 		date = time.Now().Format("2006-01-02")
 	}
 
+	var cutoffDay int
+	_ = r.db.QueryRowContext(ctx, `SELECT cycle_cutoff_day FROM group_settings WHERE group_id = ?`, groupID).Scan(&cutoffDay)
+	if cutoffDay < 1 || cutoffDay > 31 {
+		cutoffDay = 1
+	}
+
+	billingCycle := ""
+	parsedDate, parseErr := time.Parse("2006-01-02", date)
+	if parseErr == nil && cutoffDay > 1 && parsedDate.Day() >= cutoffDay {
+		nextMonth := parsedDate.AddDate(0, 1, 0)
+		billingCycle = nextMonth.Format("2006-01")
+	} else if parseErr == nil {
+		billingCycle = parsedDate.Format("2006-01")
+	} else if len(date) >= 7 {
+		billingCycle = date[:7]
+	} else {
+		billingCycle = time.Now().Format("2006-01")
+	}
+
 	query := `
-		INSERT INTO transactions (id, type, category, description, amount, date, status, paid_amount, group_id, user_id, created_by, receipt_image, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO transactions (id, type, category, description, amount, date, status, paid_amount, group_id, user_id, created_by, receipt_image, billing_cycle, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
-	_, err = r.db.ExecContext(ctx, query, id, txType, req.Category, req.Description, req.Amount, date, status, paidAmount, groupID, userID, userID, receiptImage, now, now)
+	_, err = r.db.ExecContext(ctx, query, id, txType, req.Category, req.Description, req.Amount, date, status, paidAmount, groupID, userID, userID, receiptImage, billingCycle, now, now)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create transaction from telegram: %w", err)
 	}
@@ -337,6 +356,7 @@ func (r *TelegramRepository) CreateTransactionFromTelegram(ctx context.Context, 
 	tx.Description = req.Description
 	tx.Amount = req.Amount
 	tx.Date = date
+	tx.BillingCycle = &billingCycle
 	if status != nil {
 		st := models.ExpenseStatus(*status)
 		tx.Status = &st

@@ -12,6 +12,7 @@ export interface GroupSettings {
   shareCredit: boolean;
   shareLoans: boolean;
   shareAnnual: boolean;
+  cycleCutoffDay?: number;
   updatedAt?: string;
 }
 

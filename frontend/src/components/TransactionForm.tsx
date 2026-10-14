@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { DatePicker, Select, InputNumber, Input, Button, Upload, message } from "antd";
+import { DatePicker, Select, InputNumber, Input, Button, Upload, message, Tag } from "antd";
 import { CopyOutlined, DownOutlined, UpOutlined, PictureOutlined, DeleteOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import type {
@@ -44,6 +44,7 @@ export default function TransactionForm({
   const { t } = useLanguage();
   const { groupInfo } = useAuth();
   const [form, setForm] = useState<TransactionFormState>(initialState);
+  const targetCycle = dayjs().year(currentYear).month(currentMonth - 1).format("YYYY-MM");
   const [selectedOwner, setSelectedOwner] = useState<string | undefined>(undefined);
   const [isExpanded, setIsExpanded] = useState(true);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -184,6 +185,7 @@ export default function TransactionForm({
         description: form.description,
         amount,
         date: form.date,
+        billingCycle: form.billingCycle || targetCycle,
         userId: ownerUserId,
         receiptImage: form.receiptImage,
       };
@@ -200,13 +202,13 @@ export default function TransactionForm({
         description: form.description,
         amount,
         date: form.date,
+        billingCycle: form.billingCycle || targetCycle,
         status: form.status as ExpenseStatus,
         paidAmount: isNaN(paidAmount) ? 0 : paidAmount,
         userId: ownerUserId,
         receiptImage: form.receiptImage,
       };
     }
-
     setSubmitting(true);
     try {
       await onSubmit(req);
@@ -338,8 +340,13 @@ export default function TransactionForm({
               allowClear={false}
               format="YYYY-MM-DD"
             />
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+              <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{t.transactions.billingCycle}:</span>
+              <Tag color="geekblue" style={{ margin: 0, fontWeight: 500, fontSize: 12 }}>
+                {form.billingCycle || targetCycle}
+              </Tag>
+            </div>
           </div>
-
           <div className="form-group full-width">
             <label>{t.common.description}</label>
             <Input.TextArea

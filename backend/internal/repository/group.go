@@ -354,17 +354,18 @@ func (r *GroupRepository) GroupHasMultipleMembers(ctx context.Context, groupID s
 
 // GetGroupSettings retrieves sharing settings for a group, returning defaults if not yet set.
 func (r *GroupRepository) GetGroupSettings(ctx context.Context, groupID string) (*models.GroupSettings, error) {
-	query := `SELECT group_id, share_credit, share_loans, share_annual, updated_at FROM group_settings WHERE group_id = ?`
+	query := `SELECT group_id, share_credit, share_loans, share_annual, cycle_cutoff_day, updated_at FROM group_settings WHERE group_id = ?`
 	var s models.GroupSettings
-	var sc, sl, sa int
-	err := r.db.QueryRowContext(ctx, query, groupID).Scan(&s.GroupID, &sc, &sl, &sa, &s.UpdatedAt)
+	var sc, sl, sa, cutoff int
+	err := r.db.QueryRowContext(ctx, query, groupID).Scan(&s.GroupID, &sc, &sl, &sa, &cutoff, &s.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return &models.GroupSettings{
-				GroupID:     groupID,
-				ShareCredit: true,
-				ShareLoans:  true,
-				ShareAnnual: true,
+				GroupID:        groupID,
+				ShareCredit:    true,
+				ShareLoans:     true,
+				ShareAnnual:    true,
+				CycleCutoffDay: 1,
 			}, nil
 		}
 		return nil, fmt.Errorf("failed to get group settings: %w", err)
@@ -372,6 +373,10 @@ func (r *GroupRepository) GetGroupSettings(ctx context.Context, groupID string) 
 	s.ShareCredit = sc == 1
 	s.ShareLoans = sl == 1
 	s.ShareAnnual = sa == 1
+	if cutoff < 1 || cutoff > 31 {
+		cutoff = 1
+	}
+	s.CycleCutoffDay = cutoff
 	return &s, nil
 }
 
@@ -390,20 +395,26 @@ func (r *GroupRepository) UpdateGroupSettings(ctx context.Context, groupID strin
 	if settings.ShareAnnual {
 		sa = 1
 	}
+	cutoff := settings.CycleCutoffDay
+	if cutoff < 1 || cutoff > 31 {
+		cutoff = 1
+	}
 
-	query := `INSERT INTO group_settings (group_id, share_credit, share_loans, share_annual, updated_at)
-		VALUES (?, ?, ?, ?, ?)
+	query := `INSERT INTO group_settings (group_id, share_credit, share_loans, share_annual, cycle_cutoff_day, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(group_id) DO UPDATE SET
 			share_credit = excluded.share_credit,
 			share_loans = excluded.share_loans,
 			share_annual = excluded.share_annual,
+			cycle_cutoff_day = excluded.cycle_cutoff_day,
 			updated_at = excluded.updated_at`
 
-	_, err := r.db.ExecContext(ctx, query, groupID, sc, sl, sa, now)
+	_, err := r.db.ExecContext(ctx, query, groupID, sc, sl, sa, cutoff, now)
 	if err != nil {
 		return fmt.Errorf("failed to update group settings: %w", err)
 	}
 	settings.GroupID = groupID
+	settings.CycleCutoffDay = cutoff
 	settings.UpdatedAt = now
 	return nil
 }

@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
-import { Button, Input, message, Modal, Table, Tag, Tooltip, Switch } from "antd";
+import { Button, Input, message, Modal, Table, Tag, Tooltip, Switch, InputNumber } from "antd";
 import {
   CopyOutlined, UserAddOutlined, LogoutOutlined,
   CreditCardOutlined, DollarOutlined, LineChartOutlined, LockOutlined, ShareAltOutlined,
-  SendOutlined, CheckCircleOutlined, InfoCircleOutlined, BarChartOutlined,
+  SendOutlined, CheckCircleOutlined, InfoCircleOutlined, BarChartOutlined, CalendarOutlined,
 } from "@ant-design/icons";
 import { useAuth } from "../contexts/AuthContext";
 import {
@@ -49,6 +49,7 @@ export default function GroupPage() {
   const [shareLoans, setShareLoans] = useState(true);
   const [shareAnnual, setShareAnnual] = useState(true);
   const [updatingSettings, setUpdatingSettings] = useState(false);
+  const [cycleCutoffDay, setCycleCutoffDay] = useState(1);
   const [telegramStatus, setTelegramStatus] = useState<TelegramStatus | null>(null);
   const [telegramCode, setTelegramCode] = useState<GenerateLinkCodeResponse | null>(null);
   const [generatingCode, setGeneratingCode] = useState(false);
@@ -61,6 +62,7 @@ export default function GroupPage() {
       setShareCredit(groupInfo.settings.shareCredit);
       setShareLoans(groupInfo.settings.shareLoans);
       setShareAnnual(groupInfo.settings.shareAnnual);
+      setCycleCutoffDay(groupInfo.settings.cycleCutoffDay || 1);
     }
   }, [groupInfo]);
 
@@ -80,6 +82,21 @@ export default function GroupPage() {
       if (key === "shareLoans") setShareLoans(!val);
       if (key === "shareAnnual") setShareAnnual(!val);
       message.error(e instanceof Error ? e.message : "Failed to update setting");
+    } finally {
+      setUpdatingSettings(false);
+    }
+  }
+
+  async function handleUpdateCutoffDay(day: number) {
+    if (!isOwner) return;
+    setUpdatingSettings(true);
+    setCycleCutoffDay(day);
+    try {
+      await updateGroupSettings({ cycleCutoffDay: day });
+      message.success(t.group.cycleCutoffUpdated);
+      await refreshGroupInfo();
+    } catch (e: unknown) {
+      message.error(e instanceof Error ? e.message : "Failed to update cutoff day");
     } finally {
       setUpdatingSettings(false);
     }
@@ -481,6 +498,50 @@ export default function GroupPage() {
                   checked={shareAnnual}
                   loading={updatingSettings}
                   onChange={(checked) => handleToggleSetting("shareAnnual", checked)}
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Cycle Cutoff Day setting */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "14px 16px",
+              background: "var(--bg-card)",
+              border: "1px solid var(--border-subtle)",
+              borderRadius: 12,
+              gap: 16,
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <div style={{ width: 40, height: 40, borderRadius: 10, background: "rgba(14, 165, 233, 0.12)", display: "flex", alignItems: "center", justifyContent: "center", color: "#0ea5e9", fontSize: 20, flexShrink: 0 }}>
+                <CalendarOutlined />
+              </div>
+              <div>
+                <div style={{ fontWeight: 600, color: "var(--text-primary)", fontSize: 15 }}>
+                  {t.group.cycleCutoffDayTitle}
+                </div>
+                <div style={{ color: "var(--text-secondary)", fontSize: 12, marginTop: 2 }}>
+                  {t.group.cycleCutoffDayDesc}
+                </div>
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginLeft: "auto" }}>
+              <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>
+                {cycleCutoffDay} {t.group.cycleCutoffDaySuffix}
+              </span>
+              {isOwner && (
+                <InputNumber
+                  min={1}
+                  max={31}
+                  value={cycleCutoffDay}
+                  disabled={updatingSettings}
+                  onChange={(val) => val && handleUpdateCutoffDay(val)}
+                  style={{ width: 70 }}
                 />
               )}
             </div>

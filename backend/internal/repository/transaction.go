@@ -27,31 +27,23 @@ func NewTransactionRepository(db *database.DB) *TransactionRepository {
 // GetByMonthYear retrieves all transactions for a given month/year and group.
 // Includes createdByUsername only when the group has more than 1 member.
 func (r *TransactionRepository) GetByMonthYear(ctx context.Context, month, year int, groupID string) (*models.TransactionsResponse, error) {
-	// Build date range: first day of month to last day of month
-	startDate := fmt.Sprintf("%04d-%02d-01", year, month)
-	// Use first day of next month as exclusive upper bound
-	nextMonth := month + 1
-	nextYear := year
-	if nextMonth > 12 {
-		nextMonth = 1
-		nextYear++
-	}
-	endDate := fmt.Sprintf("%04d-%02d-01", nextYear, nextMonth)
+	cycle := fmt.Sprintf("%04d-%02d", year, month)
 
 	query := `
 		SELECT t.id, t.type, t.category, t.description, t.amount, t.date,
 		       t.status, t.paid_amount, t.group_id, t.user_id, t.created_by, t.receipt_image,
+		       t.billing_cycle,
 		       rec_u.username as created_by_username,
 		       own_u.username as owner_username,
 		       t.created_at, t.updated_at
 		FROM transactions t
 		LEFT JOIN users rec_u ON t.created_by = rec_u.id
 		LEFT JOIN users own_u ON t.user_id = own_u.id
-		WHERE t.date >= ? AND t.date < ? AND t.group_id = ?
+		WHERE COALESCE(t.billing_cycle, strftime('%Y-%m', t.date)) = ? AND t.group_id = ?
 		ORDER BY t.date DESC, t.created_at DESC
 	`
 
-	rows, err := r.db.QueryContext(ctx, query, startDate, endDate, groupID)
+	rows, err := r.db.QueryContext(ctx, query, cycle, groupID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query transactions: %w", err)
 	}
@@ -75,6 +67,7 @@ func (r *TransactionRepository) GetByMonthYear(ctx context.Context, month, year 
 			&row.UserID,
 			&row.CreatedByID,
 			&row.ReceiptImage,
+			&row.BillingCycle,
 			&row.CreatedByUsername,
 			&row.OwnerUsername,
 			&row.CreatedAt,
@@ -123,22 +116,15 @@ func (r *TransactionRepository) GetByMonthYear(ctx context.Context, month, year 
 // GetByMonthYearCompact retrieves a minimal set of fields for MoM comparison.
 // Only returns id, type, category, description, amount, and user_id — no receipt_image, status, or JOINs.
 func (r *TransactionRepository) GetByMonthYearCompact(ctx context.Context, month, year int, groupID string) (*models.CompactTransactionsResponse, error) {
-	startDate := fmt.Sprintf("%04d-%02d-01", year, month)
-	nextMonth := month + 1
-	nextYear := year
-	if nextMonth > 12 {
-		nextMonth = 1
-		nextYear++
-	}
-	endDate := fmt.Sprintf("%04d-%02d-01", nextYear, nextMonth)
+	cycle := fmt.Sprintf("%04d-%02d", year, month)
 
 	query := `
 		SELECT t.id, t.type, t.category, t.description, t.amount, t.user_id
 		FROM transactions t
-		WHERE t.date >= ? AND t.date < ? AND t.group_id = ?
+		WHERE COALESCE(t.billing_cycle, strftime('%Y-%m', t.date)) = ? AND t.group_id = ?
 	`
 
-	rows, err := r.db.QueryContext(ctx, query, startDate, endDate, groupID)
+	rows, err := r.db.QueryContext(ctx, query, cycle, groupID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query compact transactions: %w", err)
 	}
@@ -172,6 +158,7 @@ func (r *TransactionRepository) GetByID(ctx context.Context, id, groupID string)
 	query := `
 		SELECT t.id, t.type, t.category, t.description, t.amount, t.date,
 		       t.status, t.paid_amount, t.group_id, t.user_id, t.created_by, t.receipt_image,
+		       t.billing_cycle,
 		       rec_u.username as created_by_username,
 		       own_u.username as owner_username,
 		       t.created_at, t.updated_at
@@ -195,6 +182,7 @@ func (r *TransactionRepository) GetByID(ctx context.Context, id, groupID string)
 		&row.UserID,
 		&row.CreatedByID,
 		&row.ReceiptImage,
+		&row.BillingCycle,
 		&row.CreatedByUsername,
 		&row.OwnerUsername,
 		&row.CreatedAt,
@@ -248,9 +236,32 @@ func (r *TransactionRepository) Create(ctx context.Context, req models.CreateTra
 	}
 	// For INCOME: status and paidAmount remain nil
 
+	billingCycle := ""
+	if req.BillingCycle != nil && *req.BillingCycle != "" {
+		billingCycle = *req.BillingCycle
+	} else {
+		var cutoffDay int
+		_ = r.db.QueryRowContext(ctx, `SELECT cycle_cutoff_day FROM group_settings WHERE group_id = ?`, groupID).Scan(&cutoffDay)
+		if cutoffDay < 1 || cutoffDay > 31 {
+			cutoffDay = 1
+		}
+
+		parsedDate, parseErr := time.Parse("2006-01-02", req.Date)
+		if parseErr == nil && cutoffDay > 1 && parsedDate.Day() >= cutoffDay {
+			nextMonth := parsedDate.AddDate(0, 1, 0)
+			billingCycle = nextMonth.Format("2006-01")
+		} else if parseErr == nil {
+			billingCycle = parsedDate.Format("2006-01")
+		} else if len(req.Date) >= 7 {
+			billingCycle = req.Date[:7]
+		} else {
+			billingCycle = time.Now().Format("2006-01")
+		}
+	}
+
 	query := `
-		INSERT INTO transactions (id, type, category, description, amount, date, status, paid_amount, group_id, user_id, created_by, receipt_image, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO transactions (id, type, category, description, amount, date, status, paid_amount, group_id, user_id, created_by, receipt_image, billing_cycle, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	_, err := r.db.ExecContext(ctx, query,
@@ -266,6 +277,7 @@ func (r *TransactionRepository) Create(ctx context.Context, req models.CreateTra
 		ownerUserID,
 		createdByID,
 		req.ReceiptImage,
+		billingCycle,
 		now,
 		now,
 	)
@@ -294,8 +306,8 @@ func (r *TransactionRepository) CreateBatch(ctx context.Context, requests []mode
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	query := `
-		INSERT INTO transactions (id, type, category, description, amount, date, status, paid_amount, group_id, user_id, created_by, receipt_image, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO transactions (id, type, category, description, amount, date, status, paid_amount, group_id, user_id, created_by, receipt_image, billing_cycle, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	stmt, err := tx.PrepareContext(ctx, query)
@@ -331,6 +343,15 @@ func (r *TransactionRepository) CreateBatch(ctx context.Context, requests []mode
 			}
 		}
 
+		billingCycle := ""
+		if req.BillingCycle != nil && *req.BillingCycle != "" {
+			billingCycle = *req.BillingCycle
+		} else if len(req.Date) >= 7 {
+			billingCycle = req.Date[:7]
+		} else {
+			billingCycle = time.Now().Format("2006-01")
+		}
+
 		_, err := stmt.ExecContext(ctx,
 			id,
 			string(req.Type),
@@ -344,6 +365,7 @@ func (r *TransactionRepository) CreateBatch(ctx context.Context, requests []mode
 			ownerUserID,
 			createdByID,
 			req.ReceiptImage,
+			billingCycle,
 			now,
 			now,
 		)
@@ -390,6 +412,25 @@ func (r *TransactionRepository) Update(ctx context.Context, id, groupID string, 
 	if req.UserID != nil {
 		setClauses = append(setClauses, "user_id = ?")
 		args = append(args, *req.UserID)
+	}
+	if req.Date != nil && *req.Date != "" {
+		setClauses = append(setClauses, "date = ?")
+		args = append(args, *req.Date)
+	}
+
+	if req.Category != nil && *req.Category != "" {
+		setClauses = append(setClauses, "category = ?")
+		args = append(args, *req.Category)
+	}
+
+	if req.Description != nil {
+		setClauses = append(setClauses, "description = ?")
+		args = append(args, *req.Description)
+	}
+
+	if req.BillingCycle != nil && *req.BillingCycle != "" {
+		setClauses = append(setClauses, "billing_cycle = ?")
+		args = append(args, *req.BillingCycle)
 	}
 
 	// Fetch existing transaction to validate status change rules
@@ -510,15 +551,15 @@ func (r *TransactionRepository) DeleteBatch(ctx context.Context, ids []string, g
 
 // GetAnnualSummary retrieves and aggregates all transactions for a given year and group, optionally scoped to a user.
 func (r *TransactionRepository) GetAnnualSummary(ctx context.Context, year int, groupID string, filterUserID ...string) (*models.AnnualSummaryResponse, error) {
-	startDate := fmt.Sprintf("%04d-01-01", year)
-	endDate := fmt.Sprintf("%04d-01-01", year+1)
+	startCycle := fmt.Sprintf("%04d-01", year)
+	endCycle := fmt.Sprintf("%04d-12", year)
 
 	query := `
-		SELECT type, category, amount, date, status, paid_amount
+		SELECT type, category, amount, COALESCE(billing_cycle, strftime('%Y-%m', date)) as cycle, status, paid_amount
 		FROM transactions
-		WHERE date >= ? AND date < ? AND group_id = ?
+		WHERE COALESCE(billing_cycle, strftime('%Y-%m', date)) >= ? AND COALESCE(billing_cycle, strftime('%Y-%m', date)) <= ? AND group_id = ?
 	`
-	args := []interface{}{startDate, endDate, groupID}
+	args := []interface{}{startCycle, endCycle, groupID}
 	if len(filterUserID) > 0 && filterUserID[0] != "" {
 		query += " AND (user_id = ? OR created_by = ?)"
 		args = append(args, filterUserID[0], filterUserID[0])
@@ -545,18 +586,20 @@ func (r *TransactionRepository) GetAnnualSummary(ctx context.Context, year int, 
 		var txType string
 		var category string
 		var amount float64
-		var dateStr string
+		var cycleStr string
 		var status sql.NullString
 		var paidAmount sql.NullFloat64
 
-		if err := rows.Scan(&txType, &category, &amount, &dateStr, &status, &paidAmount); err != nil {
+		if err := rows.Scan(&txType, &category, &amount, &cycleStr, &status, &paidAmount); err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
 		}
 
-		// parse month from YYYY-MM-DD
-		var tYear, tMonth, tDay int
-		fmt.Sscanf(dateStr, "%04d-%02d-%02d", &tYear, &tMonth, &tDay)
-
+		// parse month from YYYY-MM
+		var tYear, tMonth int
+		fmt.Sscanf(cycleStr, "%04d-%02d", &tYear, &tMonth)
+		if tMonth < 1 || tMonth > 12 {
+			tMonth = 1
+		}
 		tType := models.TransactionType(txType)
 
 		// calculate active amount for expenses (pending + paid)
@@ -626,7 +669,7 @@ func (r *TransactionRepository) GetWalletSummary(ctx context.Context, month, yea
 		JOIN users u ON u.id = gm.user_id
 		LEFT JOIN transactions t ON t.user_id = gm.user_id
 			AND t.group_id = ?
-			AND substr(t.date, 1, 7) = ?
+			AND COALESCE(t.billing_cycle, strftime('%Y-%m', t.date)) = ?
 		WHERE gm.group_id = ?
 		GROUP BY gm.user_id, u.username
 		ORDER BY u.username

@@ -486,6 +486,14 @@ func (h *GroupHandler) UpdateGroupSettings(w http.ResponseWriter, r *http.Reques
 	if req.ShareAnnual != nil {
 		current.ShareAnnual = *req.ShareAnnual
 	}
+	if req.CycleCutoffDay != nil {
+		cutoff := *req.CycleCutoffDay
+		if cutoff < 1 || cutoff > 31 {
+			writeError(w, http.StatusBadRequest, "cycle cutoff day must be between 1 and 31")
+			return
+		}
+		current.CycleCutoffDay = cutoff
+	}
 
 	if err := h.groupRepo.UpdateGroupSettings(ctx, groupID, current); err != nil {
 		log.Printf("ERROR: UpdateGroupSettings save: %v", err)

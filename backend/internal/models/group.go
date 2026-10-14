@@ -50,18 +50,20 @@ type GroupInfo struct {
 
 // GroupSettings defines menu-level sharing configuration for a group.
 type GroupSettings struct {
-	GroupID     string `json:"groupId"`
-	ShareCredit bool   `json:"shareCredit"`
-	ShareLoans  bool   `json:"shareLoans"`
-	ShareAnnual bool   `json:"shareAnnual"`
-	UpdatedAt   string `json:"updatedAt"`
+	GroupID        string `json:"groupId"`
+	ShareCredit    bool   `json:"shareCredit"`
+	ShareLoans     bool   `json:"shareLoans"`
+	ShareAnnual    bool   `json:"shareAnnual"`
+	CycleCutoffDay int    `json:"cycleCutoffDay"`
+	UpdatedAt      string `json:"updatedAt"`
 }
 
 // UpdateGroupSettingsRequest is the payload for updating group sharing settings.
 type UpdateGroupSettingsRequest struct {
-	ShareCredit *bool `json:"shareCredit"`
-	ShareLoans  *bool `json:"shareLoans"`
-	ShareAnnual *bool `json:"shareAnnual"`
+	ShareCredit    *bool `json:"shareCredit"`
+	ShareLoans     *bool `json:"shareLoans"`
+	ShareAnnual    *bool `json:"shareAnnual"`
+	CycleCutoffDay *int  `json:"cycleCutoffDay"`
 }
 
 // ActivityLogEntry represents one activity record.

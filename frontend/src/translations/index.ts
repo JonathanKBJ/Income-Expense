@@ -89,6 +89,9 @@ export interface TranslationKeys {
     momUnchanged: string;
     momTooltip: string;
     filterByMember: string;
+    billingCycle: string;
+    billingCycleHint: string;
+    cycleBadge: (cycle: string) => string;
   };
   copy: {
     title: string;
@@ -175,6 +178,10 @@ export interface TranslationKeys {
     telegramCopied: string;
     telegramUsageTitle: string;
     telegramUsageBtn: string;
+    cycleCutoffDayTitle: string;
+    cycleCutoffDayDesc: string;
+    cycleCutoffDaySuffix: string;
+    cycleCutoffUpdated: string;
   };
   loansPage: {
     title: string;
@@ -433,6 +440,9 @@ export const translations: Record<Language, TranslationKeys> = {
       momUnchanged: "—",
       momTooltip: "Prev: {prev} → Now: {curr} ({pct})",
       filterByMember: "Filter by Member",
+      billingCycle: "Billing Cycle",
+      billingCycleHint: "Accounting budget month for this transaction",
+      cycleBadge: (cycle) => `Cycle: ${cycle}`,
     },
     copy: {
       title: "Copy Transactions from Other Month",
@@ -519,6 +529,10 @@ export const translations: Record<Language, TranslationKeys> = {
       telegramCopied: "Command copied to clipboard",
       telegramUsageTitle: "Free Tier Quotas & Usage Remaining",
       telegramUsageBtn: "Check Quotas",
+      cycleCutoffDayTitle: "Billing Cycle Cutoff Day",
+      cycleCutoffDayDesc: "Transactions dated on or after this day default to the next month's billing cycle (e.g. salary day on 25th).",
+      cycleCutoffDaySuffix: "th of month",
+      cycleCutoffUpdated: "Billing cutoff day updated",
     },
     loansPage: {
       title: "Loans & Debts",
@@ -778,6 +792,9 @@ export const translations: Record<Language, TranslationKeys> = {
       momUnchanged: "—",
       momTooltip: "เดือนก่อน: {prev} → ปัจจุบัน: {curr} ({pct})",
       filterByMember: "กรองตามสมาชิก",
+      billingCycle: "รอบเดือนงบประมาณ",
+      billingCycleHint: "ระบุว่าเป็นบิลของรอบเดือนไหน (เช่น 2026-11 แม้วันที่ตามบิลจะเป็น 31 ต.ค.)",
+      cycleBadge: (cycle) => `รอบ ${cycle}`,
     },
     copy: {
       title: "คัดลอกรายการจากเดือนอื่น",
@@ -864,6 +881,10 @@ export const translations: Record<Language, TranslationKeys> = {
       telegramCopied: "คัดลอกคำสั่งเรียบร้อยแล้ว",
       telegramUsageTitle: "โควต้าบริการฟรีคงเหลือ",
       telegramUsageBtn: "เช็คโควต้าคงเหลือ",
+      cycleCutoffDayTitle: "วันตัดรอบบัญชีของกลุ่ม",
+      cycleCutoffDayDesc: "รายการที่ลงวันที่ตั้งแต่วันนี้เป็นต้นไป ระบบจะแนะนำรอบเดือนเป็นเดือนถัดไปให้อัตโนมัติ (เช่น วันเงินเดือนออก วันที่ 25)",
+      cycleCutoffDaySuffix: "ของเดือน",
+      cycleCutoffUpdated: "อัปเดตวันตัดรอบบัญชีแล้ว",
     },
     loansPage: {
       title: "เงินกู้และหนี้สิน",

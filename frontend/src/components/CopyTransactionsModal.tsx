@@ -70,11 +70,9 @@ export default function CopyTransactionsModal({
     
     if (selectedTransactions.length === 0) return;
 
+    const destCycle = destDate.format("YYYY-MM");
     const requests: CreateTransactionRequest[] = selectedTransactions.map(t => {
-      // Logic for new date: same day of month, but in destination month
-      let newDate = destDate.date(dayjs(t.date).date());
-      // If the day is invalid for the target month (e.g., Jan 31 -> Feb), 
-      // dayjs handles it by wrapping or we can cap it. Caps at last day automatically.
+      const newDate = destDate.date(dayjs(t.date).date());
       
       const common = {
         type: t.type,
@@ -82,9 +80,9 @@ export default function CopyTransactionsModal({
         description: t.description,
         amount: t.amount,
         date: newDate.format("YYYY-MM-DD"),
+        billingCycle: destCycle,
         userId: t.userId,
       };
-
       if (t.type === "EXPENSE") {
         return {
           ...common,

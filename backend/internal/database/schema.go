@@ -43,10 +43,11 @@ CREATE TABLE IF NOT EXISTS group_members (
 const createGroupSettingsTable = `
 CREATE TABLE IF NOT EXISTS group_settings (
     group_id     TEXT PRIMARY KEY,
-    share_credit INTEGER NOT NULL DEFAULT 1,
-    share_loans  INTEGER NOT NULL DEFAULT 1,
-    share_annual INTEGER NOT NULL DEFAULT 1,
-    updated_at   TEXT NOT NULL,
+    share_credit     INTEGER NOT NULL DEFAULT 1,
+    share_loans      INTEGER NOT NULL DEFAULT 1,
+    share_annual     INTEGER NOT NULL DEFAULT 1,
+    cycle_cutoff_day INTEGER NOT NULL DEFAULT 1 CHECK (cycle_cutoff_day >= 1 AND cycle_cutoff_day <= 31),
+    updated_at       TEXT NOT NULL,
     FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE
 );
 `
@@ -67,6 +68,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     user_id       TEXT,
     created_by    TEXT,
     receipt_image TEXT,
+    billing_cycle TEXT,
     created_at    TEXT NOT NULL,
     updated_at    TEXT NOT NULL
 );
@@ -94,6 +96,7 @@ CREATE INDEX IF NOT EXISTS idx_transactions_group ON transactions(group_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_group_date ON transactions(group_id, date);
 CREATE INDEX IF NOT EXISTS idx_categories_group ON categories(group_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_global_unique ON categories(name, type) WHERE group_id IS NULL AND user_id IS NULL;
+CREATE INDEX IF NOT EXISTS idx_transactions_group_cycle ON transactions(group_id, billing_cycle);
 `
 
 // createActivityLogTable is the DDL for the activity_log table (Phase 1: Group Awareness).
@@ -369,12 +372,13 @@ func (d *DB) Migrate() error {
 		"ALTER TABLE users ADD COLUMN telegram_user_id TEXT",
 		"ALTER TABLE users ADD COLUMN telegram_username TEXT",
 		"ALTER TABLE groups ADD COLUMN telegram_chat_id TEXT",
+		"ALTER TABLE transactions ADD COLUMN billing_cycle TEXT",
+		"ALTER TABLE group_settings ADD COLUMN cycle_cutoff_day INTEGER NOT NULL DEFAULT 1",
 	}
 	for _, sql := range alterations {
 		// We ignore errors because the columns might already exist
 		_, _ = d.ExecContext(ctx, sql)
 	}
-
 	// Migration for categories to update UNIQUE constraint and add user_id
 	var hasUserID int
 	_ = d.QueryRowContext(ctx, "SELECT count(*) FROM pragma_table_info('categories') WHERE name='user_id'").Scan(&hasUserID)

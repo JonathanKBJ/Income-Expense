@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Modal, Select, InputNumber, Upload, Button, Tooltip, message } from "antd";
+import { Modal, Select, InputNumber, Upload, Button, Tooltip, message, Tag } from "antd";
 import { FileImageOutlined, DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import type {
   Transaction,
@@ -176,6 +176,9 @@ export default function TransactionList({
     setActionLoading(tx.id);
     try {
       const req: UpdateTransactionRequest = { amount: editAmount };
+      if (tx.billingCycle) {
+        req.billingCycle = tx.billingCycle;
+      }
       if (canEditOwner && editOwnerId) {
         req.userId = editOwnerId;
       }
@@ -400,7 +403,14 @@ export default function TransactionList({
                     />
                   </td>
                 )}
-                <td className="col-date">{formatDate(t.date)}</td>
+                <td className="col-date">
+                  <div>{formatDate(t.date)}</div>
+                  {t.billingCycle && t.billingCycle !== t.date.slice(0, 7) && (
+                    <Tag color="geekblue" style={{ fontSize: 10, padding: "0 4px", marginTop: 2, display: "inline-block" }}>
+                      {tr.transactions.cycleBadge(t.billingCycle)}
+                    </Tag>
+                  )}
+                </td>
                 <td className="col-category">{t.category}</td>
                 {hasOwnerColumn && (
                   <td className="col-owner">
@@ -747,7 +757,14 @@ export default function TransactionList({
               <>
                 <div className="card-top">
                   <div className="card-info">
-                    <span className="card-date">{formatDate(t.date)}</span>
+                    <span className="card-date">
+                      {formatDate(t.date)}
+                      {t.billingCycle && t.billingCycle !== t.date.slice(0, 7) && (
+                        <Tag color="geekblue" style={{ fontSize: 10, padding: "0 4px", marginLeft: 4 }}>
+                          {tr.transactions.cycleBadge(t.billingCycle)}
+                        </Tag>
+                      )}
+                    </span>
                     <span className="card-category">{t.category}</span>
                   </div>
                   <div className="card-amount-box">
