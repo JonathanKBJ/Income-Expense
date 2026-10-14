@@ -95,10 +95,24 @@ func ValidateUpdateRequest(req *models.UpdateTransactionRequest, existing *model
 	}
 
 	// 3. Must provide at least one field to update
-	if req.Amount == nil && req.Status == nil && req.PaidAmount == nil && req.ReceiptImage == nil {
-		return fmt.Errorf("at least one of amount, status, paidAmount or receiptImage must be provided")
+	if req.Amount == nil && req.Status == nil && req.PaidAmount == nil && req.ReceiptImage == nil &&
+		req.Date == nil && req.BillingCycle == nil && req.Category == nil && req.Description == nil && req.UserID == nil {
+		return fmt.Errorf("at least one field must be provided for update")
 	}
 
+	// Validate date format if provided
+	if req.Date != nil && *req.Date != "" {
+		if _, err := time.Parse("2006-01-02", *req.Date); err != nil {
+			return fmt.Errorf("date must be in YYYY-MM-DD format")
+		}
+	}
+
+	// Validate billingCycle format if provided
+	if req.BillingCycle != nil && *req.BillingCycle != "" {
+		if _, err := time.Parse("2006-01", *req.BillingCycle); err != nil {
+			return fmt.Errorf("billingCycle must be in YYYY-MM format")
+		}
+	}
 	// Validate status value if provided
 	if req.Status != nil {
 		if *req.Status != models.StatusPending && *req.Status != models.StatusPaid {

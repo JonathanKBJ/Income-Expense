@@ -90,6 +90,8 @@ export interface TranslationKeys {
     momTooltip: string;
     filterByMember: string;
     billingCycle: string;
+    billingCycleCol: string;
+    dueDate: string;
     billingCycleHint: string;
     cycleBadge: (cycle: string) => string;
   };
@@ -441,6 +443,8 @@ export const translations: Record<Language, TranslationKeys> = {
       momTooltip: "Prev: {prev} → Now: {curr} ({pct})",
       filterByMember: "Filter by Member",
       billingCycle: "Billing Cycle",
+      billingCycleCol: "Billing Cycle",
+      dueDate: "Due Date",
       billingCycleHint: "Accounting budget month for this transaction",
       cycleBadge: (cycle) => `Cycle: ${cycle}`,
     },
@@ -793,6 +797,8 @@ export const translations: Record<Language, TranslationKeys> = {
       momTooltip: "เดือนก่อน: {prev} → ปัจจุบัน: {curr} ({pct})",
       filterByMember: "กรองตามสมาชิก",
       billingCycle: "รอบเดือนงบประมาณ",
+      billingCycleCol: "รอบบัญชี",
+      dueDate: "กำหนดการจ่าย",
       billingCycleHint: "ระบุว่าเป็นบิลของรอบเดือนไหน (เช่น 2026-11 แม้วันที่ตามบิลจะเป็น 31 ต.ค.)",
       cycleBadge: (cycle) => `รอบ ${cycle}`,
     },

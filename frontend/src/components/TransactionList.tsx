@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Modal, Select, InputNumber, Upload, Button, Tooltip, message, Tag } from "antd";
+import { Modal, Select, InputNumber, Upload, Button, Tooltip, message, Tag, DatePicker } from "antd";
 import { FileImageOutlined, DeleteOutlined, PlusOutlined } from "@ant-design/icons";
+import dayjs from "dayjs";
 import type {
   Transaction,
   UpdateTransactionRequest,
@@ -96,6 +97,8 @@ export default function TransactionList({
   const [editPaidAmount, setEditPaidAmount] = useState<number>(0);
   const [editOwnerId, setEditOwnerId] = useState<string | undefined>(undefined);
   const [editReceiptImage, setEditReceiptImage] = useState<string | undefined>(undefined);
+  const [editDate, setEditDate] = useState<string>("");
+  const [editBillingCycle, setEditBillingCycle] = useState<string>("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerImage, setViewerImage] = useState<string | null>(null);
@@ -113,6 +116,8 @@ export default function TransactionList({
     setEditingId(tx.id);
     setEditAmount(tx.amount);
     setEditOwnerId(tx.userId ?? user?.id);
+    setEditDate(tx.date);
+    setEditBillingCycle(tx.billingCycle ?? tx.date.slice(0, 7));
     if (isExpense(tx)) {
       setEditStatus(tx.status);
       setEditPaidAmount(tx.paidAmount);
@@ -126,6 +131,8 @@ export default function TransactionList({
     setEditingId(null);
     setEditOwnerId(undefined);
     setEditReceiptImage(undefined);
+    setEditDate("");
+    setEditBillingCycle("");
   }
 
   const compressImage = (file: File): Promise<string> => {
@@ -175,10 +182,11 @@ export default function TransactionList({
   async function handleSave(tx: Transaction) {
     setActionLoading(tx.id);
     try {
-      const req: UpdateTransactionRequest = { amount: editAmount };
-      if (tx.billingCycle) {
-        req.billingCycle = tx.billingCycle;
-      }
+      const req: UpdateTransactionRequest = { 
+        amount: editAmount,
+        date: editDate || tx.date,
+        billingCycle: editBillingCycle || tx.billingCycle || tx.date.slice(0, 7),
+      };
       if (canEditOwner && editOwnerId) {
         req.userId = editOwnerId;
       }
@@ -379,7 +387,8 @@ export default function TransactionList({
                   />
                 </th>
               )}
-              <th>{tr.common.date}</th>
+              <th>{tr.transactions.billingCycleCol || "รอบบัญชี"}</th>
+              <th>{tr.transactions.dueDate || "กำหนดการจ่าย"}</th>
               <th>{tr.transactions.category}</th>
               {hasOwnerColumn && <th>{tr.transactions.owner}</th>}
               <th>{tr.common.description}</th>
@@ -403,12 +412,35 @@ export default function TransactionList({
                     />
                   </td>
                 )}
-                <td className="col-date">
-                  <div>{formatDate(t.date)}</div>
-                  {t.billingCycle && t.billingCycle !== t.date.slice(0, 7) && (
-                    <Tag color="geekblue" style={{ fontSize: 10, padding: "0 4px", marginTop: 2, display: "inline-block" }}>
-                      {tr.transactions.cycleBadge(t.billingCycle)}
+                <td className="col-cycle">
+                  {editingId === t.id ? (
+                    <DatePicker
+                      size="small"
+                      picker="month"
+                      value={dayjs(editBillingCycle || t.billingCycle || t.date.slice(0, 7))}
+                      onChange={(d) => setEditBillingCycle(d ? d.format("YYYY-MM") : "")}
+                      allowClear={false}
+                      format="YYYY-MM"
+                      style={{ width: 105 }}
+                    />
+                  ) : (
+                    <Tag color="geekblue" style={{ fontWeight: 500 }}>
+                      {t.billingCycle || t.date.slice(0, 7)}
                     </Tag>
+                  )}
+                </td>
+                <td className="col-date">
+                  {editingId === t.id ? (
+                    <DatePicker
+                      size="small"
+                      value={dayjs(editDate || t.date)}
+                      onChange={(d) => setEditDate(d ? d.format("YYYY-MM-DD") : "")}
+                      allowClear={false}
+                      format="YYYY-MM-DD"
+                      style={{ width: 125 }}
+                    />
+                  ) : (
+                    <div>{formatDate(t.date)}</div>
                   )}
                 </td>
                 <td className="col-category">{t.category}</td>
@@ -666,6 +698,27 @@ export default function TransactionList({
                   </div>
                 )}
                 <div className="form-group">
+                  <label>{tr.transactions.billingCycleCol || "รอบบัญชี"}</label>
+                  <DatePicker
+                    picker="month"
+                    className="antd-datepicker-full"
+                    value={dayjs(editBillingCycle || t.billingCycle || t.date.slice(0, 7))}
+                    onChange={(d) => setEditBillingCycle(d ? d.format("YYYY-MM") : "")}
+                    allowClear={false}
+                    format="YYYY-MM"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>{tr.transactions.dueDate || "กำหนดการจ่าย"}</label>
+                  <DatePicker
+                    className="antd-datepicker-full"
+                    value={dayjs(editDate || t.date)}
+                    onChange={(d) => setEditDate(d ? d.format("YYYY-MM-DD") : "")}
+                    allowClear={false}
+                    format="YYYY-MM-DD"
+                  />
+                </div>
+                <div className="form-group">
                   <label>{tr.common.amount}</label>
                   <InputNumber
                     className="antd-input-number-full"
@@ -757,14 +810,12 @@ export default function TransactionList({
               <>
                 <div className="card-top">
                   <div className="card-info">
-                    <span className="card-date">
-                      {formatDate(t.date)}
-                      {t.billingCycle && t.billingCycle !== t.date.slice(0, 7) && (
-                        <Tag color="geekblue" style={{ fontSize: 10, padding: "0 4px", marginLeft: 4 }}>
-                          {tr.transactions.cycleBadge(t.billingCycle)}
-                        </Tag>
-                      )}
-                    </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 2 }}>
+                      <Tag color="geekblue" style={{ fontSize: 11, padding: "0 5px", margin: 0, fontWeight: 500 }}>
+                        {t.billingCycle || t.date.slice(0, 7)}
+                      </Tag>
+                      <span className="card-date">{formatDate(t.date)}</span>
+                    </div>
                     <span className="card-category">{t.category}</span>
                   </div>
                   <div className="card-amount-box">

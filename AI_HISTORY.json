@@ -963,5 +963,17 @@
         ],
         "logic_changed": "Decoupled transaction accounting cycle (billing_cycle) from transaction physical date. Transactions in monthly and annual queries are filtered by COALESCE(billing_cycle, strftime('%Y-%m', date)) = targetCycle. Added cycle_cutoff_day (1-31) in group_settings to auto-map transactions after cutoff day into the next billing cycle. TransactionForm binds billing_cycle to currently viewed month. CopyTransactionsModal sets destination billing_cycle with PENDING status. TransactionList preserves billing_cycle on edit and renders a cycle badge when date month differs from billing cycle.",
         "ai_warning": "Always use COALESCE(billing_cycle, strftime('%Y-%m', date)) in monthly queries to maintain backward compatibility with legacy transactions that lack billing_cycle."
+    },
+    {
+        "date": "2026-10-14",
+        "scope": "[Full-Stack]",
+        "task": "Add Billing Cycle and Due Date columns with inline date/cycle editing in TransactionList",
+        "files_touched": [
+            "backend/internal/middleware/validation.go",
+            "frontend/src/components/TransactionList.tsx",
+            "frontend/src/translations/index.ts"
+        ],
+        "logic_changed": "Added 'รอบบัญชี' (billing cycle tag/month picker) and 'กำหนดการจ่าย' (due date picker) columns to TransactionList table and mobile card view. Enhanced ValidateUpdateRequest and UpdateTransaction to allow updating date, category, description, and billingCycle. Enabled inline date and cycle editing in TransactionList rows.",
+        "ai_warning": "ValidateUpdateRequest now accepts updates with only date/billingCycle without requiring amount or status changes."
     }
 ]
