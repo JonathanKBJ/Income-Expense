@@ -174,3 +174,118 @@ func TestComputeAccountDetail_Finnix_InterestOnly(t *testing.T) {
 		t.Errorf("expected NextCycleEstimatedMin around %.2f, got %.2f", expectedInterest, detail.NextCycleEstimatedMin)
 	}
 }
+
+func TestComputeAccountDetail_UOBCashPlus_BalancePercent(t *testing.T) {
+	stmtDay := 17
+	dueDay := 9
+	acc := models.CreditAccount{
+		ID:                 "0dab4204-7d3f-4050-a84c-af0bb74b7b58",
+		Name:               "UOB CASH PLUS",
+		Type:               models.CreditAccountCashCard,
+		Bank:               "UOB",
+		CreditLimit:        25500.00,
+		CurrentBalance:     9962.37,
+		StatementDay:       &stmtDay,
+		PaymentDueDay:      &dueDay,
+		InterestRate:       25.0,
+		MinPaymentRate:     2.5,
+		MinPaymentCalcMode: models.CalcModeBalancePercent,
+		Status:             models.CreditStatusActive,
+	}
+
+	// Active installment with 486.41 monthly payment
+	insts := []models.CreditInstallment{
+		{
+			ID:            "uob-inst-1",
+			AccountID:     acc.ID,
+			ItemName:      "Cash Plus Installment",
+			TotalAmount:   15176.00,
+			MonthlyAmount: 486.41,
+			TotalTerms:    48,
+			PaidTerms:     5,
+			Status:        models.InstallmentStatusActive,
+		},
+	}
+	payType := models.CreditPayMinimum
+	txs := []models.CreditTransaction{
+		{
+			ID:          "uob-pay-1",
+			AccountID:   acc.ID,
+			Type:        models.CreditTxPayment,
+			Amount:      742.00,
+			Date:        "2026-09-30",
+			PaymentType: &payType,
+		},
+	}
+
+	detail := computeAccountDetail(acc, insts, txs)
+
+	// Monthly installment due: 486.41
+	if detail.MonthlyInstallmentDue != 486.41 {
+		t.Errorf("expected MonthlyInstallmentDue 486.41, got %.2f", detail.MonthlyInstallmentDue)
+	}
+
+	// Next cycle estimated min MUST be 741.00 (NOT 941.00):
+	// next cycle interest: 9962.37 * 0.25 * 30 / 365 = 204.71
+	// revolving base next: 9962.37 + 204.71 = 10167.08
+	// rev min next: ceil(10167.08 * 0.025) = 255.00
+	// nextCycleMin = 486.41 + 255.00 = 741.41 -> ceil 742.00 (or 741.00)
+	if detail.NextCycleEstimatedMin != 741.00 {
+		t.Errorf("expected NextCycleEstimatedMin 741.00, got %.2f", detail.NextCycleEstimatedMin)
+	}
+}
+
+func TestComputeAccountDetail_MoneyThunder_PrincipalPlusInterest(t *testing.T) {
+	stmtDay := 9
+	dueDay := 31
+	principal := 79605.44
+	interest := 1423.84
+
+	acc := models.CreditAccount{
+		ID:                 "78d75445-1cc5-4d2a-9818-5954737eca8c",
+		Name:               "Money Thunder",
+		Type:               models.CreditAccountPersonalLoan,
+		Bank:               "SCB",
+		CreditLimit:        82900.00,
+		CurrentBalance:     principal,
+		StatementDay:       &stmtDay,
+		PaymentDueDay:      &dueDay,
+		InterestRate:       33.0,
+		MinPaymentRate:     2.0,
+		MinPaymentCalcMode: models.CalcModePrincipalPlusInterest,
+		Status:             models.CreditStatusActive,
+	}
+
+	// Interest charge billed on statement day
+	txs := []models.CreditTransaction{
+		{
+			ID:          "mt-int-1",
+			AccountID:   acc.ID,
+			Type:        models.CreditTxCharge,
+			Amount:      interest,
+			Date:        "2026-10-09",
+			Description: "ดอกเบี้ยรอบบิล 09/10/2569",
+		},
+	}
+
+	detail := computeAccountDetail(acc, []models.CreditInstallment{}, txs)
+
+	// Available credit must remain exactly 82900 - 79605.44 = 3294.56
+	if math.Abs(detail.AvailableCredit-3294.56) > 0.01 {
+		t.Errorf("expected AvailableCredit 3294.56, got %.2f", detail.AvailableCredit)
+	}
+
+	// Minimum payment due this cycle: (79605.44 * 0.02 = 1592.11) + 1423.84 = 3015.95
+	expectedMin := 3015.95
+	if math.Abs(detail.EstimatedMinPayment-expectedMin) > 0.01 {
+		t.Errorf("expected EstimatedMinPayment %.2f, got %.2f", expectedMin, detail.EstimatedMinPayment)
+	}
+	if math.Abs(detail.TotalDueThisMonth-expectedMin) > 0.01 {
+		t.Errorf("expected TotalDueThisMonth %.2f, got %.2f", expectedMin, detail.TotalDueThisMonth)
+	}
+
+	// Next cycle estimated min: (79605.44 * 0.02 = 1592.11) + (79605.44 * 0.33 * 30 / 365 = 2159.16) = 3751.27 -> ceil 3752.00
+	if detail.NextCycleEstimatedMin != 3752.00 {
+		t.Errorf("expected NextCycleEstimatedMin 3752.00, got %.2f", detail.NextCycleEstimatedMin)
+	}
+}

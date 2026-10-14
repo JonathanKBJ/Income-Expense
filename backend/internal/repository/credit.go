@@ -35,19 +35,22 @@ func (r *CreditRepository) CreateAccount(ctx context.Context, acc *models.Credit
 	if acc.MinPaymentFloor < 0 {
 		acc.MinPaymentFloor = 0
 	}
+	if acc.MinPaymentCalcMode == "" {
+		acc.MinPaymentCalcMode = models.CalcModeBalancePercent
+	}
 	acc.CreatedAt = time.Now().UTC()
 	acc.UpdatedAt = time.Now().UTC()
 
 	query := `INSERT INTO credit_accounts (
 		id, name, type, bank, credit_limit, current_balance, statement_day, payment_due_day,
-		interest_rate, min_payment_rate, min_payment_floor, status, notes, group_id, user_id,
+		interest_rate, min_payment_rate, min_payment_floor, min_payment_calc_mode, status, notes, group_id, user_id,
 		created_at, updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	_, err := r.db.ExecContext(ctx, query,
 		acc.ID, acc.Name, acc.Type, acc.Bank, acc.CreditLimit, acc.CurrentBalance,
 		acc.StatementDay, acc.PaymentDueDay, acc.InterestRate, acc.MinPaymentRate, acc.MinPaymentFloor,
-		acc.Status, acc.Notes, groupID, userID, now, now,
+		acc.MinPaymentCalcMode, acc.Status, acc.Notes, groupID, userID, now, now,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create credit account: %w", err)
@@ -59,7 +62,7 @@ func (r *CreditRepository) CreateAccount(ctx context.Context, acc *models.Credit
 // GetAccountByID retrieves a single credit account belonging to groupID, optionally scoped to a user.
 func (r *CreditRepository) GetAccountByID(ctx context.Context, id, groupID string, filterUserID ...string) (*models.CreditAccount, error) {
 	query := `SELECT id, name, type, bank, credit_limit, current_balance, statement_day, payment_due_day,
-		interest_rate, min_payment_rate, min_payment_floor, status, notes, group_id, user_id,
+		interest_rate, min_payment_rate, min_payment_floor, min_payment_calc_mode, status, notes, group_id, user_id,
 		created_at, updated_at
 		FROM credit_accounts WHERE id = ? AND group_id = ?`
 	args := []interface{}{id, groupID}
@@ -75,7 +78,7 @@ func (r *CreditRepository) GetAccountByID(ctx context.Context, id, groupID strin
 	err := row.Scan(
 		&a.ID, &a.Name, &a.Type, &a.Bank, &a.CreditLimit, &a.CurrentBalance,
 		&a.StatementDay, &a.PaymentDueDay, &a.InterestRate, &a.MinPaymentRate, &a.MinPaymentFloor,
-		&a.Status, &a.Notes, &a.GroupID, &a.UserID, &cAt, &uAt,
+		&a.MinPaymentCalcMode, &a.Status, &a.Notes, &a.GroupID, &a.UserID, &cAt, &uAt,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -92,7 +95,7 @@ func (r *CreditRepository) GetAccountByID(ctx context.Context, id, groupID strin
 // ListAccountsByGroup retrieves all credit accounts in a group, optionally filtered by user.
 func (r *CreditRepository) ListAccountsByGroup(ctx context.Context, groupID string, filterUserID ...string) ([]models.CreditAccount, error) {
 	query := `SELECT id, name, type, bank, credit_limit, current_balance, statement_day, payment_due_day,
-		interest_rate, min_payment_rate, min_payment_floor, status, notes, group_id, user_id,
+		interest_rate, min_payment_rate, min_payment_floor, min_payment_calc_mode, status, notes, group_id, user_id,
 		created_at, updated_at
 		FROM credit_accounts WHERE group_id = ?`
 	args := []interface{}{groupID}
@@ -115,7 +118,7 @@ func (r *CreditRepository) ListAccountsByGroup(ctx context.Context, groupID stri
 		if err := rows.Scan(
 			&a.ID, &a.Name, &a.Type, &a.Bank, &a.CreditLimit, &a.CurrentBalance,
 			&a.StatementDay, &a.PaymentDueDay, &a.InterestRate, &a.MinPaymentRate, &a.MinPaymentFloor,
-			&a.Status, &a.Notes, &a.GroupID, &a.UserID, &cAt, &uAt,
+			&a.MinPaymentCalcMode, &a.Status, &a.Notes, &a.GroupID, &a.UserID, &cAt, &uAt,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan credit account: %w", err)
 		}
@@ -174,6 +177,10 @@ func (r *CreditRepository) UpdateAccount(ctx context.Context, id, groupID string
 	if req.MinPaymentFloor != nil {
 		query += ", min_payment_floor = ?"
 		args = append(args, *req.MinPaymentFloor)
+	}
+	if req.MinPaymentCalcMode != nil {
+		query += ", min_payment_calc_mode = ?"
+		args = append(args, *req.MinPaymentCalcMode)
 	}
 	if req.Status != nil {
 		query += ", status = ?"

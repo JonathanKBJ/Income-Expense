@@ -197,6 +197,7 @@ CREATE TABLE IF NOT EXISTS credit_accounts (
     interest_rate     REAL DEFAULT 0,
     min_payment_rate  REAL DEFAULT 5.0,
     min_payment_floor REAL DEFAULT 500.0,
+    min_payment_calc_mode TEXT NOT NULL DEFAULT 'BALANCE_PERCENT' CHECK (min_payment_calc_mode IN ('BALANCE_PERCENT', 'PRINCIPAL_PERCENT_PLUS_INTEREST', 'INTEREST_ONLY')),
     status            TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'CLOSED')),
     notes             TEXT DEFAULT '',
     group_id          TEXT NOT NULL,
@@ -438,6 +439,14 @@ func (d *DB) Migrate() error {
 			"ALTER TABLE credit_installments ADD COLUMN end_date TEXT",
 		}
 		for _, sql := range creditInstAlterations {
+			_, _ = d.ExecContext(ctx, sql)
+		}
+
+		// Alterations for credit_accounts calculation modes
+		creditAccountAlterations := []string{
+			"ALTER TABLE credit_accounts ADD COLUMN min_payment_calc_mode TEXT NOT NULL DEFAULT 'BALANCE_PERCENT'",
+		}
+		for _, sql := range creditAccountAlterations {
 			_, _ = d.ExecContext(ctx, sql)
 		}
 	// Fix orphaned transactions and categories by assigning them to their user's primary group

@@ -18,6 +18,7 @@ import type {
   CreateCreditTxRequest,
   CreditDashboardSummary,
   CreditPaymentType,
+  CreditMinPaymentCalcMode,
 } from "../types/credit";
 import * as api from "../api/credit";
 import { useAuth } from "../contexts/AuthContext";
@@ -142,7 +143,8 @@ function computeDateAdjustedMinPayment(
 
   const dailyInterest = (revolvingBal * apr) / 365.0;
   const totalInterestDiff = dailyInterest * daysDiff;
-  const minAdjustment = acc.minPaymentRate === 0 ? totalInterestDiff : totalInterestDiff * minRate;
+  const isInterestMode = acc.minPaymentCalcMode === "PRINCIPAL_PERCENT_PLUS_INTEREST" || acc.minPaymentCalcMode === "INTEREST_ONLY" || acc.minPaymentRate === 0;
+  const minAdjustment = isInterestMode ? totalInterestDiff : totalInterestDiff * minRate;
   let adjusted = baseMin;
   if (daysDiff > 0) {
     adjusted = Math.max(acc.monthlyInstallmentDue, Math.round((baseMin - minAdjustment) * 100) / 100);
@@ -214,6 +216,7 @@ export default function CreditTracker() {
   const [accInterestRate, setAccInterestRate] = useState<number>(16);
   const [accMinRate, setAccMinRate] = useState<number>(5);
   const [accMinFloor, setAccMinFloor] = useState<number>(0);
+  const [accCalcMode, setAccCalcMode] = useState<CreditMinPaymentCalcMode>("BALANCE_PERCENT");
   const [accNotes, setAccNotes] = useState("");
 
   // Form states: Installment
@@ -327,6 +330,7 @@ export default function CreditTracker() {
     setAccInterestRate(16);
     setAccMinRate(5);
     setAccMinFloor(0);
+    setAccCalcMode("BALANCE_PERCENT");
     setAccNotes("");
     setShowAccountModal(true);
   }
@@ -343,6 +347,7 @@ export default function CreditTracker() {
     setAccInterestRate(acc.interestRate);
     setAccMinRate(acc.minPaymentRate);
     setAccMinFloor(acc.minPaymentFloor);
+    setAccCalcMode(acc.minPaymentCalcMode || (acc.minPaymentRate === 0 ? "INTEREST_ONLY" : "BALANCE_PERCENT"));
     setAccNotes(acc.notes || "");
     setShowAccountModal(true);
   }
@@ -366,6 +371,7 @@ export default function CreditTracker() {
           interestRate: accInterestRate,
           minPaymentRate: accMinRate,
           minPaymentFloor: accMinFloor,
+          minPaymentCalcMode: accCalcMode,
           notes: accNotes.trim(),
         });
         message.success(t.creditPage.updated);
@@ -381,6 +387,7 @@ export default function CreditTracker() {
           interestRate: accInterestRate,
           minPaymentRate: accMinRate,
           minPaymentFloor: accMinFloor,
+          minPaymentCalcMode: accCalcMode,
           notes: accNotes.trim(),
         };
         const created = await api.createCreditAccount(payload);
@@ -639,6 +646,12 @@ export default function CreditTracker() {
             <div style={{ marginTop: 4, display: "flex", gap: 6, flexWrap: "wrap" }}>
               {renderAccountTypeTag(acc.type)}
               {acc.bank && <Tag>{acc.bank}</Tag>}
+              {acc.minPaymentCalcMode === "PRINCIPAL_PERCENT_PLUS_INTEREST" && (
+                <Tag color="cyan">เงินต้น + ดอกเบี้ย</Tag>
+              )}
+              {acc.minPaymentCalcMode === "INTEREST_ONLY" && (
+                <Tag color="purple">จ่ายเฉพาะดอก</Tag>
+              )}
             </div>
           </div>
           <div style={{ textAlign: "right" }}>
@@ -701,6 +714,12 @@ export default function CreditTracker() {
               {account.name}
               {renderAccountTypeTag(account.type)}
               {account.bank && <Tag>{account.bank}</Tag>}
+              {account.minPaymentCalcMode === "PRINCIPAL_PERCENT_PLUS_INTEREST" && (
+                <Tag color="cyan">เงินต้น + ดอกเบี้ย</Tag>
+              )}
+              {account.minPaymentCalcMode === "INTEREST_ONLY" && (
+                <Tag color="purple">จ่ายเฉพาะดอก</Tag>
+              )}
             </h3>
             <div style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: 4 }}>
               {account.notes || "No notes"}
@@ -862,7 +881,13 @@ export default function CreditTracker() {
                   • ประมาณการยอดเรียกเก็บรอบถัดไป: <strong>฿{formatMoney(account.nextCycleEstimatedStatement)}</strong>
                   <br />
                   • <strong>ประมาณการยอดชำระขั้นต่ำรอบถัดไป = <span style={{ color: isDark ? "#f59e0b" : "#d97706", fontSize: 14 }}>฿{formatMoney(account.nextCycleEstimatedMin)}</span></strong>
-                  {" "}<span style={{ fontSize: 11, color: "var(--text-secondary)" }}>({account.minPaymentRate === 0 ? "คิดเฉพาะดอกเบี้ยรอบบิล" : `คิดจาก ${account.minPaymentRate}% ของยอดคงค้าง + ดอกเบี้ยรอบบิล`})</span>
+                  {" "}<span style={{ fontSize: 11, color: "var(--text-secondary)" }}>
+                    ({account.minPaymentCalcMode === "INTEREST_ONLY" || account.minPaymentRate === 0
+                      ? "คิดเฉพาะดอกเบี้ยรอบบิล"
+                      : account.minPaymentCalcMode === "PRINCIPAL_PERCENT_PLUS_INTEREST"
+                      ? `คิดจาก ${account.minPaymentRate}% ของยอดคงค้าง + ดอกเบี้ยรอบบิล`
+                      : `คิดจาก ${account.minPaymentRate}% ของยอดเรียกเก็บรอบถัดไป`})
+                  </span>
                 </div>
               )}
             </div>
@@ -1454,6 +1479,31 @@ export default function CreditTracker() {
           </Row>
 
           <div>
+            <label style={{ display: "block", marginBottom: 4, fontWeight: 500 }}>
+              {t.creditPage.calcModeLabel}
+            </label>
+            <Select
+              value={accCalcMode}
+              onChange={setAccCalcMode}
+              style={{ width: "100%" }}
+              options={[
+                {
+                  value: "BALANCE_PERCENT",
+                  label: t.creditPage.calcModeBalancePercent,
+                },
+                {
+                  value: "PRINCIPAL_PERCENT_PLUS_INTEREST",
+                  label: t.creditPage.calcModePrincipalPlusInterest,
+                },
+                {
+                  value: "INTEREST_ONLY",
+                  label: t.creditPage.calcModeInterestOnly,
+                },
+              ]}
+            />
+          </div>
+
+          <div>
             <label style={{ display: "block", marginBottom: 4, fontWeight: 500 }}>{t.common.description}</label>
             <Input.TextArea
               value={accNotes}
@@ -1666,6 +1716,33 @@ export default function CreditTracker() {
               {t.creditPage.payment}
             </Button>
           </div>
+
+          {/* Quick options when in CHARGE mode */}
+          {txType === "CHARGE" && selectedAccount && (
+            <div style={{ background: isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.02)", border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid var(--border-subtle)", padding: 10, borderRadius: 8 }}>
+              <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8 }}>
+                ประเภทรายการใช้จ่าย / ดอกเบี้ย:
+              </div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <Button
+                  size="small"
+                  onClick={() => {
+                    setTxDescription(`ดอกเบี้ยรอบบิล ${selectedAccount.statementDay ? `วันที่ ${selectedAccount.statementDay}` : ""}`);
+                  }}
+                >
+                  ดอกเบี้ยรอบบิล (Interest)
+                </Button>
+                <Button
+                  size="small"
+                  onClick={() => {
+                    setTxDescription("เบิกถอนเงินสด / รูดซื้อสินค้า");
+                  }}
+                >
+                  เบิกถอน / รูดซื้อ
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Quick Payment Options Shortcuts when in PAYMENT mode */}
           {txType === "PAYMENT" && selectedAccount && (

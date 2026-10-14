@@ -271,6 +271,10 @@ export interface TranslationKeys {
     deleteFailed: string;
     loadFailed: string;
     totalCreditLimit: string;
+    calcModeLabel: string;
+    calcModeBalancePercent: string;
+    calcModePrincipalPlusInterest: string;
+    calcModeInterestOnly: string;
     totalOutstanding: string;
     totalAvailable: string;
     totalDueEstimated: string;
@@ -602,6 +606,10 @@ export const translations: Record<Language, TranslationKeys> = {
       totalDueEstimated: "Est. Due This Month",
       totalNextCycleOutstanding: "Est. Next Month Debt",
       totalNextCycleEstimatedDue: "Est. Next Month Due",
+      calcModeLabel: "Minimum Calculation Rule",
+      calcModeBalancePercent: "% of Total Debt (Standard Cards, UOB Cash Plus, First Choice)",
+      calcModePrincipalPlusInterest: "% of Principal + 100% Interest (Money Thunder)",
+      calcModeInterestOnly: "100% Interest Only (Finnix)",
     },
     auth: {
       welcomeBack: "Welcome Back",
@@ -929,6 +937,10 @@ export const translations: Record<Language, TranslationKeys> = {
       totalDueEstimated: "ยอดที่ต้องจ่ายเดือนนี้ (ประมาณการ)",
       totalNextCycleOutstanding: "ยอดหนี้คงค้างรวมเดือนถัดไป (ประมาณการ)",
       totalNextCycleEstimatedDue: "ยอดที่ต้องจ่ายเดือนถัดไป (ประมาณการ)",
+      calcModeLabel: "รูปแบบการคำนวณขั้นต่ำ",
+      calcModeBalancePercent: "คิด % จากยอดหนี้รวม (บัตรเครดิตทั่วไป, First Choice, UOB Cash Plus)",
+      calcModePrincipalPlusInterest: "คิด % เงินต้น + ดอกเบี้ยรอบบิล 100% (เช่น Money Thunder)",
+      calcModeInterestOnly: "จ่ายเฉพาะดอกเบี้ย 100% (เช่น Finnix)",
     },
     auth: {
       welcomeBack: "ยินดีต้อนรับกลับ",

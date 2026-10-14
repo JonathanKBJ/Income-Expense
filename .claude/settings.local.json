@@ -22,5 +22,9 @@
       "PowerShell(Get-Content \"d:\\\\PERSONAL\\\\Income-Expense\\\\backend\\\\internal\\\\repository\\\\transaction.go\" | Select-Object -Skip 65 -First 15 | ForEach-Object { $_.Replace\\(\"`t\", \"[TAB]\"\\) })",
       "PowerShell($content = Get-Content \"d:\\\\PERSONAL\\\\Income-Expense\\\\backend\\\\internal\\\\repository\\\\transaction.go\" -Raw; $lines = $content -split \"`r`n\"; for \\($i = 75; $i -le 84; $i++\\) { Write-Output \"$\\($i\\): $\\([System.Text.Encoding]::UTF8.GetBytes\\($lines[$i-1]\\) | ForEach-Object { '{0:X2}' -f $_ }\\)\" })"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "graft"
+  ],
+  "enableAllProjectMcpServers": true
 }

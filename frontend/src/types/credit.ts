@@ -4,6 +4,11 @@ export type InstallmentStatus = "ACTIVE" | "COMPLETED";
 export type CreditTxType = "CHARGE" | "PAYMENT";
 export type CreditPaymentType = "FULL" | "MINIMUM" | "INSTALLMENT" | "CUSTOM";
 
+export type CreditMinPaymentCalcMode =
+  | "BALANCE_PERCENT"
+  | "PRINCIPAL_PERCENT_PLUS_INTEREST"
+  | "INTEREST_ONLY";
+
 export interface CreditAccount {
   id: string;
   name: string;
@@ -16,6 +21,7 @@ export interface CreditAccount {
   interestRate: number;
   minPaymentRate: number;
   minPaymentFloor: number;
+  minPaymentCalcMode?: CreditMinPaymentCalcMode;
   status: CreditStatus;
   notes: string;
   groupId: string;
@@ -101,6 +107,7 @@ export interface CreateCreditAccountRequest {
   interestRate?: number;
   minPaymentRate?: number;
   minPaymentFloor?: number;
+  minPaymentCalcMode?: CreditMinPaymentCalcMode;
   notes?: string;
 }
 
@@ -115,6 +122,7 @@ export interface UpdateCreditAccountRequest {
   interestRate?: number;
   minPaymentRate?: number;
   minPaymentFloor?: number;
+  minPaymentCalcMode?: CreditMinPaymentCalcMode;
   status?: CreditStatus;
   notes?: string;
 }

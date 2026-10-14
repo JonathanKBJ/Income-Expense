@@ -876,5 +876,22 @@
         ],
         "logic_changed": "Instead of hiding Sidebar menus or throwing 403 Forbidden errors when sharing is turned off, menus remain universally accessible. Added filterUserID support across creditRepo, loanRepo, and transactionRepo. When shareCredit/shareLoans/shareAnnual is disabled in group_settings, handlers scope queries and mutations to the requester's own records (WHERE group_id = ? AND user_id = ?). When enabled, queries return group-wide data. Added sharing badges (👥 แชร์ในกลุ่ม vs 🔒 ส่วนตัว) to CreditTracker and LoanTracker headers, and interactive Group Menu Permissions switches in GroupPage.tsx.",
         "ai_warning": "When sharing is disabled, credit accounts and loans created by users remain saved under their user_id within the group. Enabling sharing immediately includes those records in group views without database migration."
+    },
+    {
+        "date": "2026-10-12",
+        "scope": "[Full-Stack]",
+        "task": "POC: Configurable Minimum Payment Calculation Modes per credit/loan account",
+        "files_touched": [
+            "backend/internal/database/schema.go",
+            "backend/internal/models/credit.go",
+            "backend/internal/repository/credit.go",
+            "backend/internal/handlers/credit.go",
+            "backend/internal/handlers/credit_test.go",
+            "frontend/src/types/credit.ts",
+            "frontend/src/translations/index.ts",
+            "frontend/src/components/CreditTracker.tsx"
+        ],
+        "logic_changed": "Introduced MinPaymentCalcMode ('BALANCE_PERCENT', 'PRINCIPAL_PERCENT_PLUS_INTEREST', 'INTEREST_ONLY') per account in schema, models, repo, and UI. BALANCE_PERCENT maintains existing balance-based percentage (UOB Cash Plus stays at 741.00, First Choice at 4707.00, UOB TMRW at 1265.00). PRINCIPAL_PERCENT_PLUS_INTEREST calculates minimum payment as (principal * rate%) + full cycle interest (Money Thunder matches 3015.95 with available credit 3294.56). INTEREST_ONLY charges 100% cycle interest (Finnix 686.00). Added mode selector in Account Modal, mode badges in UI, and interest preset buttons.",
+        "ai_warning": "Default calculation mode is BALANCE_PERCENT. Do not hardcode calculations based only on account.type; always branch on acc.MinPaymentCalcMode to prevent cross-account calculation regressions."
     }
 ]
