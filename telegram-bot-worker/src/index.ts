@@ -57,7 +57,10 @@ interface TelegramInlineKeyboardButton {
 interface TelegramSendMessageOptions {
   parse_mode?: "Markdown" | "HTML";
   reply_markup?: {
-    inline_keyboard: TelegramInlineKeyboardButton[][];
+    inline_keyboard?: TelegramInlineKeyboardButton[][];
+    keyboard?: Array<Array<{ text: string; web_app?: { url: string } }>>;
+    resize_keyboard?: boolean;
+    is_persistent?: boolean;
   };
 }
 
@@ -169,23 +172,42 @@ async function handleMessage(msg: TelegramMessage, env: Env): Promise<void> {
   if (!user) return;
 
   // 1. Command: /start or /help
-  if (text === "/start" || text === "/help") {
+  // 1. Command: /start or /help or Quick Menu
+  if (text === "/start" || text === "/help" || text.includes("วิธีใช้งาน")) {
     const helpText =
       `🤖 *ยินดีต้อนรับสู่ Expense Tracker Bot*\n\n` +
-      `📌 *คำสั่งที่ใช้งานได้:*\n` +
+      `📌 *คำสั่งและปุ่มลัดที่ใช้งานได้:*\n` +
       `• \`/link <รหัส>\` - เชื่อมต่อบัญชีผู้ใช้และกลุ่ม (สร้างรหัสได้จากหน้าเว็บ เมนูกลุ่ม)\n` +
-      `• \`/usage\` หรือ \`/quota\` - เช็คโควต้าบริการฟรีคงเหลือ (Gemini, Cloudflare, Turso, Render)\n` +
+      `• \`/usage\` หรือกดปุ่ม *[ 📊 เช็คโควต้า ]* - ตรวจสอบโควต้าบริการฟรีคงเหลือ\n` +
+      `• กดปุ่ม *[ 🌐 เปิดหน้าเว็บแอป ]* - เปิดแดชบอร์ดดูสถิติและรายจ่ายใน Telegram ได้ทันที\n` +
       `• ส่งรูปภาพสลิปโอนเงินเข้ากลุ่ม - บอทจะใช้ AI ตรวจสอบยอดเงิน และให้เลือกว่าจะตัดจ่ายบิลค้างชำระ หรือบันทึกเป็นรายการใหม่ทันที!`;
-    await sendTelegramMessage(env, chatId, helpText, { parse_mode: "Markdown" });
+
+    const quickKeyboard = {
+      keyboard: [
+        [
+          { text: "📊 เช็คโควต้า" },
+          { text: "❓ วิธีใช้งาน" },
+        ],
+        [
+          { text: "🌐 เปิดหน้าเว็บแอป", web_app: { url: "https://expensetracker-ashen-nu.vercel.app" } },
+        ],
+      ],
+      resize_keyboard: true,
+      is_persistent: true,
+    };
+
+    await sendTelegramMessage(env, chatId, helpText, {
+      parse_mode: "Markdown",
+      reply_markup: quickKeyboard,
+    });
     return;
   }
 
-  // 2. Command: /usage or /quota
-  if (text === "/usage" || text === "/quota") {
+  // 2. Command: /usage or /quota or Quick Menu
+  if (text === "/usage" || text === "/quota" || text.includes("เช็คโควต้า")) {
     await handleUsageCommand(chatId, env);
     return;
   }
-
   // 2. Command: /link <CODE> or direct TG-XXXXXX code
   const linkMatch = text.match(/(?:\/link\s+)?(TG-\d{6})/i);
   if (linkMatch) {
