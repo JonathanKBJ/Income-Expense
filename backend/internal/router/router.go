@@ -61,6 +61,8 @@ func New(
 		r.Get("/pending-bills", telegramHandler.GetPendingBills)
 		r.Post("/pay-bill", telegramHandler.PayPendingBill)
 		r.Post("/transactions", telegramHandler.CreateTransaction)
+		r.Get("/usage", telegramHandler.GetUsage)
+		r.Post("/usage/increment", telegramHandler.IncrementUsage)
 	})
 
 	// --- Protected API Routes ---
@@ -111,6 +113,7 @@ func New(
 				r.Route("/telegram", func(r chi.Router) {
 					r.Get("/status", telegramHandler.GetStatus)
 					r.Post("/link-code", telegramHandler.GenerateLinkCode)
+					r.Get("/usage", telegramHandler.GetUsage)
 				})
 			})
 

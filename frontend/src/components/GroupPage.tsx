@@ -3,7 +3,7 @@ import { Button, Input, message, Modal, Table, Tag, Tooltip, Switch } from "antd
 import {
   CopyOutlined, UserAddOutlined, LogoutOutlined,
   CreditCardOutlined, DollarOutlined, LineChartOutlined, LockOutlined, ShareAltOutlined,
-  SendOutlined, CheckCircleOutlined, InfoCircleOutlined,
+  SendOutlined, CheckCircleOutlined, InfoCircleOutlined, BarChartOutlined,
 } from "@ant-design/icons";
 import { useAuth } from "../contexts/AuthContext";
 import {
@@ -20,8 +20,10 @@ import {
 import {
   getTelegramStatus,
   generateTelegramLinkCode,
+  getTelegramUsageStats,
   type TelegramStatus,
   type GenerateLinkCodeResponse,
+  type TelegramUsageStats,
 } from "../api/telegram";
 import { useLanguage } from "../contexts/LanguageContext";
 
@@ -51,6 +53,9 @@ export default function GroupPage() {
   const [telegramCode, setTelegramCode] = useState<GenerateLinkCodeResponse | null>(null);
   const [generatingCode, setGeneratingCode] = useState(false);
 
+  const [usageStats, setUsageStats] = useState<TelegramUsageStats | null>(null);
+  const [showUsageModal, setShowUsageModal] = useState(false);
+  const [loadingUsage, setLoadingUsage] = useState(false);
   useEffect(() => {
     if (groupInfo?.settings) {
       setShareCredit(groupInfo.settings.shareCredit);
@@ -104,6 +109,19 @@ export default function GroupPage() {
     navigator.clipboard.writeText(`/link ${telegramCode.code}`);
     message.success(t.group.telegramCopied);
   }
+  async function handleOpenUsage() {
+    setShowUsageModal(true);
+    setLoadingUsage(true);
+    try {
+      const stats = await getTelegramUsageStats();
+      setUsageStats(stats);
+    } catch (e: unknown) {
+      message.error(e instanceof Error ? e.message : "Failed to load usage stats");
+    } finally {
+      setLoadingUsage(false);
+    }
+  }
+
   useEffect(() => {
     if (groupInfo) {
       setMembers(groupInfo.members);
@@ -478,6 +496,14 @@ export default function GroupPage() {
             {t.group.telegramTitle}
           </h3>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <Button
+              size="small"
+              icon={<BarChartOutlined />}
+              onClick={handleOpenUsage}
+              style={{ marginRight: 8 }}
+            >
+              {t.group.telegramUsageBtn}
+            </Button>
             <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>{t.group.telegramGroupStatus}</span>
             {telegramStatus?.isGroupLinked ? (
               <Tag color="success" icon={<CheckCircleOutlined />}>{t.group.telegramLinked}</Tag>
@@ -552,6 +578,73 @@ export default function GroupPage() {
             </div>
           )}
         </div>
+
+      {/* Usage Stats Modal */}
+      <Modal
+        title={
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <BarChartOutlined style={{ color: "#3b82f6" }} />
+            {t.group.telegramUsageTitle}
+          </div>
+        }
+        open={showUsageModal}
+        onCancel={() => setShowUsageModal(false)}
+        footer={null}
+        width="95vw"
+        style={{ maxWidth: 540, top: 20 }}
+      >
+        {loadingUsage || !usageStats ? (
+          <div style={{ padding: 24, textAlign: "center", color: "var(--text-secondary)" }}>
+            กำลังโหลดข้อมูลโควต้า...
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 16 }}>
+            {/* Gemini */}
+            <div style={{ padding: 14, background: "var(--bg-card)", border: "1px solid var(--border-subtle)", borderRadius: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>🤖 {usageStats.gemini.name}</span>
+                <Tag color="cyan">{usageStats.gemini.remainingToday.toLocaleString()} / {usageStats.gemini.dailyLimit.toLocaleString()} เหลือ</Tag>
+              </div>
+              <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                ใช้ไปวันนี้: {usageStats.gemini.usedToday.toLocaleString()} ครั้ง ({usageStats.gemini.note})
+              </div>
+            </div>
+
+            {/* Cloudflare */}
+            <div style={{ padding: 14, background: "var(--bg-card)", border: "1px solid var(--border-subtle)", borderRadius: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>⚡ {usageStats.cloudflare.name}</span>
+                <Tag color="blue">{usageStats.cloudflare.remainingToday.toLocaleString()} / 100,000 เหลือ</Tag>
+              </div>
+              <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                ใช้ไปวันนี้: {usageStats.cloudflare.usedToday.toLocaleString()} requests ({usageStats.cloudflare.note})
+              </div>
+            </div>
+
+            {/* Render */}
+            <div style={{ padding: 14, background: "var(--bg-card)", border: "1px solid var(--border-subtle)", borderRadius: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>🖥️ {usageStats.render.name}</span>
+                <Tag color="green">พร้อมใช้งาน 24/7</Tag>
+              </div>
+              <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                {usageStats.render.note}
+              </div>
+            </div>
+
+            {/* Database */}
+            <div style={{ padding: 14, background: "var(--bg-card)", border: "1px solid var(--border-subtle)", borderRadius: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>🗄️ {usageStats.database.name}</span>
+                <Tag color="purple">{usageStats.totalTransactions.toLocaleString()} รายการในระบบ</Tag>
+              </div>
+              <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                {usageStats.database.note}
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
       </div>
 
       {/* Activity Feed */}

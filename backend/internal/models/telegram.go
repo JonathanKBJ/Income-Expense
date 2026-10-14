@@ -86,3 +86,31 @@ type TelegramStatusResponse struct {
 	IsGroupLinked    bool    `json:"isGroupLinked"`
 	TelegramChatID   *string `json:"telegramChatId,omitempty"`
 }
+
+// IncrementUsageRequest allows the Cloudflare Worker to track daily usage counters.
+type IncrementUsageRequest struct {
+	GeminiCalls     int `json:"geminiCalls"`
+	WorkerRequests  int `json:"workerRequests"`
+	BotTransactions int `json:"botTransactions"`
+}
+
+// ServiceQuotaItem describes usage and limits of an integrated free-tier service.
+type ServiceQuotaItem struct {
+	Name           string  `json:"name"`
+	UsedToday      int     `json:"usedToday"`
+	DailyLimit     int     `json:"dailyLimit"`
+	RemainingToday int     `json:"remainingToday"`
+	Unit           string  `json:"unit"`
+	PercentUsed    float64 `json:"percentUsed"`
+	Note           string  `json:"note"`
+}
+
+// TelegramUsageStatsResponse contains usage metrics across the free-tier infrastructure.
+type TelegramUsageStatsResponse struct {
+	Date              string           `json:"date"`
+	Gemini            ServiceQuotaItem `json:"gemini"`
+	Cloudflare        ServiceQuotaItem `json:"cloudflare"`
+	Render            ServiceQuotaItem `json:"render"`
+	Database          ServiceQuotaItem `json:"database"`
+	TotalTransactions int              `json:"totalTransactions"`
+}

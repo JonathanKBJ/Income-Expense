@@ -190,3 +190,44 @@ func (h *TelegramHandler) CreateTransaction(w http.ResponseWriter, r *http.Reque
 
 	writeJSON(w, http.StatusCreated, tx)
 }
+
+// GetUsage handles GET /api/telegram/usage and GET /api/me/telegram/usage.
+func (h *TelegramHandler) GetUsage(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("X-Telegram-Bot-Secret") != "" || h.botSecret != "" {
+		if !h.validateBotSecret(r) && middleware.GetUserID(r.Context()) == "" {
+			writeError(w, http.StatusUnauthorized, "invalid or missing bot secret")
+			return
+		}
+	}
+
+	stats, err := h.telegramRepo.GetUsageStats(r.Context())
+	if err != nil {
+		log.Printf("ERROR: GetTelegramUsage: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to get usage stats: "+err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, stats)
+}
+
+// IncrementUsage handles POST /api/telegram/usage/increment (Called by Worker).
+func (h *TelegramHandler) IncrementUsage(w http.ResponseWriter, r *http.Request) {
+	if !h.validateBotSecret(r) {
+		writeError(w, http.StatusUnauthorized, "invalid or missing bot secret")
+		return
+	}
+
+	var req models.IncrementUsageRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON payload: "+err.Error())
+		return
+	}
+
+	if err := h.telegramRepo.IncrementUsage(r.Context(), req); err != nil {
+		log.Printf("ERROR: IncrementUsage: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to increment usage: "+err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "usage incremented"})
+}

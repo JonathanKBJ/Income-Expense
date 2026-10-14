@@ -174,8 +174,15 @@ async function handleMessage(msg: TelegramMessage, env: Env): Promise<void> {
       `🤖 *ยินดีต้อนรับสู่ Expense Tracker Bot*\n\n` +
       `📌 *คำสั่งที่ใช้งานได้:*\n` +
       `• \`/link <รหัส>\` - เชื่อมต่อบัญชีผู้ใช้และกลุ่ม (สร้างรหัสได้จากหน้าเว็บ เมนูกลุ่ม)\n` +
+      `• \`/usage\` หรือ \`/quota\` - เช็คโควต้าบริการฟรีคงเหลือ (Gemini, Cloudflare, Turso, Render)\n` +
       `• ส่งรูปภาพสลิปโอนเงินเข้ากลุ่ม - บอทจะใช้ AI ตรวจสอบยอดเงิน และให้เลือกว่าจะตัดจ่ายบิลค้างชำระ หรือบันทึกเป็นรายการใหม่ทันที!`;
     await sendTelegramMessage(env, chatId, helpText, { parse_mode: "Markdown" });
+    return;
+  }
+
+  // 2. Command: /usage or /quota
+  if (text === "/usage" || text === "/quota") {
+    await handleUsageCommand(chatId, env);
     return;
   }
 
@@ -270,6 +277,7 @@ async function handlePhotoSlip(msg: TelegramMessage, env: Env): Promise<void> {
 
     // 3. Send to Gemini 2.0 Flash Vision
     const parsedSlip = await parseSlipWithGemini(base64Data, env.GEMINI_API_KEY);
+    recordUsage(env, 1, 1, 0);
 
     // 4. Query pending bills for this group / user from Go Backend (best-effort)
     let pendingBills: PendingBill[] = [];
@@ -432,6 +440,7 @@ async function handleCallbackQuery(cb: TelegramCallbackQuery, env: Env): Promise
       if (!res.ok) {
         throw new Error(tx.error || "Failed to create transaction");
       }
+      recordUsage(env, 0, 1, 1);
 
       const successText =
         `✅ *บันทึกรายจ่ายใหม่สำเร็จ!*\n` +
@@ -530,6 +539,79 @@ Rules:
   }
 
   throw new Error(lastError || "Failed to parse slip with all available models");
+}
+
+/**
+ * Handle /usage command to display free-tier quotas and remaining limits.
+ */
+async function handleUsageCommand(chatId: number, env: Env): Promise<void> {
+  const backendUrl = env.BACKEND_URL.replace(/\/+$/, "");
+
+  try {
+    const res = await fetch(`${backendUrl}/api/telegram/usage`, {
+      headers: { "X-Telegram-Bot-Secret": env.TELEGRAM_BOT_SECRET },
+    });
+
+    if (!res.ok) {
+      throw new Error(`Server returned ${res.status}`);
+    }
+
+    const data = (await res.json()) as {
+      date: string;
+      gemini: { usedToday: number; dailyLimit: number; remainingToday: number; percentUsed: number };
+      cloudflare: { usedToday: number; dailyLimit: number; remainingToday: number; percentUsed: number };
+      render: { note: string };
+      database: { totalTransactions: number; note: string };
+      totalTransactions: number;
+    };
+
+    const geminiRemainPct = Math.max(0, 100 - data.gemini.percentUsed).toFixed(1);
+    const cfRemainPct = Math.max(0, 100 - data.cloudflare.percentUsed).toFixed(1);
+
+    const usageText =
+      `📊 *สรุปโควต้าการใช้งานฟรีคงเหลือ (Usage Remaining)*\n` +
+      `📅 วันที่: ${data.date}\n\n` +
+      `🤖 *Google Gemini AI (สแกนสลิป):*\n` +
+      `• ใช้ไปวันนี้: ${data.gemini.usedToday.toLocaleString()} ครั้ง\n` +
+      `• คงเหลือวันนี้: *${data.gemini.remainingToday.toLocaleString()}* / ${data.gemini.dailyLimit.toLocaleString()} ครั้ง (${geminiRemainPct}%)\n` +
+      `• ขีดจำกัดความเร็ว: 15 ครั้ง/นาที\n\n` +
+      `⚡ *Cloudflare Worker (Bot Gateway):*\n` +
+      `• ใช้ไปวันนี้: ${data.cloudflare.usedToday.toLocaleString()} requests\n` +
+      `• คงเหลือวันนี้: *${data.cloudflare.remainingToday.toLocaleString()}* / 100,000 requests (${cfRemainPct}%)\n\n` +
+      `🖥️ *Render Backend (Go API):*\n` +
+      `• โควต้า: 750 ชม./เดือน (รัน 24/7 ได้ทั้งเดือนหากมี 1 service)\n\n` +
+      `🗄️ *Turso Database (LibSQL):*\n` +
+      `• รายการในระบบ: ${data.totalTransactions.toLocaleString()} รายการ\n` +
+      `• ขีดจำกัด: 25,000,000 Writes / 1,000,000,000 Reads ต่อเดือน`;
+
+    await sendTelegramMessage(env, chatId, usageText, { parse_mode: "Markdown" });
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    await sendTelegramMessage(env, chatId, `⚠️ ไม่สามารถดึงข้อมูลโควต้าได้: ${errMsg}`);
+  }
+}
+
+/**
+ * Increment usage statistics asynchronously in Go backend.
+ */
+async function recordUsage(env: Env, geminiCalls = 0, workerRequests = 0, botTransactions = 0): Promise<void> {
+  try {
+    const backendUrl = env.BACKEND_URL.replace(/\/+$/, "");
+    await fetch(`${backendUrl}/api/telegram/usage/increment`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Telegram-Bot-Secret": env.TELEGRAM_BOT_SECRET,
+      },
+      body: JSON.stringify({
+        geminiCalls,
+        workerRequests,
+        botTransactions,
+      }),
+    });
+  } catch (err: unknown) {
+    console.warn("Failed to record usage increment:", err);
+  }
 }
 
 /**
