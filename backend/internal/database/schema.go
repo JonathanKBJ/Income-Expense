@@ -69,6 +69,8 @@ CREATE TABLE IF NOT EXISTS transactions (
     created_by    TEXT,
     receipt_image TEXT,
     billing_cycle TEXT,
+    credit_account_id TEXT,
+    loan_id           TEXT,
     created_at    TEXT NOT NULL,
     updated_at    TEXT NOT NULL
 );
@@ -374,6 +376,8 @@ func (d *DB) Migrate() error {
 		"ALTER TABLE groups ADD COLUMN telegram_chat_id TEXT",
 		"ALTER TABLE transactions ADD COLUMN billing_cycle TEXT",
 		"ALTER TABLE group_settings ADD COLUMN cycle_cutoff_day INTEGER NOT NULL DEFAULT 1",
+		"ALTER TABLE transactions ADD COLUMN credit_account_id TEXT",
+		"ALTER TABLE transactions ADD COLUMN loan_id TEXT",
 	}
 	for _, sql := range alterations {
 		// We ignore errors because the columns might already exist

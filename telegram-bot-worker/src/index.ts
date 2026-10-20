@@ -136,6 +136,16 @@ const CATEGORIES = [
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+
+    if (url.pathname === "/cron/post-installments") {
+      const result = await runPostInstallmentsCron(env);
+      return new Response(JSON.stringify(result, null, 2), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
     if (request.method === "GET") {
       return new Response("Telegram Bot Worker is healthy! 🚀", { status: 200 });
     }
@@ -159,7 +169,39 @@ export default {
       return new Response("OK", { status: 200 }); // Always 200 to prevent Telegram retry spam
     }
   },
+
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(runPostInstallmentsCron(env));
+  },
 };
+
+/**
+ * Cron job: Post due installments on statement day and broadcast Telegram alert
+ */
+async function runPostInstallmentsCron(env: Env): Promise<unknown> {
+  console.log("Running scheduled post-installments cron job at:", new Date().toISOString());
+  try {
+    const res = await fetch(`${env.BACKEND_URL}/api/telegram/cron/post-installments`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Telegram-Bot-Secret": env.TELEGRAM_BOT_SECRET,
+      },
+      body: JSON.stringify({}),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error("Backend post-installments cron failed with status", res.status, errText);
+      return { error: `status ${res.status}: ${errText}` };
+    }
+    const data = await res.json();
+    console.log("Post-installments cron succeeded:", JSON.stringify(data));
+    return data;
+  } catch (err: unknown) {
+    console.error("Error executing post-installments cron:", err);
+    return { error: String(err) };
+  }
+}
 
 /**
  * Handle incoming Telegram messages (text, commands, photo slips).

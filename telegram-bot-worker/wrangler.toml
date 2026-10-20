@@ -5,3 +5,6 @@ compatibility_date = "2024-10-01"
 [vars]
 # Configure your backend URL and secrets in Cloudflare Dashboard or .dev.vars
 BACKEND_URL = "https://income-expense-y0wg.onrender.com"
+
+[triggers]
+crons = ["0 1 * * *"] # 01:00 UTC = 08:00 Bangkok (UTC+7) every day

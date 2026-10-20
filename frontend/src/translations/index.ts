@@ -270,6 +270,8 @@ export interface TranslationKeys {
     paidTerms: string;
     termsProgress: string;
     advanceTerm: string;
+    billInstallment: string;
+    billedThisCycle: string;
     transactions: string;
     newTransaction: string;
     charge: string;
@@ -623,6 +625,8 @@ export const translations: Record<Language, TranslationKeys> = {
       paidTerms: "Paid Terms",
       termsProgress: "Terms Progress",
       advanceTerm: "Pay 1 Term",
+      billInstallment: "Post to Statement",
+      billedThisCycle: "Billed This Cycle",
       transactions: "Transactions & Payments",
       newTransaction: "Record Usage / Payment",
       charge: "Charge / Withdrawal",
@@ -977,6 +981,8 @@ export const translations: Record<Language, TranslationKeys> = {
       paidTerms: "งวดที่จ่ายแล้ว",
       termsProgress: "ความคืบหน้างวด",
       advanceTerm: "บันทึกจ่าย 1 งวด",
+      billInstallment: "ลงยอดหนี้งวดนี้",
+      billedThisCycle: "ลงยอดหนี้แล้ว",
       transactions: "รายการใช้จ่าย & การชำระเงิน",
       newTransaction: "บันทึกการใช้จ่าย / ชำระเงิน",
       charge: "รูดใช้จ่าย / เบิกถอน",

@@ -6,6 +6,9 @@ import type {
   AnnualSummaryResponse,
   WalletSummaryResponse,
   CompactTransactionsResponse,
+  SyncDuesPreviewResponse,
+  SyncDueUpdateItem,
+  ApplySyncDuesResponse,
 } from "../types/transaction";
 import { apiFetch } from "./client";
 
@@ -124,4 +127,28 @@ export async function getWalletSummary(
   year: number
 ): Promise<WalletSummaryResponse> {
   return apiFetch(`/api/transactions/wallet-summary?month=${month}&year=${year}`);
+}
+
+/**
+ * Fetch credit and loan dues preview matched with dashboard transactions.
+ * GET /api/transactions/sync-credit-dues?month={M}&year={Y}
+ */
+export async function getSyncDuesPreview(
+  month: number,
+  year: number
+): Promise<SyncDuesPreviewResponse> {
+  return apiFetch(`/api/transactions/sync-credit-dues?month=${month}&year=${year}`);
+}
+
+/**
+ * Apply matched sync dues to dashboard transactions.
+ * POST /api/transactions/apply-sync-dues
+ */
+export async function applySyncDues(
+  updates: SyncDueUpdateItem[]
+): Promise<ApplySyncDuesResponse> {
+  return apiFetch("/api/transactions/apply-sync-dues", {
+    method: "POST",
+    body: JSON.stringify({ updates }),
+  });
 }

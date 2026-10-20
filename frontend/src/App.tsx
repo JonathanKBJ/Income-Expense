@@ -229,6 +229,9 @@ function AuthenticatedApp() {
                 onDelete={remove}
                 onRemoveBatch={removeBatch}
                 momChanges={momChanges}
+                month={month}
+                year={year}
+                onRefresh={refresh}
               />
             </div>
           </>

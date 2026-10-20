@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Modal, Select, InputNumber, Upload, Button, Tooltip, message, Tag, DatePicker } from "antd";
-import { FileImageOutlined, DeleteOutlined, PlusOutlined } from "@ant-design/icons";
+import { FileImageOutlined, DeleteOutlined, PlusOutlined, SyncOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import type {
   Transaction,
@@ -12,6 +12,7 @@ import { isExpense } from "../types/transaction";
 import StatusBadge from "./StatusBadge";
 import { useLanguage } from "../contexts/LanguageContext";
 import { useAuth } from "../contexts/AuthContext";
+import SyncCreditDuesModal from "./SyncCreditDuesModal";
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -20,6 +21,9 @@ interface TransactionListProps {
   onDelete: (id: string) => Promise<void>;
   onRemoveBatch: (ids: string[]) => Promise<void>;
   momChanges: MomChangeMap;
+  month?: number;
+  year?: number;
+  onRefresh?: () => void;
 }
 
 function formatCurrency(value: number): string {
@@ -88,6 +92,9 @@ export default function TransactionList({
   onDelete,
   onRemoveBatch,
   momChanges,
+  month,
+  year,
+  onRefresh,
 }: TransactionListProps) {
   const { t: tr } = useLanguage();
   const { groupInfo, user } = useAuth();
@@ -103,6 +110,7 @@ export default function TransactionList({
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerImage, setViewerImage] = useState<string | null>(null);
 
+  const [syncModalOpen, setSyncModalOpen] = useState(false);
   // New states for filtering and bulk actions
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [memberFilter, setMemberFilter] = useState<string>("ALL");
@@ -201,6 +209,9 @@ export default function TransactionList({
       }
       req.receiptImage = editReceiptImage;
       await onUpdate(tx.id, req);
+      if (isExpense(tx) && editStatus === "PAID" && (tx.creditAccountId || tx.loanId)) {
+        message.success("บันทึกการชำระเงินและตัดยอดหนี้ในหน้าบัตร/สินเชื่อเรียบร้อยแล้ว 💳");
+      }
       resetEditState();
     } catch {
       // Error handled by parent
@@ -319,6 +330,21 @@ export default function TransactionList({
             ]}
           />
 
+          <Button
+            icon={<SyncOutlined />}
+            onClick={() => setSyncModalOpen(true)}
+            size="small"
+            className="sync-credit-dues-btn"
+            style={{
+              borderColor: "#6366f1",
+              color: "#6366f1",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+            }}
+          >
+            <span>Sync ยอดบัตร/สินเชื่อ</span>
+          </Button>
           {showMemberFilter && (
             <Select
               value={memberFilter}
@@ -476,7 +502,16 @@ export default function TransactionList({
                     )}
                   </td>
                 )}
-                <td className="col-description">{t.description || "—"}</td>
+                <td className="col-description">
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <span>{t.description || "—"}</span>
+                    {(t.creditAccountId || t.loanId) && (
+                      <Tag color="purple" style={{ margin: 0, fontSize: 10, lineHeight: "16px", padding: "0 4px" }}>
+                        💳 ผูกบัตร/สินเชื่อ
+                      </Tag>
+                    )}
+                  </div>
+                </td>
                 <td className="col-type">
                   <span className={`type-badge ${t.type.toLowerCase()}`}>
                     {t.type}
@@ -815,6 +850,11 @@ export default function TransactionList({
                         {t.billingCycle || t.date.slice(0, 7)}
                       </Tag>
                       <span className="card-date">{formatDate(t.date)}</span>
+                      {(t.creditAccountId || t.loanId) && (
+                        <Tag color="purple" style={{ margin: 0, fontSize: 10, lineHeight: "16px", padding: "0 4px" }}>
+                          💳 ผูกบัตร/สินเชื่อ
+                        </Tag>
+                      )}
                     </div>
                     <span className="card-category">{t.category}</span>
                   </div>
@@ -924,6 +964,17 @@ export default function TransactionList({
           />
         )}
       </Modal>
+
+      {/* Sync Credit & Loan Dues Modal */}
+      <SyncCreditDuesModal
+        open={syncModalOpen}
+        onCancel={() => setSyncModalOpen(false)}
+        onSuccess={() => {
+          if (onRefresh) onRefresh();
+        }}
+        month={month || dayjs().month() + 1}
+        year={year || dayjs().year()}
+      />
     </section>
   );
 }

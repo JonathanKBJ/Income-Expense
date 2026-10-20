@@ -3,6 +3,7 @@ package handlers
 import (
 	"math"
 	"testing"
+	"time"
 
 	"expense-tracker/internal/models"
 )
@@ -45,7 +46,7 @@ func TestComputeAccountDetail_UOB_TMRW(t *testing.T) {
 		},
 	}
 
-	detail := computeAccountDetail(acc, insts, txs)
+	detail := computeAccountDetail(acc, insts, txs, time.Date(2026, 10, 10, 0, 0, 0, 0, time.UTC))
 
 	if detail.AvailableCredit != 1407.00 {
 		t.Errorf("expected AvailableCredit 1407.00, got %.2f", detail.AvailableCredit)
@@ -218,7 +219,7 @@ func TestComputeAccountDetail_UOBCashPlus_BalancePercent(t *testing.T) {
 		},
 	}
 
-	detail := computeAccountDetail(acc, insts, txs)
+	detail := computeAccountDetail(acc, insts, txs, time.Date(2026, 10, 10, 0, 0, 0, 0, time.UTC))
 
 	// Monthly installment due: 486.41
 	if detail.MonthlyInstallmentDue != 486.41 {

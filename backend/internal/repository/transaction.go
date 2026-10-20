@@ -32,7 +32,7 @@ func (r *TransactionRepository) GetByMonthYear(ctx context.Context, month, year 
 	query := `
 		SELECT t.id, t.type, t.category, t.description, t.amount, t.date,
 		       t.status, t.paid_amount, t.group_id, t.user_id, t.created_by, t.receipt_image,
-		       t.billing_cycle,
+		       t.billing_cycle, t.credit_account_id, t.loan_id,
 		       rec_u.username as created_by_username,
 		       own_u.username as owner_username,
 		       t.created_at, t.updated_at
@@ -68,6 +68,8 @@ func (r *TransactionRepository) GetByMonthYear(ctx context.Context, month, year 
 			&row.CreatedByID,
 			&row.ReceiptImage,
 			&row.BillingCycle,
+			&row.CreditAccountID,
+			&row.LoanID,
 			&row.CreatedByUsername,
 			&row.OwnerUsername,
 			&row.CreatedAt,
@@ -158,7 +160,7 @@ func (r *TransactionRepository) GetByID(ctx context.Context, id, groupID string)
 	query := `
 		SELECT t.id, t.type, t.category, t.description, t.amount, t.date,
 		       t.status, t.paid_amount, t.group_id, t.user_id, t.created_by, t.receipt_image,
-		       t.billing_cycle,
+		       t.billing_cycle, t.credit_account_id, t.loan_id,
 		       rec_u.username as created_by_username,
 		       own_u.username as owner_username,
 		       t.created_at, t.updated_at
@@ -183,6 +185,8 @@ func (r *TransactionRepository) GetByID(ctx context.Context, id, groupID string)
 		&row.CreatedByID,
 		&row.ReceiptImage,
 		&row.BillingCycle,
+		&row.CreditAccountID,
+		&row.LoanID,
 		&row.CreatedByUsername,
 		&row.OwnerUsername,
 		&row.CreatedAt,
@@ -260,8 +264,8 @@ func (r *TransactionRepository) Create(ctx context.Context, req models.CreateTra
 	}
 
 	query := `
-		INSERT INTO transactions (id, type, category, description, amount, date, status, paid_amount, group_id, user_id, created_by, receipt_image, billing_cycle, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO transactions (id, type, category, description, amount, date, status, paid_amount, group_id, user_id, created_by, receipt_image, billing_cycle, credit_account_id, loan_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	_, err := r.db.ExecContext(ctx, query,
@@ -278,6 +282,8 @@ func (r *TransactionRepository) Create(ctx context.Context, req models.CreateTra
 		createdByID,
 		req.ReceiptImage,
 		billingCycle,
+		req.CreditAccountID,
+		req.LoanID,
 		now,
 		now,
 	)
@@ -306,8 +312,8 @@ func (r *TransactionRepository) CreateBatch(ctx context.Context, requests []mode
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	query := `
-		INSERT INTO transactions (id, type, category, description, amount, date, status, paid_amount, group_id, user_id, created_by, receipt_image, billing_cycle, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO transactions (id, type, category, description, amount, date, status, paid_amount, group_id, user_id, created_by, receipt_image, billing_cycle, credit_account_id, loan_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	stmt, err := tx.PrepareContext(ctx, query)
@@ -366,6 +372,8 @@ func (r *TransactionRepository) CreateBatch(ctx context.Context, requests []mode
 			createdByID,
 			req.ReceiptImage,
 			billingCycle,
+			req.CreditAccountID,
+			req.LoanID,
 			now,
 			now,
 		)
@@ -431,6 +439,16 @@ func (r *TransactionRepository) Update(ctx context.Context, id, groupID string, 
 	if req.BillingCycle != nil && *req.BillingCycle != "" {
 		setClauses = append(setClauses, "billing_cycle = ?")
 		args = append(args, *req.BillingCycle)
+	}
+
+	if req.CreditAccountID != nil {
+		setClauses = append(setClauses, "credit_account_id = ?")
+		args = append(args, *req.CreditAccountID)
+	}
+
+	if req.LoanID != nil {
+		setClauses = append(setClauses, "loan_id = ?")
+		args = append(args, *req.LoanID)
 	}
 
 	// Fetch existing transaction to validate status change rules
@@ -716,4 +734,42 @@ func (r *TransactionRepository) GetWalletSummary(ctx context.Context, month, yea
 		Members:    members,
 		GroupTotal: groupTotal,
 	}, nil
+}
+
+// BatchUpdateCreditLoanMapping updates amount, credit_account_id, and loan_id for multiple transactions in a single db tx.
+func (r *TransactionRepository) BatchUpdateCreditLoanMapping(ctx context.Context, groupID string, updates []models.SyncDueUpdateItem) error {
+	if len(updates) == 0 {
+		return nil
+	}
+	dbTx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin tx: %w", err)
+	}
+	defer dbTx.Rollback()
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	stmt, err := dbTx.PrepareContext(ctx, `
+		UPDATE transactions
+		SET amount = ?, credit_account_id = ?, loan_id = ?, updated_at = ?
+		WHERE id = ? AND group_id = ?
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare update: %w", err)
+	}
+	defer stmt.Close()
+
+	for _, u := range updates {
+		var creditAccID, loanID *string
+		if u.CreditAccountID != nil && *u.CreditAccountID != "" {
+			creditAccID = u.CreditAccountID
+		}
+		if u.LoanID != nil && *u.LoanID != "" {
+			loanID = u.LoanID
+		}
+		if _, err := stmt.ExecContext(ctx, u.Amount, creditAccID, loanID, now, u.TransactionID, groupID); err != nil {
+			return fmt.Errorf("failed to update tx %s: %w", u.TransactionID, err)
+		}
+	}
+
+	return dbTx.Commit()
 }

@@ -35,6 +35,8 @@ type Transaction struct {
 	CreatedByID       *string         `json:"createdById"`   // Who recorded this (always JWT user)
 	ReceiptImage      *string         `json:"receiptImage"`
 	BillingCycle      *string         `json:"billingCycle,omitempty"`
+	CreditAccountID   *string         `json:"creditAccountId,omitempty"`
+	LoanID            *string         `json:"loanId,omitempty"`
 	CreatedByUsername *string         `json:"createdByUsername,omitempty"` // recorder username
 	OwnerUsername     *string         `json:"ownerUsername,omitempty"`     // wallet owner username
 	CreatedAt         string          `json:"createdAt"`
@@ -57,6 +59,8 @@ type TransactionRow struct {
 	CreatedByID       sql.NullString
 	ReceiptImage      sql.NullString
 	BillingCycle      sql.NullString
+	CreditAccountID   sql.NullString
+	LoanID            sql.NullString
 	CreatedByUsername sql.NullString
 	OwnerUsername     sql.NullString
 	CreatedAt         string
@@ -119,7 +123,14 @@ func (r *TransactionRow) ToTransaction() Transaction {
 		val := r.BillingCycle.String
 		t.BillingCycle = &val
 	}
-
+	if r.CreditAccountID.Valid && r.CreditAccountID.String != "" {
+		val := r.CreditAccountID.String
+		t.CreditAccountID = &val
+	}
+	if r.LoanID.Valid && r.LoanID.String != "" {
+		val := r.LoanID.String
+		t.LoanID = &val
+	}
 	return t
 }
 
@@ -137,6 +148,8 @@ type CreateTransactionRequest struct {
 	UserID      *string         `json:"userId,omitempty"`     // Optional: override wallet owner (must be group member)
 	ReceiptImage *string        `json:"receiptImage,omitempty"`
 	BillingCycle *string        `json:"billingCycle,omitempty"`
+	CreditAccountID *string     `json:"creditAccountId,omitempty"`
+	LoanID          *string         `json:"loanId,omitempty"`
 }
 
 // UpdateTransactionRequest is the payload for PATCH /api/transactions/{id}.
@@ -150,6 +163,8 @@ type UpdateTransactionRequest struct {
 	PaidAmount   *float64       `json:"paidAmount,omitempty"`
 	UserID       *string        `json:"userId,omitempty"`     // Optional: change wallet owner (must be group member)
 	ReceiptImage *string        `json:"receiptImage,omitempty"`
+	CreditAccountID *string     `json:"creditAccountId,omitempty"`
+	LoanID          *string         `json:"loanId,omitempty"`
 }
 
 // TransactionSummary holds aggregated dashboard metrics for a given month.

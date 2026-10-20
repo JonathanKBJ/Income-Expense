@@ -1,11 +1,14 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"math"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 	"expense-tracker/internal/middleware"
@@ -13,11 +16,15 @@ import (
 	"expense-tracker/internal/repository"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 type CreditHandler struct {
-	creditRepo *repository.CreditRepository
-	groupRepo  *repository.GroupRepository
+	creditRepo   *repository.CreditRepository
+	groupRepo    *repository.GroupRepository
+	telegramRepo *repository.TelegramRepository
+	botToken     string
+	botSecret    string
 }
 
 func NewCreditHandler(creditRepo *repository.CreditRepository, groupRepo *repository.GroupRepository) *CreditHandler {
@@ -25,6 +32,245 @@ func NewCreditHandler(creditRepo *repository.CreditRepository, groupRepo *reposi
 		creditRepo: creditRepo,
 		groupRepo:  groupRepo,
 	}
+}
+
+func (h *CreditHandler) WithTelegram(telegramRepo *repository.TelegramRepository, botToken, botSecret string) *CreditHandler {
+	h.telegramRepo = telegramRepo
+	h.botToken = botToken
+	h.botSecret = botSecret
+	return h
+}
+
+func (h *CreditHandler) validateBotSecret(r *http.Request) bool {
+	if h.botSecret == "" {
+		return true
+	}
+	secret := r.Header.Get("X-Telegram-Bot-Secret")
+	if secret == "" {
+		authHeader := r.Header.Get("Authorization")
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			secret = strings.TrimPrefix(authHeader, "Bearer ")
+		}
+	}
+	return secret == h.botSecret
+}
+
+func (h *CreditHandler) sendInstallmentTelegramAlert(groupID, accName string, inst models.CreditInstallment, termNum int, newBalance float64, dueDay *int) bool {
+	if h.telegramRepo == nil || h.botToken == "" {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	chatID, err := h.telegramRepo.GetGroupTelegramChatID(ctx, groupID)
+	if err != nil || chatID == "" {
+		return false
+	}
+
+	dueStr := "-"
+	if dueDay != nil && *dueDay >= 1 && *dueDay <= 31 {
+		dueStr = fmt.Sprintf("วันที่ %d", *dueDay)
+	}
+
+	text := fmt.Sprintf(
+		"🔔 *แจ้งเตือนรอบบิลอัตโนมัติ (Statement Due)*\n\n"+
+			"💳 บัญชี: *%s*\n"+
+			"📋 รายการ: *%s (งวดที่ %d/%d)*\n"+
+			"💸 ยอดค่างวดรอบนี้: *฿%.2f*\n"+
+			"📊 ยอดหนี้รวมคงค้างใหม่: *฿%.2f*\n"+
+			"📅 วันครบกำหนดชำระ: *%s*",
+		accName, inst.ItemName, termNum, inst.TotalTerms,
+		inst.MonthlyAmount, newBalance, dueStr,
+	)
+
+	payload := map[string]string{
+		"chat_id":    chatID,
+		"text":       text,
+		"parse_mode": "Markdown",
+	}
+	jsonBody, err := json.Marshal(payload)
+	if err != nil {
+		return false
+	}
+
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", h.botToken)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonBody))
+	if err != nil {
+		return false
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 8 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("ERROR: sendInstallmentTelegramAlert: %v", err)
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode >= 200 && resp.StatusCode < 300
+}
+
+type CronInstallmentItemResult struct {
+	AccountID     string  `json:"accountId"`
+	AccountName   string  `json:"accountName"`
+	InstallmentID string  `json:"installmentId"`
+	ItemName      string  `json:"itemName"`
+	Term          int     `json:"term"`
+	TotalTerms    int     `json:"totalTerms"`
+	Amount        float64 `json:"amount"`
+	NewBalance    float64 `json:"newBalance"`
+	Status        string  `json:"status"`
+	TelegramSent  bool    `json:"telegramSent"`
+}
+
+type CronPostInstallmentsResponse struct {
+	ProcessedAt string                      `json:"processedAt"`
+	TargetDay   int                         `json:"targetDay"`
+	DryRun      bool                        `json:"dryRun"`
+	Accounts    int                         `json:"accountsChecked"`
+	Items       []CronInstallmentItemResult `json:"items"`
+}
+
+// CronPostInstallments handles POST and GET /api/telegram/cron/post-installments and /api/credit/cron/post-installments
+func (h *CreditHandler) CronPostInstallments(w http.ResponseWriter, r *http.Request) {
+	if !h.validateBotSecret(r) {
+		userID := middleware.GetUserID(r.Context())
+		if userID == "" {
+			writeError(w, http.StatusUnauthorized, "unauthorized: valid bot secret or auth token required")
+			return
+		}
+	}
+
+	// Determine Bangkok time and target statement day
+	bkkLoc, err := time.LoadLocation("Asia/Bangkok")
+	if err != nil {
+		bkkLoc = time.FixedZone("Asia/Bangkok", 7*3600)
+	}
+	nowBkk := time.Now().In(bkkLoc)
+	targetDay := nowBkk.Day()
+
+	// Check overrides from query param or JSON body
+	dryRun := false
+	if r.URL.Query().Get("dry_run") == "true" {
+		dryRun = true
+	}
+	if dayStr := r.URL.Query().Get("day"); dayStr != "" {
+		if d, err := strconv.Atoi(dayStr); err == nil && d >= 1 && d <= 31 {
+			targetDay = d
+		}
+	}
+
+	if r.Method == http.MethodPost && r.Body != nil {
+		var req struct {
+			Day    *int  `json:"day"`
+			DryRun *bool `json:"dryRun"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err == nil {
+			if req.Day != nil && *req.Day >= 1 && *req.Day <= 31 {
+				targetDay = *req.Day
+			}
+			if req.DryRun != nil {
+				dryRun = *req.DryRun
+			}
+		}
+	}
+
+	accounts, err := h.creditRepo.FindAccountsByStatementDay(r.Context(), targetDay)
+	if err != nil {
+		log.Printf("ERROR: FindAccountsByStatementDay: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to query accounts for statement day")
+		return
+	}
+
+	resp := CronPostInstallmentsResponse{
+		ProcessedAt: nowBkk.Format(time.RFC3339),
+		TargetDay:   targetDay,
+		DryRun:      dryRun,
+		Accounts:    len(accounts),
+		Items:       []CronInstallmentItemResult{},
+	}
+
+	sinceDate := nowBkk.AddDate(0, 0, -32).Format("2006-01-02")
+	todayStr := nowBkk.Format("2006-01-02")
+
+	for _, acc := range accounts {
+		insts, err := h.creditRepo.ListInstallments(r.Context(), acc.ID)
+		if err != nil {
+			log.Printf("WARN: ListInstallments failed for acc %s: %v", acc.ID, err)
+			continue
+		}
+
+		currentAccBalance := acc.CurrentBalance
+
+		for _, inst := range insts {
+			if inst.Status != models.InstallmentStatusActive {
+				continue
+			}
+			if inst.PaidTerms >= inst.TotalTerms {
+				continue
+			}
+
+			termNum := inst.PaidTerms + 1
+			alreadyCharged, err := h.creditRepo.IsInstallmentChargedInCycle(r.Context(), acc.ID, inst.ID, termNum, inst.TotalTerms, sinceDate)
+			if err != nil {
+				log.Printf("WARN: IsInstallmentChargedInCycle failed for acc %s, inst %s: %v", acc.ID, inst.ID, err)
+				continue
+			}
+
+			if alreadyCharged {
+				resp.Items = append(resp.Items, CronInstallmentItemResult{
+					AccountID:     acc.ID,
+					AccountName:   acc.Name,
+					InstallmentID: inst.ID,
+					ItemName:      inst.ItemName,
+					Term:          termNum,
+					TotalTerms:    inst.TotalTerms,
+					Amount:        inst.MonthlyAmount,
+					NewBalance:    currentAccBalance,
+					Status:        "SKIPPED_ALREADY_CHARGED",
+					TelegramSent:  false,
+				})
+				continue
+			}
+
+			// Post CHARGE transaction
+			newBal := currentAccBalance + inst.MonthlyAmount
+			telegramSent := false
+
+			if !dryRun {
+				tx := models.CreditTransaction{
+					ID:            uuid.New().String(),
+					AccountID:     acc.ID,
+					Type:          models.CreditTxCharge,
+					Amount:        inst.MonthlyAmount,
+					Date:          todayStr,
+					Description:   fmt.Sprintf("ค่างวด %s (งวดที่ %d/%d)", inst.ItemName, termNum, inst.TotalTerms),
+					InstallmentID: &inst.ID,
+				}
+				if err := h.creditRepo.AddTransaction(r.Context(), &tx, acc.ID); err != nil {
+					log.Printf("ERROR: AddTransaction for cron installment failed: %v", err)
+					continue
+				}
+				currentAccBalance = newBal
+				telegramSent = h.sendInstallmentTelegramAlert(acc.GroupID, acc.Name, inst, termNum, newBal, acc.PaymentDueDay)
+			}
+
+			resp.Items = append(resp.Items, CronInstallmentItemResult{
+				AccountID:     acc.ID,
+				AccountName:   acc.Name,
+				InstallmentID: inst.ID,
+				ItemName:      inst.ItemName,
+				Term:          termNum,
+				TotalTerms:    inst.TotalTerms,
+				Amount:        inst.MonthlyAmount,
+				NewBalance:    newBal,
+				Status:        "POSTED",
+				TelegramSent:  telegramSent,
+			})
+		}
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }
 func (h *CreditHandler) getScopedUserID(ctx context.Context, groupID, userID string) string {
 	settings, err := h.groupRepo.GetGroupSettings(ctx, groupID)
@@ -448,12 +694,14 @@ func (h *CreditHandler) DeleteTransaction(w http.ResponseWriter, r *http.Request
 }
 
 // --- Computation Helper ---
-func getBillingCycleStartDate(statementDay *int) string {
+func getBillingCycleStartDate(statementDay *int, refDate ...time.Time) string {
 	today := time.Now().UTC()
+	if len(refDate) > 0 && !refDate[0].IsZero() {
+		today = refDate[0]
+	}
 	if statementDay == nil || *statementDay < 1 || *statementDay > 31 {
 		return time.Date(today.Year(), today.Month(), 1, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
 	}
-
 	stmtDay := *statementDay
 	var year int
 	var month time.Month
@@ -480,7 +728,7 @@ func getBillingCycleStartDate(statementDay *int) string {
 }
 
 
-func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstallment, txs []models.CreditTransaction) models.CreditAccountDetail {
+func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstallment, txs []models.CreditTransaction, refDate ...time.Time) models.CreditAccountDetail {
 	// Active installments monthly sum and unbilled future installments blocking credit limit
 	var monthlyInstDue float64
 	var unbilledInstallments float64
@@ -523,7 +771,7 @@ func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstall
 	}
 
 	// Cycle payments & charges
-	cycleStart := getBillingCycleStartDate(acc.StatementDay)
+	cycleStart := getBillingCycleStartDate(acc.StatementDay, refDate...)
 	var paidThisCycle float64
 	var chargesThisCycle float64
 	var interestChargesThisCycle float64
@@ -533,9 +781,17 @@ func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstall
 				paidThisCycle += tx.Amount
 			} else if tx.Type == models.CreditTxCharge {
 				descLower := strings.ToLower(tx.Description)
-				if strings.Contains(descLower, "ดอกเบี้ย") || strings.Contains(descLower, "interest") {
+				isInterest := strings.Contains(descLower, "ดอกเบี้ย") || strings.Contains(descLower, "interest")
+				isInstallment := (tx.InstallmentID != nil && *tx.InstallmentID != "") ||
+					strings.Contains(descLower, "ค่างวด") || strings.Contains(descLower, "installment")
+
+				if isInterest {
 					interestChargesThisCycle += tx.Amount
-				} else {
+				} else if isInstallment {
+					// Installment charges are part of the statement, not post-cutoff new swipes
+					continue
+				} else if tx.Date > cycleStart {
+					// Only new revolving purchases strictly after statement cutoff reduce statement balance
 					chargesThisCycle += tx.Amount
 				}
 			}
@@ -714,4 +970,9 @@ func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstall
 		Installments:           insts,
 		Transactions:           txs,
 	}
+}
+
+// ComputeAccountDetailPublic exposes computeAccountDetail for external verification.
+func ComputeAccountDetailPublic(acc models.CreditAccount, insts []models.CreditInstallment, txs []models.CreditTransaction) models.CreditAccountDetail {
+	return computeAccountDetail(acc, insts, txs)
 }

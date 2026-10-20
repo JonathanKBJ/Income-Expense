@@ -25,6 +25,8 @@ interface BaseTransaction {
   createdByUsername?: string; // recorder username (multi-member groups)
   ownerUsername?: string;     // wallet owner username (multi-member groups)
   billingCycle?: string;      // YYYY-MM accounting/budget cycle
+  creditAccountId?: string | null;
+  loanId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -70,6 +72,8 @@ export interface CreateExpenseRequest {
   userId?: string;       // optional: override wallet owner
   receiptImage?: string;
   billingCycle?: string; // YYYY-MM budget cycle
+  creditAccountId?: string | null;
+  loanId?: string | null;
 }
 
 export type CreateTransactionRequest = CreateIncomeRequest | CreateExpenseRequest;
@@ -84,6 +88,8 @@ export interface UpdateTransactionRequest {
   paidAmount?: number;
   userId?: string;       // optional: change wallet owner
   receiptImage?: string;
+  creditAccountId?: string | null;
+  loanId?: string | null;
 }
 
 // --- API Response Types ---
@@ -137,6 +143,55 @@ export interface AnnualSummaryResponse {
 export interface ErrorResponse {
   error: string;
   details?: string;
+}
+
+// --- Sync Credit & Loan Dues ---
+
+export interface SyncDueMatchItem {
+  transactionId: string;
+  transactionDescription: string;
+  category: string;
+  currentAmount: number;
+  date: string;
+  status: string;
+  matchedType: "CREDIT_ACCOUNT" | "LOAN" | "";
+  matchedId: string;
+  matchedName: string;
+  dueAmount: number;
+  fullAmount: number;
+  suggestedAmount: number;
+  selectedAmountType: "DUE" | "FULL";
+  diff: number;
+}
+
+export interface SyncDueAvailableAccount {
+  type: "CREDIT_ACCOUNT" | "LOAN";
+  id: string;
+  name: string;
+  dueAmount: number;
+  fullAmount: number;
+}
+
+export interface SyncDuesPreviewResponse {
+  month: number;
+  year: number;
+  matches: SyncDueMatchItem[];
+  availableAccounts: SyncDueAvailableAccount[];
+}
+
+export interface SyncDueUpdateItem {
+  transactionId: string;
+  amount: number;
+  creditAccountId?: string | null;
+  loanId?: string | null;
+}
+
+export interface ApplySyncDuesRequest {
+  updates: SyncDueUpdateItem[];
+}
+
+export interface ApplySyncDuesResponse {
+  updatedCount: number;
 }
 
 // --- Form State ---

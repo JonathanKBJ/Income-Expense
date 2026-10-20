@@ -975,5 +975,75 @@
         ],
         "logic_changed": "Added 'รอบบัญชี' (billing cycle tag/month picker) and 'กำหนดการจ่าย' (due date picker) columns to TransactionList table and mobile card view. Enhanced ValidateUpdateRequest and UpdateTransaction to allow updating date, category, description, and billingCycle. Enabled inline date and cycle editing in TransactionList rows.",
         "ai_warning": "ValidateUpdateRequest now accepts updates with only date/billingCycle without requiring amount or status changes."
+    },
+    {
+        "date": "2026-10-19",
+        "scope": "[Data/Credit]",
+        "task": "Reconcile UOB TMRW credit card with Oct 18 statement PDF: add interest, adjust balance & cycle days, sync pending expense",
+        "files_touched": [
+            "backend/internal/database/schema.go"
+        ],
+        "logic_changed": "Reconciled UOB TMRW credit card with actual statement (18 OCT 2026): inserted interest charge of 217.08 THB, adjusted prior net cycle adjustment from 337.48 to 337.37 (accounting for 352 LineMan - 3.44 BOT rebate - 11.19 cashback), updated card statement_day to 18, payment_due_day to 10, and current_balance to 15958.97 THB. Recorded 2 new cycle Grab swipe charges (200.00 and 300.00 THB on 2026-10-18 post-cutoff), updating current_balance to 16458.97 THB and available credit to 541.03 THB while statement due on 2026-11-10 remains 1277.00 THB. Updated pending expense plan for 2026-11-10 from 1323.56 to 1277.00 THB.",
+        "ai_warning": "UOB TMRW card cycle cuts on the 18th with payment due on the 10th. Post-cutoff charges on or after the 18th fall into chargesThisCycle and do not increase the current cycle statement balance (15958.97 THB), while immediately reducing available credit to 541.03 THB."
+    },
+    {
+        "date": "2026-10-20",
+        "scope": "[Frontend/Credit]",
+        "task": "Add Post Installment Charge button & cycle billing detection to CreditTracker",
+        "files_touched": [
+            "frontend/src/components/CreditTracker.tsx",
+            "frontend/src/translations/index.ts"
+        ],
+        "logic_changed": "Added 'ลงยอดหนี้งวดนี้' (Post to Statement) button in CreditTracker installment table rows and tab header. Created isInstallmentChargedThisCycle helper to detect existing CHARGE transactions for the current installment term within the past 35 days, disabling the button with a green checkmark if already posted. In Transaction Modal, added quick installment shortcut buttons under CHARGE mode and enabled linking CHARGE transactions to installmentId.",
+        "ai_warning": "Charging an installment posts a CHARGE transaction that increases currentBalance by the monthly installment without advancing paidTerms. Advancement of paidTerms occurs only upon PAYMENT or via advanceTerm."
+    },
+    {
+        "date": "2026-10-20",
+        "scope": "[Full-Stack/Worker]",
+        "task": "Automated installment posting on Statement Day via Cloudflare Worker Cron & Telegram notification",
+        "files_touched": [
+            "backend/internal/handlers/credit.go",
+            "backend/internal/handlers/credit_cron_test.go",
+            "backend/internal/repository/credit.go",
+            "backend/internal/router/router.go",
+            "backend/cmd/server/main.go",
+            "telegram-bot-worker/wrangler.toml",
+            "telegram-bot-worker/src/index.ts"
+        ],
+        "logic_changed": "Implemented CronPostInstallments endpoint in CreditHandler (accessible via /api/telegram/cron/post-installments and /api/credit-accounts/cron/post-installments). Checks active credit accounts on their statement day (Bangkok timezone UTC+7), verifies idempotency via IsInstallmentChargedInCycle, atomically posts a CHARGE transaction with installment_id, updates currentBalance, and broadcasts a Telegram notification to the group chat. Added Cloudflare Worker scheduled handler in telegram-bot-worker with wrangler trigger crons = ['0 1 * * *'] (08:00 AM Bangkok).",
+        "ai_warning": "Endpoint validates X-Telegram-Bot-Secret header (or admin JWT). Supports optional ?day=X and ?dry_run=true query parameters for manual testing without DB mutations."
+    },
+    {
+        "date": "2026-10-20",
+        "scope": "[Full-Stack/Credit]",
+        "task": "Fix monthly due calculation for installment charges & prevent double submission across CreditTracker",
+        "files_touched": [
+            "backend/internal/handlers/credit.go",
+            "backend/internal/repository/credit.go",
+            "frontend/src/components/CreditTracker.tsx"
+        ],
+        "logic_changed": "In computeAccountDetail (credit.go), excluded installment charges and statement-date charges from chargesThisCycle so they are not subtracted from statementBal, fixing totalDueThisMonth calculation from 755 to 767. In repository/credit.go AddTransaction, added a 3-second rapid duplicate submission guard at DB transaction level. In CreditTracker.tsx, added savingAccount, savingInstallment, advancingInstId, and savingTx loading states, binding confirmLoading and disabled props to all modals and action buttons to block repeated clicks.",
+        "ai_warning": "Installment charges (linked via installmentId or marked as ค่างวด) belong to the current billing cycle statement and must never be classified as post-cutoff revolving charges (chargesThisCycle)."
+    },
+    {
+        "date": "2026-10-20",
+        "scope": "[Full-Stack/Integration]",
+        "task": "Add Sync Credit/Loan Dues Modal to Dashboard & Two-Way Payment Tracking to Cards/Loans",
+        "files_touched": [
+            "backend/internal/database/schema.go",
+            "backend/internal/models/transaction.go",
+            "backend/internal/models/sync.go",
+            "backend/internal/repository/transaction.go",
+            "backend/internal/handlers/transaction.go",
+            "backend/internal/router/router.go",
+            "backend/cmd/server/main.go",
+            "frontend/src/types/transaction.ts",
+            "frontend/src/api/transactions.ts",
+            "frontend/src/components/SyncCreditDuesModal.tsx",
+            "frontend/src/components/TransactionList.tsx",
+            "frontend/src/App.tsx"
+        ],
+        "logic_changed": "Added credit_account_id and loan_id columns to transactions table. Created GET /api/transactions/sync-credit-dues to preview and fuzzy-match dashboard expenses against credit accounts & borrow loans with calculated minimum/monthly dues. Created POST /api/transactions/apply-sync-dues to atomically batch-update amounts and link IDs. In TransactionHandler UpdateTransaction & CreateTransaction, added two-way payment reflection: when a transaction linked to creditAccountId or loanId transitions to PAID status, it automatically records a PAYMENT transaction on the credit card (advancing installment terms) or an INSTALLMENT entry on the loan. Added SyncCreditDuesModal and Sync button in TransactionList header controls.",
+        "ai_warning": "Transactions bound to creditAccountId or loanId will automatically deduct balance from the corresponding account when marked PAID. Do not manually record payments in CreditTracker if already marked PAID in Dashboard."
     }
 ]

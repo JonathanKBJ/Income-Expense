@@ -57,19 +57,21 @@ func main() {
 	telegramRepo := repository.NewTelegramRepository(db.DB)
 	telegramHandler := handlers.NewTelegramHandler(telegramRepo, cfg.TelegramBotSecret)
 
-	txRepo := repository.NewTransactionRepository(db)
-	txHandler := handlers.NewTransactionHandler(txRepo, groupRepo, activityRepo).WithTelegram(telegramRepo, cfg.TelegramBotToken)
-	catRepo := repository.NewCategoryRepository(db)
-	catHandler := handlers.NewCategoryHandler(catRepo, groupRepo, activityRepo)
-
-	groupHandler := handlers.NewGroupHandler(groupRepo, activityRepo, inviteRepo, userRepo, authService)
-
 	loanRepo := repository.NewLoanRepository(db.DB)
 	loanHandler := handlers.NewLoanHandler(loanRepo, groupRepo)
 
 	creditRepo := repository.NewCreditRepository(db.DB)
-	creditHandler := handlers.NewCreditHandler(creditRepo, groupRepo)
+	creditHandler := handlers.NewCreditHandler(creditRepo, groupRepo).WithTelegram(telegramRepo, cfg.TelegramBotToken, cfg.TelegramBotSecret)
 
+	txRepo := repository.NewTransactionRepository(db)
+	txHandler := handlers.NewTransactionHandler(txRepo, groupRepo, activityRepo).
+		WithTelegram(telegramRepo, cfg.TelegramBotToken).
+		WithCreditAndLoans(creditRepo, loanRepo)
+
+	catRepo := repository.NewCategoryRepository(db)
+	catHandler := handlers.NewCategoryHandler(catRepo, groupRepo, activityRepo)
+
+	groupHandler := handlers.NewGroupHandler(groupRepo, activityRepo, inviteRepo, userRepo, authService)
 	httpRouter := router.New(authService, authHandler, adminHandler, txHandler, catHandler, groupHandler, loanHandler, creditHandler, telegramHandler)
 	// Configure HTTP server
 	srv := &http.Server{

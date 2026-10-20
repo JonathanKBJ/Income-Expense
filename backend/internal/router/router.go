@@ -63,6 +63,8 @@ func New(
 		r.Post("/transactions", telegramHandler.CreateTransaction)
 		r.Get("/usage", telegramHandler.GetUsage)
 		r.Post("/usage/increment", telegramHandler.IncrementUsage)
+		r.Post("/cron/post-installments", creditHandler.CronPostInstallments)
+		r.Get("/cron/post-installments", creditHandler.CronPostInstallments)
 	})
 
 	// --- Protected API Routes ---
@@ -77,6 +79,7 @@ func New(
 				r.Get("/compact", txHandler.GetTransactionsCompact)
 				r.Get("/annual", txHandler.GetAnnualSummary)
 				r.Get("/wallet-summary", txHandler.GetWalletSummary)
+				r.Get("/sync-credit-dues", txHandler.GetSyncDuesPreview)
 				// Write: EDITOR+
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Post("/", txHandler.CreateTransaction)
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Post("/batch", txHandler.CreateTransactionsBatch)
@@ -84,6 +87,7 @@ func New(
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Patch("/{id}", txHandler.UpdateTransaction)
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Delete("/{id}", txHandler.DeleteTransaction)
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Delete("/batch", txHandler.DeleteTransactionsBatch)
+				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Post("/apply-sync-dues", txHandler.ApplySyncDues)
 			})
 
 			// Category routes
@@ -143,6 +147,8 @@ func New(
 
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Post("/{id}/transactions", creditHandler.AddTransaction)
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Delete("/{id}/transactions/{tid}", creditHandler.DeleteTransaction)
+				r.Post("/cron/post-installments", creditHandler.CronPostInstallments)
+				r.Get("/cron/post-installments", creditHandler.CronPostInstallments)
 			})
 
 			// Admin routes (Protected by Auth + AdminOnly)

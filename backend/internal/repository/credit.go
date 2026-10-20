@@ -432,6 +432,17 @@ func (r *CreditRepository) AddTransaction(ctx context.Context, tx *models.Credit
 	}
 	defer dbTx.Rollback()
 
+	// Guard against rapid duplicate submission (e.g. double click within 3 seconds)
+	var dupID string
+	_ = dbTx.QueryRowContext(ctx, `
+		SELECT id FROM credit_transactions
+		WHERE account_id = ? AND type = ? AND amount = ? AND date = ? AND description = ?
+		  AND created_at >= datetime('now', '-3 seconds')
+		LIMIT 1
+	`, accountID, tx.Type, tx.Amount, tx.Date, tx.Description).Scan(&dupID)
+	if dupID != "" {
+		return nil
+	}
 	// 1. Insert transaction
 	insertQuery := `INSERT INTO credit_transactions (
 		id, account_id, type, amount, date, description, payment_type, installment_id, receipt_image,
@@ -598,4 +609,52 @@ func (r *CreditRepository) DeleteTransaction(ctx context.Context, id, accountID 
 	}
 
 	return dbTx.Commit()
+}
+
+// FindAccountsByStatementDay retrieves all active credit accounts whose statement_day matches targetDay.
+func (r *CreditRepository) FindAccountsByStatementDay(ctx context.Context, targetDay int) ([]models.CreditAccount, error) {
+	query := `SELECT id, name, type, bank, credit_limit, current_balance, statement_day, payment_due_day,
+		interest_rate, min_payment_rate, min_payment_floor, min_payment_calc_mode, status, notes, group_id, user_id,
+		created_at, updated_at
+		FROM credit_accounts WHERE status = 'ACTIVE' AND (statement_day = ? OR (? >= 28 AND statement_day > ?))`
+
+	rows, err := r.db.QueryContext(ctx, query, targetDay, targetDay, targetDay)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query accounts by statement day: %w", err)
+	}
+	defer rows.Close()
+
+	var list []models.CreditAccount
+	for rows.Next() {
+		var a models.CreditAccount
+		var cAt, uAt string
+		if err := rows.Scan(
+			&a.ID, &a.Name, &a.Type, &a.Bank, &a.CreditLimit, &a.CurrentBalance,
+			&a.StatementDay, &a.PaymentDueDay, &a.InterestRate, &a.MinPaymentRate, &a.MinPaymentFloor,
+			&a.MinPaymentCalcMode, &a.Status, &a.Notes, &a.GroupID, &a.UserID, &cAt, &uAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan credit account: %w", err)
+		}
+		a.CreatedAt, _ = time.Parse(time.RFC3339, cAt)
+		a.UpdatedAt, _ = time.Parse(time.RFC3339, uAt)
+		list = append(list, a)
+	}
+	return list, nil
+}
+
+// IsInstallmentChargedInCycle checks if a CHARGE transaction has already been posted for an installment term.
+func (r *CreditRepository) IsInstallmentChargedInCycle(ctx context.Context, accountID, installmentID string, termNum, totalTerms int, sinceDate string) (bool, error) {
+	termPattern := fmt.Sprintf("%%%d/%d%%", termNum, totalTerms)
+	termPatternAlt := fmt.Sprintf("%%งวดที่ %d%%", termNum)
+	query := `SELECT COUNT(*) FROM credit_transactions
+		WHERE account_id = ?
+		  AND type = 'CHARGE'
+		  AND (installment_id = ? OR (description LIKE ? OR description LIKE ?))
+		  AND date >= ?`
+	var count int
+	err := r.db.QueryRowContext(ctx, query, accountID, installmentID, termPattern, termPatternAlt, sinceDate).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("failed to check installment charge: %w", err)
+	}
+	return count > 0, nil
 }

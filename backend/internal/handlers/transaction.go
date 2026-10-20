@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"expense-tracker/internal/middleware"
@@ -24,6 +26,8 @@ type TransactionHandler struct {
 	groupRepo    *repository.GroupRepository
 	activityRepo *repository.ActivityLogRepository
 	telegramRepo *repository.TelegramRepository
+	creditRepo   *repository.CreditRepository
+	loanRepo     *repository.LoanRepository
 	botToken     string
 }
 
@@ -44,6 +48,13 @@ func NewTransactionHandler(
 func (h *TransactionHandler) WithTelegram(telegramRepo *repository.TelegramRepository, botToken string) *TransactionHandler {
 	h.telegramRepo = telegramRepo
 	h.botToken = botToken
+	return h
+}
+
+// WithCreditAndLoans attaches credit and loan repositories for two-way sync and payments.
+func (h *TransactionHandler) WithCreditAndLoans(creditRepo *repository.CreditRepository, loanRepo *repository.LoanRepository) *TransactionHandler {
+	h.creditRepo = creditRepo
+	h.loanRepo = loanRepo
 	return h
 }
 
@@ -234,6 +245,16 @@ func (h *TransactionHandler) CreateTransaction(w http.ResponseWriter, r *http.Re
 	// Notify linked Telegram group in the background
 	h.notifyTelegramGroup(groupID, transaction)
 
+	// Two-way payment reflection to credit cards / loans if created directly as PAID
+	if transaction.Status != nil && *transaction.Status == models.StatusPaid {
+		if h.creditRepo != nil && transaction.CreditAccountID != nil && *transaction.CreditAccountID != "" {
+			go h.recordCreditCardPaymentFromDashboard(context.Background(), *transaction.CreditAccountID, transaction)
+		}
+		if h.loanRepo != nil && transaction.LoanID != nil && *transaction.LoanID != "" {
+			go h.recordLoanPaymentFromDashboard(context.Background(), *transaction.LoanID, transaction)
+		}
+	}
+
 }
 
 // CreateTransactionsBatch handles POST /api/transactions/batch
@@ -403,6 +424,17 @@ func (h *TransactionHandler) UpdateTransaction(w http.ResponseWriter, r *http.Re
 	if updated == nil {
 		writeError(w, http.StatusNotFound, "transaction not found")
 		return
+	}
+
+	// Two-way payment reflection to credit cards / loans when marked as PAID
+	if (existing.Status == nil || *existing.Status != models.StatusPaid) &&
+		(updated.Status != nil && *updated.Status == models.StatusPaid) {
+		if h.creditRepo != nil && updated.CreditAccountID != nil && *updated.CreditAccountID != "" {
+			go h.recordCreditCardPaymentFromDashboard(context.Background(), *updated.CreditAccountID, updated)
+		}
+		if h.loanRepo != nil && updated.LoanID != nil && *updated.LoanID != "" {
+			go h.recordLoanPaymentFromDashboard(context.Background(), *updated.LoanID, updated)
+		}
 	}
 
 	// Log activity for multi-member groups
@@ -589,6 +621,309 @@ func (h *TransactionHandler) GetWalletSummary(w http.ResponseWriter, r *http.Req
 	}
 
 	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *TransactionHandler) recordCreditCardPaymentFromDashboard(ctx context.Context, accountID string, tx *models.Transaction) {
+	paidAmount := tx.Amount
+	if tx.PaidAmount != nil && *tx.PaidAmount > 0 {
+		paidAmount = *tx.PaidAmount
+	}
+
+	creditTx := models.CreditTransaction{
+		ID:           uuid.New().String(),
+		AccountID:    accountID,
+		Type:         models.CreditTxPayment,
+		Amount:       paidAmount,
+		Date:         tx.Date,
+		Description:  fmt.Sprintf("ชำระผ่าน Dashboard: %s", tx.Description),
+		ReceiptImage: tx.ReceiptImage,
+	}
+
+	// Link to active installment if exists
+	insts, err := h.creditRepo.ListInstallments(ctx, accountID)
+	if err == nil {
+		for _, inst := range insts {
+			if inst.Status == models.InstallmentStatusActive && inst.PaidTerms < inst.TotalTerms {
+				creditTx.InstallmentID = &inst.ID
+				break
+			}
+		}
+	}
+
+	payType := models.CreditPayCustom
+	creditTx.PaymentType = &payType
+
+	if err := h.creditRepo.AddTransaction(ctx, &creditTx, accountID); err != nil {
+		log.Printf("WARN: recordCreditCardPaymentFromDashboard failed: %v", err)
+	}
+}
+
+func (h *TransactionHandler) recordLoanPaymentFromDashboard(ctx context.Context, loanID string, tx *models.Transaction) {
+	paidAmount := tx.Amount
+	if tx.PaidAmount != nil && *tx.PaidAmount > 0 {
+		paidAmount = *tx.PaidAmount
+	}
+
+	entry := models.LoanEntry{
+		ID:           uuid.New().String(),
+		LoanID:       loanID,
+		EntryType:    models.EntryInstallment,
+		Amount:       paidAmount,
+		Date:         tx.Date,
+		Description:  fmt.Sprintf("ชำระผ่าน Dashboard: %s", tx.Description),
+		ReceiptImage: tx.ReceiptImage,
+	}
+
+	if err := h.loanRepo.AddEntry(ctx, &entry); err != nil {
+		log.Printf("WARN: recordLoanPaymentFromDashboard failed: %v", err)
+	}
+}
+
+func normalizeName(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	s = strings.ReplaceAll(s, " ", "")
+	s = strings.ReplaceAll(s, "-", "")
+	s = strings.ReplaceAll(s, "_", "")
+	return s
+}
+
+func matchAccountForDescription(desc string, accounts []models.SyncDueAvailableAccount) *models.SyncDueAvailableAccount {
+	normDesc := normalizeName(desc)
+	if normDesc == "" {
+		return nil
+	}
+
+	// 1. Direct exact or substring match
+	for i := range accounts {
+		normName := normalizeName(accounts[i].Name)
+		if normName == "" {
+			continue
+		}
+		if normDesc == normName || strings.Contains(normDesc, normName) || strings.Contains(normName, normDesc) {
+			return &accounts[i]
+		}
+	}
+
+	// 2. Specific alias patterns
+	for i := range accounts {
+		normName := normalizeName(accounts[i].Name)
+		// UOB Cash Plus
+		if (strings.Contains(normDesc, "cashplus") || strings.Contains(normDesc, "cashplusuob")) && strings.Contains(normName, "cashplus") {
+			return &accounts[i]
+		}
+		// UOB TMRW / UOB Credit
+		if (strings.Contains(normDesc, "uob") || strings.Contains(normDesc, "tmrw")) && (strings.Contains(normName, "tmrw") || strings.Contains(normName, "uob")) && !strings.Contains(normDesc, "cashplus") && !strings.Contains(normName, "cashplus") {
+			return &accounts[i]
+		}
+		// SCB Up Cash
+		if (strings.Contains(normDesc, "upcash") || strings.Contains(normDesc, "scbupcash")) && strings.Contains(normName, "upcash") {
+			return &accounts[i]
+		}
+		// First choice
+		if (strings.Contains(normDesc, "firstchoice") || strings.Contains(normDesc, "first")) && strings.Contains(normName, "firstchoice") {
+			return &accounts[i]
+		}
+		// Money Thunder
+		if (strings.Contains(normDesc, "moneythunder") || strings.Contains(normDesc, "thunder")) && strings.Contains(normName, "moneythunder") {
+			return &accounts[i]
+		}
+		// Finnix
+		if strings.Contains(normDesc, "finnix") && strings.Contains(normName, "finnix") {
+			return &accounts[i]
+		}
+		// Car loan
+		if (strings.Contains(normDesc, "ผ่อนรถ") || strings.Contains(normDesc, "cimb")) && (strings.Contains(normName, "ผ่อนรถ") || strings.Contains(normName, "cimb")) {
+			return &accounts[i]
+		}
+		// Krungthai
+		if (strings.Contains(normDesc, "krungthai") || strings.Contains(normDesc, "ktb")) && (strings.Contains(normName, "krungthai") || strings.Contains(normName, "ktb")) {
+			return &accounts[i]
+		}
+	}
+
+	return nil
+}
+
+// GetSyncDuesPreview handles GET /api/transactions/sync-credit-dues?month=M&year=Y
+func (h *TransactionHandler) GetSyncDuesPreview(w http.ResponseWriter, r *http.Request) {
+	now := time.Now()
+	month := int(now.Month())
+	year := now.Year()
+	if mStr := r.URL.Query().Get("month"); mStr != "" {
+		if m, err := strconv.Atoi(mStr); err == nil && m >= 1 && m <= 12 {
+			month = m
+		}
+	}
+	if yStr := r.URL.Query().Get("year"); yStr != "" {
+		if y, err := strconv.Atoi(yStr); err == nil && y >= 2000 && y <= 2100 {
+			year = y
+		}
+	}
+	groupID := middleware.GetGroupID(r.Context())
+	if groupID == "" {
+		writeError(w, http.StatusForbidden, "group identification required")
+		return
+	}
+
+	// 1. Fetch transactions for month/year
+	txRes, err := h.repo.GetByMonthYear(r.Context(), month, year, groupID)
+	if err != nil {
+		log.Printf("ERROR: GetSyncDuesPreview (txs): %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to fetch transactions")
+		return
+	}
+
+	// 2. Fetch credit accounts
+	availAccounts := make([]models.SyncDueAvailableAccount, 0)
+	if h.creditRepo != nil {
+		accs, err := h.creditRepo.ListAccountsByGroup(r.Context(), groupID)
+		if err == nil {
+			for _, acc := range accs {
+				insts, _ := h.creditRepo.ListInstallments(r.Context(), acc.ID)
+				txs, _ := h.creditRepo.ListTransactions(r.Context(), acc.ID)
+				detail := computeAccountDetail(acc, insts, txs)
+
+				due := detail.TotalDueThisMonth
+				if due <= 0 {
+					due = detail.EstimatedMinPayment
+				}
+				if due <= 0 && detail.CurrentBalance > 0 {
+					due = detail.CurrentBalance
+				}
+
+				availAccounts = append(availAccounts, models.SyncDueAvailableAccount{
+					Type:       "CREDIT_ACCOUNT",
+					ID:         acc.ID,
+					Name:       acc.Name,
+					DueAmount:  due,
+					FullAmount: detail.CurrentBalance,
+				})
+			}
+		}
+	}
+
+	// 3. Fetch active borrow loans
+	if h.loanRepo != nil {
+		loans, err := h.loanRepo.ListByGroup(r.Context(), groupID)
+		if err == nil {
+			for _, l := range loans {
+				if l.Type == models.LoanBorrow && l.Status == models.LoanActive {
+					instAmt := 0.0
+					if l.InstallmentAmount != nil {
+						instAmt = *l.InstallmentAmount
+					}
+					availAccounts = append(availAccounts, models.SyncDueAvailableAccount{
+						Type:       "LOAN",
+						ID:         l.ID,
+						Name:       l.Name,
+						DueAmount:  instAmt,
+						FullAmount: l.Principal,
+					})
+				}
+			}
+		}
+	}
+
+	// 4. Match transactions
+	matches := make([]models.SyncDueMatchItem, 0)
+
+	for _, tx := range txRes.Transactions {
+		if tx.Type != models.TypeExpense {
+			continue
+		}
+
+		var matchedAcc *models.SyncDueAvailableAccount
+
+		// Priority 1: Already mapped by ID
+		if tx.CreditAccountID != nil && *tx.CreditAccountID != "" {
+			for i := range availAccounts {
+				if availAccounts[i].Type == "CREDIT_ACCOUNT" && availAccounts[i].ID == *tx.CreditAccountID {
+					matchedAcc = &availAccounts[i]
+					break
+				}
+			}
+		} else if tx.LoanID != nil && *tx.LoanID != "" {
+			for i := range availAccounts {
+				if availAccounts[i].Type == "LOAN" && availAccounts[i].ID == *tx.LoanID {
+					matchedAcc = &availAccounts[i]
+					break
+				}
+			}
+		}
+
+		// Priority 2: Fuzzy / keyword match by description
+		if matchedAcc == nil {
+			matchedAcc = matchAccountForDescription(tx.Description, availAccounts)
+		}
+
+		// Only include if matched, or if category suggests credit card / loan
+		isCreditCategory := strings.Contains(strings.ToLower(tx.Category), "บัตร") ||
+			strings.Contains(strings.ToLower(tx.Category), "credit") ||
+			strings.Contains(strings.ToLower(tx.Category), "หนี้") ||
+			strings.Contains(strings.ToLower(tx.Category), "เงินกู้") ||
+			strings.Contains(strings.ToLower(tx.Category), "loan")
+
+		if matchedAcc != nil || isCreditCategory {
+			statusStr := "PENDING"
+			if tx.Status != nil {
+				statusStr = string(*tx.Status)
+			}
+
+			item := models.SyncDueMatchItem{
+				TransactionID:          tx.ID,
+				TransactionDescription: tx.Description,
+				Category:               tx.Category,
+				CurrentAmount:          tx.Amount,
+				Date:                   tx.Date,
+				Status:                 statusStr,
+			}
+
+			if matchedAcc != nil {
+				item.MatchedType = matchedAcc.Type
+				item.MatchedID = matchedAcc.ID
+				item.MatchedName = matchedAcc.Name
+				item.DueAmount = matchedAcc.DueAmount
+				item.FullAmount = matchedAcc.FullAmount
+				item.SuggestedAmount = matchedAcc.DueAmount
+				item.SelectedAmountType = "DUE"
+				item.Diff = math.Round((item.SuggestedAmount-item.CurrentAmount)*100) / 100
+			}
+
+			matches = append(matches, item)
+		}
+	}
+
+	writeJSON(w, http.StatusOK, models.SyncDuesPreviewResponse{
+		Month:             month,
+		Year:              year,
+		Matches:           matches,
+		AvailableAccounts: availAccounts,
+	})
+}
+
+// ApplySyncDues handles POST /api/transactions/apply-sync-dues
+func (h *TransactionHandler) ApplySyncDues(w http.ResponseWriter, r *http.Request) {
+	groupID := middleware.GetGroupID(r.Context())
+	if groupID == "" {
+		writeError(w, http.StatusForbidden, "group identification required")
+		return
+	}
+
+	var req models.ApplySyncDuesRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+		return
+	}
+
+	if err := h.repo.BatchUpdateCreditLoanMapping(r.Context(), groupID, req.Updates); err != nil {
+		log.Printf("ERROR: ApplySyncDues: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to apply sync updates: "+err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, models.ApplySyncDuesResponse{
+		UpdatedCount: len(req.Updates),
+	})
 }
 
 // --- Response helpers ---

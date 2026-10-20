@@ -6,7 +6,7 @@ import {
 import {
   PlusOutlined, DeleteOutlined, PictureOutlined, EditOutlined,
   CreditCardOutlined, ThunderboltOutlined, DollarOutlined,
-  ReloadOutlined, TableOutlined, LeftOutlined,
+  ReloadOutlined, TableOutlined, LeftOutlined, PlusCircleOutlined, CheckCircleOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import type {
@@ -242,6 +242,12 @@ export default function CreditTracker() {
   const [txInstallmentId, setTxInstallmentId] = useState<string | undefined>();
   const [txReceipt, setTxReceipt] = useState<string | undefined>();
 
+  // Submission loading states to prevent double submission
+  const [savingAccount, setSavingAccount] = useState(false);
+  const [savingInstallment, setSavingInstallment] = useState(false);
+  const [advancingInstId, setAdvancingInstId] = useState<string | null>(null);
+  const [savingTx, setSavingTx] = useState(false);
+
   // Fetch accounts
   const fetchAccounts = useCallback(async () => {
     setLoading(true);
@@ -353,11 +359,12 @@ export default function CreditTracker() {
   }
 
   async function handleSaveAccount() {
-    if (!accName.trim()) {
-      message.warning(t.creditPage.accountName);
+    if (!accName.trim() || savingAccount) {
+      if (!accName.trim()) message.warning(t.creditPage.accountName);
       return;
     }
 
+    setSavingAccount(true);
     try {
       if (editingAccountId) {
         await api.updateCreditAccount(editingAccountId, {
@@ -399,6 +406,8 @@ export default function CreditTracker() {
       fetchAccounts();
     } catch (e: unknown) {
       message.error(getErrorMessage(e) || (editingAccountId ? t.creditPage.updateFailed : t.creditPage.createFailed));
+    } finally {
+      setSavingAccount(false);
     }
   }
 
@@ -457,11 +466,12 @@ export default function CreditTracker() {
 
   async function handleSaveInstallment() {
     if (!selectedAccount) return;
-    if (!instItemName.trim() || instTotalAmount <= 0 || instMonthlyAmount <= 0) {
-      message.warning(t.creditPage.itemName);
+    if (!instItemName.trim() || instTotalAmount <= 0 || instMonthlyAmount <= 0 || savingInstallment) {
+      if (!instItemName.trim()) message.warning(t.creditPage.itemName);
       return;
     }
 
+    setSavingInstallment(true);
     try {
       const payload: CreateCreditInstallmentRequest = {
         itemName: instItemName.trim(),
@@ -487,11 +497,14 @@ export default function CreditTracker() {
       fetchAccounts();
     } catch (e: unknown) {
       message.error(getErrorMessage(e) || (editingInstallmentId ? t.creditPage.updateFailed : t.creditPage.createFailed));
+    } finally {
+      setSavingInstallment(false);
     }
   }
 
   async function handleAdvanceTerm(inst: CreditInstallment) {
-    if (!selectedAccount) return;
+    if (!selectedAccount || advancingInstId) return;
+    setAdvancingInstId(inst.id);
     try {
       const nextPaid = Math.min(inst.totalTerms, inst.paidTerms + 1);
       await api.updateInstallment(selectedAccount.id, inst.id, {
@@ -502,7 +515,49 @@ export default function CreditTracker() {
       fetchAccounts();
     } catch (e: unknown) {
       message.error(getErrorMessage(e) || t.creditPage.updateFailed);
+    } finally {
+      setAdvancingInstId(null);
     }
+  }
+  function isInstallmentChargedThisCycle(inst: CreditInstallment, acc = selectedAccount): boolean {
+    if (!acc) return false;
+    const termNum = (inst.paidTerms || 0) + 1;
+    const termStr = `งวดที่ ${termNum}`;
+    const termStrAlt = `${termNum}/${inst.totalTerms}`;
+
+    return acc.transactions.some((tx) => {
+      if (tx.type !== "CHARGE") return false;
+      const matchesInst =
+        tx.installmentId === inst.id ||
+        (tx.description && (tx.description.includes(termStr) || tx.description.includes(termStrAlt)));
+      if (!matchesInst) return false;
+
+      // Check if charged within the last 35 days
+      const diffDays = Math.abs(dayjs().diff(dayjs(tx.date), "day"));
+      return diffDays <= 35;
+    });
+  }
+
+  function openChargeInstallmentModal(inst: CreditInstallment) {
+    if (!selectedAccount) return;
+    setTxType("CHARGE");
+    setTxPaymentOption("CUSTOM");
+    setTxAmount(inst.monthlyAmount);
+    setTxInstallmentId(inst.id);
+    const termNum = (inst.paidTerms || 0) + 1;
+    setTxDescription(`ค่างวด ${inst.itemName} (งวดที่ ${termNum}/${inst.totalTerms})`);
+
+    if (selectedAccount.statementDay) {
+      let stmtDate = dayjs().date(selectedAccount.statementDay);
+      if (dayjs().date() < selectedAccount.statementDay) {
+        stmtDate = stmtDate.subtract(1, "month");
+      }
+      setTxDate(stmtDate);
+    } else {
+      setTxDate(dayjs());
+    }
+    setTxReceipt(undefined);
+    setShowTxModal(true);
   }
 
   async function handleDeleteInstallment(instId: string) {
@@ -558,12 +613,13 @@ export default function CreditTracker() {
   }
 
   async function handleSaveTransaction() {
-    if (!selectedAccount) return;
+    if (!selectedAccount || savingTx) return;
     if (txAmount <= 0) {
       message.warning(t.common.amount);
       return;
     }
 
+    setSavingTx(true);
     try {
       const payload: CreateCreditTxRequest = {
         type: txType,
@@ -580,6 +636,8 @@ export default function CreditTracker() {
       fetchAccounts();
     } catch (e: unknown) {
       message.error(getErrorMessage(e) || t.creditPage.createFailed);
+    } finally {
+      setSavingTx(false);
     }
   }
 
@@ -911,9 +969,34 @@ export default function CreditTracker() {
                     <span style={{ color: "var(--text-secondary)", fontSize: 13 }}>
                       {t.creditPage.monthlyInstallmentDue}: <strong style={{ color: "var(--text-primary)" }}>฿{formatMoney(account.monthlyInstallmentDue)}</strong>
                     </span>
-                    <Button type="dashed" icon={<PlusOutlined />} onClick={openAddInstallmentModal} size={isMobile ? "small" : "middle"}>
-                      {t.creditPage.newInstallment}
-                    </Button>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {account.installments.filter((i) => i.status === "ACTIVE").length === 1 && (() => {
+                        const singleInst = account.installments.find((i) => i.status === "ACTIVE")!;
+                        const isCharged = isInstallmentChargedThisCycle(singleInst, account);
+                        return isCharged ? (
+                          <Button
+                            size={isMobile ? "small" : "middle"}
+                            disabled
+                            icon={<CheckCircleOutlined />}
+                            style={{ color: "#10b981", borderColor: "#10b981" }}
+                          >
+                            {t.creditPage.billedThisCycle} (งวด {singleInst.paidTerms + 1})
+                          </Button>
+                        ) : (
+                          <Button
+                            size={isMobile ? "small" : "middle"}
+                            icon={<PlusCircleOutlined />}
+                            style={{ borderColor: "#f59e0b", color: "#d97706" }}
+                            onClick={() => openChargeInstallmentModal(singleInst)}
+                          >
+                            {t.creditPage.billInstallment} (฿{formatMoney(singleInst.monthlyAmount)})
+                          </Button>
+                        );
+                      })()}
+                      <Button type="dashed" icon={<PlusOutlined />} onClick={openAddInstallmentModal} size={isMobile ? "small" : "middle"}>
+                        {t.creditPage.newInstallment}
+                      </Button>
+                    </div>
                   </div>
 
                   <Table
@@ -1003,43 +1086,69 @@ export default function CreditTracker() {
                       {
                         title: t.common.actions,
                         key: "actions",
-                        width: isMobile ? 180 : 230,
-                        render: (_, record) => (
-                          <Space wrap size="small">
-                            {record.interestType === "EFFECTIVE" && (
+                        width: isMobile ? 200 : 340,
+                        render: (_, record) => {
+                          const isCharged = isInstallmentChargedThisCycle(record);
+                          return (
+                            <Space wrap size="small">
+                              {record.interestType === "EFFECTIVE" && (
+                                <Button
+                                  size="small"
+                                  icon={<TableOutlined />}
+                                  onClick={() => openScheduleModal(record)}
+                                >
+                                  ตารางผ่อน
+                                </Button>
+                              )}
+                              {record.status !== "COMPLETED" && (
+                                <>
+                                  {isCharged ? (
+                                    <Button
+                                      size="small"
+                                      disabled
+                                      icon={<CheckCircleOutlined />}
+                                      style={{ color: "#10b981", borderColor: "#10b981" }}
+                                    >
+                                      {t.creditPage.billedThisCycle} (งวด {record.paidTerms + 1})
+                                    </Button>
+                                  ) : (
+                                    <Button
+                                      size="small"
+                                      icon={<PlusCircleOutlined />}
+                                      style={{ borderColor: "#f59e0b", color: "#d97706" }}
+                                      onClick={() => openChargeInstallmentModal(record)}
+                                    >
+                                      {t.creditPage.billInstallment} (฿{formatMoney(record.monthlyAmount)})
+                                    </Button>
+                                  )}
+                                  <Button
+                                    size="small"
+                                    type="primary"
+                                    loading={advancingInstId === record.id}
+                                    disabled={!!advancingInstId}
+                                    onClick={() => handleAdvanceTerm(record)}
+                                  >
+                                    {t.creditPage.advanceTerm}
+                                  </Button>
+                                </>
+                              )}
                               <Button
                                 size="small"
-                                icon={<TableOutlined />}
-                                onClick={() => openScheduleModal(record)}
+                                icon={<EditOutlined />}
+                                onClick={() => openEditInstallmentModal(record)}
+                              />
+                              <Popconfirm
+                                title={t.creditPage.deleteInstallmentConfirm}
+                                onConfirm={() => handleDeleteInstallment(record.id)}
+                                okText={t.common.delete}
+                                cancelText={t.common.cancel}
+                                okButtonProps={{ danger: true }}
                               >
-                                ตารางผ่อน
-                              </Button>
-                            )}
-                            {record.status !== "COMPLETED" && (
-                              <Button
-                                size="small"
-                                type="primary"
-                                onClick={() => handleAdvanceTerm(record)}
-                              >
-                                {t.creditPage.advanceTerm}
-                              </Button>
-                            )}
-                            <Button
-                              size="small"
-                              icon={<EditOutlined />}
-                              onClick={() => openEditInstallmentModal(record)}
-                            />
-                            <Popconfirm
-                              title={t.creditPage.deleteInstallmentConfirm}
-                              onConfirm={() => handleDeleteInstallment(record.id)}
-                              okText={t.common.delete}
-                              cancelText={t.common.cancel}
-                              okButtonProps={{ danger: true }}
-                            >
-                              <Button size="small" danger icon={<DeleteOutlined />} />
-                            </Popconfirm>
-                          </Space>
-                        ),
+                                <Button size="small" danger icon={<DeleteOutlined />} />
+                              </Popconfirm>
+                            </Space>
+                          );
+                        },
                       },
                     ]}
                   />
@@ -1352,6 +1461,9 @@ export default function CreditTracker() {
         open={showAccountModal}
         onOk={handleSaveAccount}
         onCancel={() => setShowAccountModal(false)}
+        confirmLoading={savingAccount}
+        okButtonProps={{ loading: savingAccount, disabled: savingAccount }}
+        cancelButtonProps={{ disabled: savingAccount }}
         okText={t.common.save}
         cancelText={t.common.cancel}
         width={isMobile ? "96%" : 560}
@@ -1521,6 +1633,9 @@ export default function CreditTracker() {
         open={showInstallmentModal}
         onOk={handleSaveInstallment}
         onCancel={() => setShowInstallmentModal(false)}
+        confirmLoading={savingInstallment}
+        okButtonProps={{ loading: savingInstallment, disabled: savingInstallment }}
+        cancelButtonProps={{ disabled: savingInstallment }}
         okText={t.common.save}
         cancelText={t.common.cancel}
         width={isMobile ? "96%" : 480}
@@ -1687,6 +1802,9 @@ export default function CreditTracker() {
         open={showTxModal}
         onOk={handleSaveTransaction}
         onCancel={() => setShowTxModal(false)}
+        confirmLoading={savingTx}
+        okButtonProps={{ loading: savingTx, disabled: savingTx }}
+        cancelButtonProps={{ disabled: savingTx }}
         okText={t.common.save}
         cancelText={t.common.cancel}
         width={isMobile ? "96%" : 480}
@@ -1740,6 +1858,22 @@ export default function CreditTracker() {
                 >
                   เบิกถอน / รูดซื้อ
                 </Button>
+                {selectedAccount.installments
+                  .filter((i) => i.status === "ACTIVE")
+                  .map((i) => (
+                    <Button
+                      key={i.id}
+                      size="small"
+                      type={txInstallmentId === i.id ? "primary" : "default"}
+                      onClick={() => {
+                        setTxAmount(i.monthlyAmount);
+                        setTxInstallmentId(i.id);
+                        setTxDescription(`ค่างวด ${i.itemName} (งวดที่ ${i.paidTerms + 1}/${i.totalTerms})`);
+                      }}
+                    >
+                      ค่างวด {i.itemName} (฿{formatMoney(i.monthlyAmount)})
+                    </Button>
+                  ))}
               </div>
             </div>
           )}
@@ -1809,6 +1943,37 @@ export default function CreditTracker() {
                   />
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Installment link for CHARGE mode if not in payment box */}
+          {txType === "CHARGE" && selectedAccount && selectedAccount.installments.filter((i) => i.status === "ACTIVE").length > 0 && (
+            <div style={{ background: isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.02)", border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid var(--border-subtle)", padding: 10, borderRadius: 8 }}>
+              <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 4 }}>
+                ผูกกับสัญญาผ่อน (Optional):
+              </label>
+              <Select
+                allowClear
+                placeholder="เลือกรายการผ่อนที่ต้องการลงยอดหนี้"
+                value={txInstallmentId}
+                onChange={(val) => {
+                  setTxInstallmentId(val);
+                  if (val) {
+                    const inst = selectedAccount.installments.find((i) => i.id === val);
+                    if (inst) {
+                      setTxAmount(inst.monthlyAmount);
+                      setTxDescription(`ค่างวด ${inst.itemName} (งวดที่ ${inst.paidTerms + 1}/${inst.totalTerms})`);
+                    }
+                  }
+                }}
+                style={{ width: "100%" }}
+                options={selectedAccount.installments
+                  .filter((i) => i.status === "ACTIVE")
+                  .map((i) => ({
+                    value: i.id,
+                    label: `${i.itemName} (งวดที่ ${i.paidTerms + 1}/${i.totalTerms} - ฿${formatMoney(i.monthlyAmount)})`,
+                  }))}
+              />
             </div>
           )}
 
