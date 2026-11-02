@@ -71,3 +71,17 @@ export default defineConfig([
   },
 ])
 ```
+
+## Credit statements
+
+The credit account editor accepts an optional official statement: statement date, closing balance, actual minimum payment, and payment due date. Enter all four values together, or use **Remove statement** to return to estimated billing.
+
+For the matching current billing cycle, the account shows the bank's original minimum and the remaining amount separately. Remaining due subtracts recorded payments through today, retains cents, and is not prorated by the selected payment date. A payment marked `FULL` or `MINIMUM` does not settle an official minimum unless its amount covers the remaining due. New purchases do not change an already-issued minimum.
+
+The statement applies only to its billing cycle; the next cutoff returns to estimated amounts until a new statement is entered. Next-cycle projections remain estimates, not bank-issued amounts.
+
+The API accepts nullable `statementDate`, `statementBalance`, `statementMinimumDue`, and `statementDueDate` fields when creating/updating accounts. Dates use `YYYY-MM-DD`. Updates that omit the fields preserve the statement; `clearStatement: true` removes it. Account details expose `usesStatementMinimum` so payment screens can distinguish actual billing from estimates.
+
+When rebuilding an account from a statement, back up its card ledger, installment plans, and linked dashboard bills first. Represent the opening balance once and import each statement transaction once; the signed ledger total must equal the closing balance. Do not also add the closing balance as another charge. Refunds currently use `PAYMENT`/`CUSTOM`; label them explicitly rather than treating them as cash transfers. Review dates and amounts on linked pending dashboard bills, and do not remove unrelated paid financial history.
+
+Statement cutoffs and payment-day comparisons use the Bangkok calendar (`UTC+7`). Marking a linked dashboard bill paid records the credit payment on the actual payment day, independently of that bill's scheduled due date. This allows early payments to settle the current minimum without treating genuinely future-dated card payments as already paid.

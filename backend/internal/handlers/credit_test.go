@@ -269,7 +269,7 @@ func TestComputeAccountDetail_MoneyThunder_PrincipalPlusInterest(t *testing.T) {
 		},
 	}
 
-	detail := computeAccountDetail(acc, []models.CreditInstallment{}, txs)
+	detail := computeAccountDetail(acc, []models.CreditInstallment{}, txs, time.Date(2026, 10, 10, 0, 0, 0, 0, time.UTC))
 
 	// Available credit must remain exactly 82900 - 79605.44 = 3294.56
 	if math.Abs(detail.AvailableCredit-3294.56) > 0.01 {
@@ -288,5 +288,232 @@ func TestComputeAccountDetail_MoneyThunder_PrincipalPlusInterest(t *testing.T) {
 	// Next cycle estimated min: (79605.44 * 0.02 = 1592.11) + (79605.44 * 0.33 * 30 / 365 = 2159.16) = 3751.27 -> ceil 3752.00
 	if detail.NextCycleEstimatedMin != 3752.00 {
 		t.Errorf("expected NextCycleEstimatedMin 3752.00, got %.2f", detail.NextCycleEstimatedMin)
+	}
+}
+
+func TestComputeAccountDetail_OfficialStatementPayments(t *testing.T) {
+	statementDay := 23
+	statementDate, dueDate := "2026-10-23", "2026-11-12"
+	statementBalance, minimum := 25648.94, 898.21
+	asOf := time.Date(2026, 10, 26, 0, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name      string
+		payments  []models.CreditTransaction
+		paid, due float64
+	}{
+		{name: "unpaid exact cents", due: 898.21},
+		{name: "partial payment", payments: []models.CreditTransaction{{Type: models.CreditTxPayment, Amount: 300, Date: "2026-10-24"}}, paid: 300, due: 598.21},
+		{name: "full payment", payments: []models.CreditTransaction{{Type: models.CreditTxPayment, Amount: 898.21, Date: "2026-10-26"}}, paid: 898.21},
+		{name: "overpayment", payments: []models.CreditTransaction{{Type: models.CreditTxPayment, Amount: 1000, Date: "2026-10-26"}}, paid: 1000},
+		{name: "multiple payments", payments: []models.CreditTransaction{
+			{Type: models.CreditTxPayment, Amount: 300, Date: "2026-10-24"},
+			{Type: models.CreditTxPayment, Amount: 598.21, Date: "2026-10-25"},
+		}, paid: 898.21},
+		{name: "no estimated twenty baht tolerance", payments: []models.CreditTransaction{{Type: models.CreditTxPayment, Amount: 880, Date: "2026-10-24"}}, paid: 880, due: 18.21},
+		{name: "last cent remains due", payments: []models.CreditTransaction{{Type: models.CreditTxPayment, Amount: 898.20, Date: "2026-10-24"}}, paid: 898.20, due: 0.01},
+		{name: "future payment ignored", payments: []models.CreditTransaction{{Type: models.CreditTxPayment, Amount: 898.21, Date: "2026-10-27"}}, due: 898.21},
+		{name: "previous cycle payment ignored", payments: []models.CreditTransaction{{Type: models.CreditTxPayment, Amount: 3560.27, Date: "2026-09-30"}}, due: 898.21},
+		{name: "cutoff day payment counts", payments: []models.CreditTransaction{{Type: models.CreditTxPayment, Amount: 300, Date: "2026-10-23"}}, paid: 300, due: 598.21},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			acc := models.CreditAccount{
+				Type: models.CreditAccountCreditCard, CurrentBalance: statementBalance - tc.paid,
+				StatementDay: &statementDay, StatementDate: &statementDate, StatementBalance: &statementBalance,
+				StatementMinimumDue: &minimum, StatementDueDate: &dueDate, MinPaymentRate: 8,
+			}
+			detail := computeAccountDetail(acc, nil, tc.payments, asOf)
+			if !detail.UsesStatementMinimum || detail.EstimatedMinPayment != minimum {
+				t.Fatalf("official minimum lost: uses=%v minimum=%.2f", detail.UsesStatementMinimum, detail.EstimatedMinPayment)
+			}
+			if math.Abs(detail.PaidThisMonth-tc.paid) > 0.000001 || math.Abs(detail.TotalDueThisMonth-tc.due) > 0.000001 {
+				t.Errorf("paid/due = %.2f/%.2f, want %.2f/%.2f", detail.PaidThisMonth, detail.TotalDueThisMonth, tc.paid, tc.due)
+			}
+			if detail.IsPaidThisMonth != (tc.due == 0) {
+				t.Errorf("paid flag = %v for due %.2f", detail.IsPaidThisMonth, tc.due)
+			}
+		})
+	}
+}
+
+func TestComputeAccountDetail_OfficialStatementIgnoresPaymentLabels(t *testing.T) {
+	statementDay := 23
+	statementDate, dueDate := "2026-10-23", "2026-11-12"
+	balance, minimum := 25648.94, 898.21
+	acc := models.CreditAccount{
+		CurrentBalance: balance - 100, StatementDay: &statementDay, StatementDate: &statementDate,
+		StatementBalance: &balance, StatementMinimumDue: &minimum, StatementDueDate: &dueDate,
+	}
+	for _, label := range []models.CreditPaymentType{models.CreditPayFull, models.CreditPayMinimum} {
+		detail := computeAccountDetail(acc, nil, []models.CreditTransaction{
+			{Type: models.CreditTxPayment, Amount: 100, Date: "2026-10-24", PaymentType: &label},
+		}, time.Date(2026, 10, 26, 0, 0, 0, 0, time.UTC))
+		if detail.IsPaidThisMonth || detail.TotalDueThisMonth != 798.21 {
+			t.Errorf("%s underpayment incorrectly settled statement: paid=%v due=%.2f", label, detail.IsPaidThisMonth, detail.TotalDueThisMonth)
+		}
+	}
+}
+
+func TestComputeAccountDetail_OfficialStatementSurvivesNewChargesAndExpires(t *testing.T) {
+	statementDay := 23
+	statementDate, dueDate := "2026-10-23", "2026-11-12"
+	balance, minimum := 25648.94, 898.21
+	acc := models.CreditAccount{
+		Type: models.CreditAccountCreditCard, CreditLimit: 50000, CurrentBalance: balance + 600,
+		StatementDay: &statementDay, StatementDate: &statementDate, StatementBalance: &balance,
+		StatementMinimumDue: &minimum, StatementDueDate: &dueDate, MinPaymentRate: 8,
+	}
+	txs := []models.CreditTransaction{
+		{Type: models.CreditTxCharge, Amount: 500, Date: "2026-10-24", Description: "new purchase"},
+		{Type: models.CreditTxCharge, Amount: 100, Date: "2026-10-25", Description: "interest"},
+	}
+	for _, date := range []time.Time{
+		time.Date(2026, 10, 23, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, 10, 26, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, 11, 22, 0, 0, 0, 0, time.UTC),
+	} {
+		detail := computeAccountDetail(acc, nil, txs, date)
+		if !detail.UsesStatementMinimum || detail.EstimatedMinPayment != minimum || detail.TotalDueThisMonth != minimum {
+			t.Fatalf("snapshot minimum changed as of %s: %+v", date.Format("2006-01-02"), detail)
+		}
+		if detail.CurrentBalance != balance+600 || *detail.StatementBalance != balance {
+			t.Fatal("live debt and original closing balance must remain separate")
+		}
+		if detail.NextCycleEstimatedMin == minimum {
+			t.Fatal("next cycle must remain an independent estimate")
+		}
+	}
+	nextCycle := time.Date(2026, 11, 23, 0, 0, 0, 0, time.UTC)
+	detail := computeAccountDetail(acc, nil, txs, nextCycle)
+	if detail.UsesStatementMinimum || detail.EstimatedMinPayment != 2100 {
+		t.Fatalf("expired snapshot reused: uses=%v min=%.2f", detail.UsesStatementMinimum, detail.EstimatedMinPayment)
+	}
+	before := computeAccountDetail(acc, nil, nil, time.Date(2026, 10, 22, 0, 0, 0, 0, time.UTC))
+	if before.UsesStatementMinimum {
+		t.Fatal("future statement must not apply before cutoff")
+	}
+}
+
+func TestComputeAccountDetail_OfficialStatementShortMonth(t *testing.T) {
+	day := 31
+	date, due := "2028-02-29", "2028-03-15"
+	balance, minimum := 1000.0, 123.45
+	acc := models.CreditAccount{
+		StatementDay: &day, StatementDate: &date, StatementDueDate: &due,
+		StatementBalance: &balance, StatementMinimumDue: &minimum, CurrentBalance: balance, MinPaymentRate: 5,
+	}
+	detail := computeAccountDetail(acc, nil, nil, time.Date(2028, 2, 29, 0, 0, 0, 0, time.UTC))
+	if !detail.UsesStatementMinimum || detail.TotalDueThisMonth != minimum {
+		t.Fatalf("last-day cutoff did not activate statement: %+v", detail)
+	}
+}
+
+func TestComputeAccountDetail_NoSnapshotPreservesEstimatedTolerance(t *testing.T) {
+	day := 23
+	acc := models.CreditAccount{CurrentBalance: 9210, StatementDay: &day, MinPaymentRate: 8}
+	detail := computeAccountDetail(acc, nil, []models.CreditTransaction{
+		{Type: models.CreditTxPayment, Amount: 790, Date: "2026-10-24"},
+	}, time.Date(2026, 10, 26, 0, 0, 0, 0, time.UTC))
+	if detail.UsesStatementMinimum || detail.EstimatedMinPayment != 800 || detail.TotalDueThisMonth != 0 || !detail.IsPaidThisMonth {
+		t.Fatalf("legacy estimated payment behavior changed: %+v", detail)
+	}
+}
+
+func TestValidateStatementSnapshot(t *testing.T) {
+	date, due := "2026-10-23", "2026-11-12"
+	balance, minimum := 25648.94, 898.21
+	if err := validateStatementSnapshot(&date, &balance, &minimum, &due, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateStatementSnapshot(nil, nil, nil, nil, false); err != nil {
+		t.Fatal("omitting a snapshot must preserve it:", err)
+	}
+	if err := validateStatementSnapshot(nil, nil, nil, nil, true); err != nil {
+		t.Fatal("explicit clear must be accepted:", err)
+	}
+	badDate, oldDue := "2026-02-30", "2026-10-22"
+	negative, tooHigh, infinite, nan := -1.0, balance+1, math.Inf(1), math.NaN()
+	for _, tc := range []struct {
+		name             string
+		date, due        *string
+		balance, minimum *float64
+		clear            bool
+	}{
+		{"partial", &date, nil, &balance, &minimum, false},
+		{"impossible date", &badDate, &due, &balance, &minimum, false},
+		{"due before statement", &date, &oldDue, &balance, &minimum, false},
+		{"negative balance", &date, &due, &negative, &minimum, false},
+		{"negative minimum", &date, &due, &balance, &negative, false},
+		{"minimum above balance", &date, &due, &balance, &tooHigh, false},
+		{"infinite balance", &date, &due, &infinite, &minimum, false},
+		{"nan minimum", &date, &due, &balance, &nan, false},
+		{"clear plus snapshot", &date, &due, &balance, &minimum, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := validateStatementSnapshot(tc.date, tc.balance, tc.minimum, tc.due, tc.clear); err == nil {
+				t.Fatal("invalid snapshot accepted")
+			}
+		})
+	}
+}
+
+func TestComputeAccountDetail_OfficialStatementBangkokBoundaries(t *testing.T) {
+	day := 23
+	date, dueDate := "2026-10-23", "2026-11-12"
+	balance, minimum := 25648.94, 898.21
+	account := models.CreditAccount{
+		CurrentBalance: balance, StatementDay: &day, StatementDate: &date,
+		StatementBalance: &balance, StatementMinimumDue: &minimum, StatementDueDate: &dueDate,
+	}
+	for _, tc := range []struct {
+		name, instant string
+		payment       bool
+		active        bool
+		remaining     float64
+	}{
+		{"before Thai cutoff", "2026-10-22T16:59:00Z", false, false, 0},
+		{"Thai cutoff starts", "2026-10-22T17:00:00Z", false, true, 898.21},
+		{"tomorrow in Thailand remains future", "2026-10-25T16:59:00Z", true, true, 898.21},
+		{"Thai payment day begins before UTC", "2026-10-25T17:30:00Z", true, true, 0},
+		{"last minute of Thai cycle", "2026-11-22T16:59:00Z", false, true, 898.21},
+		{"next Thai cutoff expires snapshot", "2026-11-22T17:00:00Z", false, false, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			asOf, err := time.Parse(time.RFC3339, tc.instant)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var payments []models.CreditTransaction
+			if tc.payment {
+				payments = []models.CreditTransaction{{Type: models.CreditTxPayment, Amount: minimum, Date: "2026-10-26"}}
+			}
+			detail := computeAccountDetail(account, nil, payments, asOf)
+			if detail.UsesStatementMinimum != tc.active {
+				t.Fatalf("official statement active=%v, want %v", detail.UsesStatementMinimum, tc.active)
+			}
+			if tc.active && (detail.EstimatedMinPayment != minimum || detail.TotalDueThisMonth != tc.remaining) {
+				t.Fatalf("original minimum/remaining = %.2f/%.2f, want %.2f/%.2f", detail.EstimatedMinPayment, detail.TotalDueThisMonth, minimum, tc.remaining)
+			}
+		})
+	}
+}
+
+func TestDashboardPaymentSettlesStatementOnActualThaiPaymentDay(t *testing.T) {
+	day := 23
+	date, dueDate := "2026-10-23", "2026-11-12"
+	balance, minimum := 25648.94, 898.21
+	paidAt := time.Date(2026, 10, 25, 17, 30, 0, 0, time.UTC)
+	for _, billDate := range []string{"2026-11-12", "2026-10-12"} {
+		t.Run(billDate, func(t *testing.T) {
+			bill := models.Transaction{Amount: minimum, Date: billDate, Description: "Uchoose"}
+			payment := newDashboardCreditPayment("statement-account", &bill, paidAt)
+			account := models.CreditAccount{
+				CurrentBalance: balance - minimum, StatementDay: &day, StatementDate: &date,
+				StatementBalance: &balance, StatementMinimumDue: &minimum, StatementDueDate: &dueDate,
+			}
+			detail := computeAccountDetail(account, nil, []models.CreditTransaction{payment}, paidAt)
+			if !detail.UsesStatementMinimum || !detail.IsPaidThisMonth || detail.TotalDueThisMonth != 0 || detail.PaidThisMonth != minimum {
+				t.Fatalf("paying dashboard bill dated %s did not settle today's official minimum: remaining=%.2f paid=%.2f", billDate, detail.TotalDueThisMonth, detail.PaidThisMonth)
+			}
+		})
 	}
 }

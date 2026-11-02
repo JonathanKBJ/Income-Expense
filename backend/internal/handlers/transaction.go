@@ -623,21 +623,26 @@ func (h *TransactionHandler) GetWalletSummary(w http.ResponseWriter, r *http.Req
 	writeJSON(w, http.StatusOK, result)
 }
 
-func (h *TransactionHandler) recordCreditCardPaymentFromDashboard(ctx context.Context, accountID string, tx *models.Transaction) {
+func newDashboardCreditPayment(accountID string, tx *models.Transaction, paidAt time.Time) models.CreditTransaction {
 	paidAmount := tx.Amount
 	if tx.PaidAmount != nil && *tx.PaidAmount > 0 {
 		paidAmount = *tx.PaidAmount
 	}
 
-	creditTx := models.CreditTransaction{
+	return models.CreditTransaction{
 		ID:           uuid.New().String(),
 		AccountID:    accountID,
 		Type:         models.CreditTxPayment,
 		Amount:       paidAmount,
-		Date:         tx.Date,
+		Date:         paidAt.In(creditBillingLocation).Format("2006-01-02"),
 		Description:  fmt.Sprintf("ชำระผ่าน Dashboard: %s", tx.Description),
 		ReceiptImage: tx.ReceiptImage,
 	}
+}
+
+func (h *TransactionHandler) recordCreditCardPaymentFromDashboard(ctx context.Context, accountID string, tx *models.Transaction) {
+	// The dashboard date is a bill's due date, not the PAID transition date.
+	creditTx := newDashboardCreditPayment(accountID, tx, time.Now())
 
 	// Link to active installment if exists
 	insts, err := h.creditRepo.ListInstallments(ctx, accountID)
@@ -784,10 +789,10 @@ func (h *TransactionHandler) GetSyncDuesPreview(w http.ResponseWriter, r *http.R
 				detail := computeAccountDetail(acc, insts, txs)
 
 				due := detail.TotalDueThisMonth
-				if due <= 0 {
+				if !detail.UsesStatementMinimum && due <= 0 {
 					due = detail.EstimatedMinPayment
 				}
-				if due <= 0 && detail.CurrentBalance > 0 {
+				if !detail.UsesStatementMinimum && due <= 0 && detail.CurrentBalance > 0 {
 					due = detail.CurrentBalance
 				}
 

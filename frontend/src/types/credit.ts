@@ -18,6 +18,10 @@ export interface CreditAccount {
   currentBalance: number;
   statementDay?: number | null;
   paymentDueDay?: number | null;
+  statementDate?: string | null;
+  statementBalance?: number | null;
+  statementMinimumDue?: number | null;
+  statementDueDate?: string | null;
   interestRate: number;
   minPaymentRate: number;
   minPaymentFloor: number;
@@ -69,6 +73,7 @@ export interface CreditAccountDetail extends CreditAccount {
   unbilledInstallments: number;
   monthlyInstallmentDue: number;
   estimatedMinPayment: number;
+  usesStatementMinimum: boolean;
   totalDueThisMonth: number;
   paidThisMonth: number;
   isPaidThisMonth: boolean;
@@ -104,6 +109,10 @@ export interface CreateCreditAccountRequest {
   currentBalance?: number;
   statementDay?: number;
   paymentDueDay?: number;
+  statementDate?: string | null;
+  statementBalance?: number | null;
+  statementMinimumDue?: number | null;
+  statementDueDate?: string | null;
   interestRate?: number;
   minPaymentRate?: number;
   minPaymentFloor?: number;
@@ -119,6 +128,11 @@ export interface UpdateCreditAccountRequest {
   currentBalance?: number;
   statementDay?: number;
   paymentDueDay?: number;
+  statementDate?: string | null;
+  statementBalance?: number | null;
+  statementMinimumDue?: number | null;
+  statementDueDate?: string | null;
+  clearStatement?: boolean;
   interestRate?: number;
   minPaymentRate?: number;
   minPaymentFloor?: number;

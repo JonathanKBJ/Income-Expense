@@ -52,7 +52,6 @@ CREATE TABLE IF NOT EXISTS group_settings (
 );
 `
 
-
 // createTransactionsTable is the DDL for the transactions table.
 const createTransactionsTable = `
 CREATE TABLE IF NOT EXISTS transactions (
@@ -142,6 +141,7 @@ CREATE TABLE IF NOT EXISTS group_invites (
 const createGroupInvitesIndex = `
 CREATE INDEX IF NOT EXISTS idx_group_invites_code ON group_invites(code);
 `
+
 // createTelegramLinkCodesTable is the DDL for one-time Telegram pairing codes.
 const createTelegramLinkCodesTable = `
 CREATE TABLE IF NOT EXISTS telegram_link_codes (
@@ -163,6 +163,7 @@ const createTelegramIndexes = `
 CREATE INDEX IF NOT EXISTS idx_users_telegram_user_id ON users(telegram_user_id);
 CREATE INDEX IF NOT EXISTS idx_groups_telegram_chat_id ON groups(telegram_chat_id);
 `
+
 // createDailyUsageStatsTable is the DDL for tracking daily API and worker usage.
 const createDailyUsageStatsTable = `
 CREATE TABLE IF NOT EXISTS daily_usage_stats (
@@ -173,7 +174,6 @@ CREATE TABLE IF NOT EXISTS daily_usage_stats (
     updated_at       TEXT NOT NULL
 );
 `
-
 
 // createLoansTable is the DDL for the loans (debt tracking) table.
 const createLoansTable = `
@@ -223,6 +223,7 @@ CREATE TABLE IF NOT EXISTS loan_entries (
 const createLoanEntriesIndex = `
 CREATE INDEX IF NOT EXISTS idx_loan_entries_loan ON loan_entries(loan_id, date);
 `
+
 // createCreditAccountsTable is the DDL for credit cards, cash cards, and personal loans.
 const createCreditAccountsTable = `
 CREATE TABLE IF NOT EXISTS credit_accounts (
@@ -234,6 +235,10 @@ CREATE TABLE IF NOT EXISTS credit_accounts (
     current_balance   REAL NOT NULL DEFAULT 0 CHECK (current_balance >= 0),
     statement_day     INTEGER CHECK (statement_day IS NULL OR (statement_day >= 1 AND statement_day <= 31)),
     payment_due_day   INTEGER CHECK (payment_due_day IS NULL OR (payment_due_day >= 1 AND payment_due_day <= 31)),
+    statement_date    TEXT,
+    statement_balance REAL,
+    statement_minimum_due REAL,
+    statement_due_date TEXT,
     interest_rate     REAL DEFAULT 0,
     min_payment_rate  REAL DEFAULT 5.0,
     min_payment_floor REAL DEFAULT 500.0,
@@ -369,7 +374,7 @@ func (d *DB) Migrate() error {
 		"ALTER TABLE transactions ADD COLUMN group_id TEXT",
 		"ALTER TABLE transactions ADD COLUMN user_id TEXT",
 		"ALTER TABLE transactions ADD COLUMN receipt_image TEXT",
-			"ALTER TABLE transactions ADD COLUMN created_by TEXT",
+		"ALTER TABLE transactions ADD COLUMN created_by TEXT",
 		"ALTER TABLE categories ADD COLUMN group_id TEXT",
 		"ALTER TABLE users ADD COLUMN telegram_user_id TEXT",
 		"ALTER TABLE users ADD COLUMN telegram_username TEXT",
@@ -459,49 +464,66 @@ func (d *DB) Migrate() error {
 		return fmt.Errorf("failed to create activity_log index: %w", err)
 	}
 	if _, err := d.ExecContext(ctx, createGroupInvitesIndex); err != nil {
-			return fmt.Errorf("failed to create group_invites index: %w", err)
-		}
-		if _, err := d.ExecContext(ctx, createLoansIndex); err != nil {
-			return fmt.Errorf("failed to create loans index: %w", err)
-		}
-		if _, err := d.ExecContext(ctx, createLoanEntriesIndex); err != nil {
-			return fmt.Errorf("failed to create loan_entries index: %w", err)
-		}
-		if _, err := d.ExecContext(ctx, createCreditAccountsIndex); err != nil {
-			return fmt.Errorf("failed to create credit_accounts index: %w", err)
-		}
-		if _, err := d.ExecContext(ctx, createCreditInstallmentsIndex); err != nil {
-			return fmt.Errorf("failed to create credit_installments index: %w", err)
-		}
-		if _, err := d.ExecContext(ctx, createCreditTransactionsIndex); err != nil {
-			return fmt.Errorf("failed to create credit_transactions index: %w", err)
-		}
-		if _, err := d.ExecContext(ctx, createTelegramLinkCodesIndex); err != nil {
-			return fmt.Errorf("failed to create telegram_link_codes index: %w", err)
-		}
-		if _, err := d.ExecContext(ctx, createTelegramIndexes); err != nil {
-			return fmt.Errorf("failed to create telegram indexes: %w", err)
-		}
+		return fmt.Errorf("failed to create group_invites index: %w", err)
+	}
+	if _, err := d.ExecContext(ctx, createLoansIndex); err != nil {
+		return fmt.Errorf("failed to create loans index: %w", err)
+	}
+	if _, err := d.ExecContext(ctx, createLoanEntriesIndex); err != nil {
+		return fmt.Errorf("failed to create loan_entries index: %w", err)
+	}
+	if _, err := d.ExecContext(ctx, createCreditAccountsIndex); err != nil {
+		return fmt.Errorf("failed to create credit_accounts index: %w", err)
+	}
+	if _, err := d.ExecContext(ctx, createCreditInstallmentsIndex); err != nil {
+		return fmt.Errorf("failed to create credit_installments index: %w", err)
+	}
+	if _, err := d.ExecContext(ctx, createCreditTransactionsIndex); err != nil {
+		return fmt.Errorf("failed to create credit_transactions index: %w", err)
+	}
+	if _, err := d.ExecContext(ctx, createTelegramLinkCodesIndex); err != nil {
+		return fmt.Errorf("failed to create telegram_link_codes index: %w", err)
+	}
+	if _, err := d.ExecContext(ctx, createTelegramIndexes); err != nil {
+		return fmt.Errorf("failed to create telegram indexes: %w", err)
+	}
 
+	// Alterations for credit_installments evolution
+	creditInstAlterations := []string{
+		"ALTER TABLE credit_installments ADD COLUMN interest_rate REAL DEFAULT 0",
+		"ALTER TABLE credit_installments ADD COLUMN interest_type TEXT NOT NULL DEFAULT 'FLAT'",
+		"ALTER TABLE credit_installments ADD COLUMN remaining_balance REAL DEFAULT 0",
+		"ALTER TABLE credit_installments ADD COLUMN end_date TEXT",
+	}
+	for _, sql := range creditInstAlterations {
+		_, _ = d.ExecContext(ctx, sql)
+	}
 
-		// Alterations for credit_installments evolution
-		creditInstAlterations := []string{
-			"ALTER TABLE credit_installments ADD COLUMN interest_rate REAL DEFAULT 0",
-			"ALTER TABLE credit_installments ADD COLUMN interest_type TEXT NOT NULL DEFAULT 'FLAT'",
-			"ALTER TABLE credit_installments ADD COLUMN remaining_balance REAL DEFAULT 0",
-			"ALTER TABLE credit_installments ADD COLUMN end_date TEXT",
+	// Alterations for credit_accounts calculation modes
+	creditAccountAlterations := []string{
+		"ALTER TABLE credit_accounts ADD COLUMN min_payment_calc_mode TEXT NOT NULL DEFAULT 'BALANCE_PERCENT'",
+	}
+	for _, sql := range creditAccountAlterations {
+		_, _ = d.ExecContext(ctx, sql)
+	}
+	// Preserve existing accounts without a snapshot; fail rather than silently
+	// continuing with a partially migrated account schema.
+	for _, column := range []struct{ name, kind string }{
+		{"statement_date", "TEXT"},
+		{"statement_balance", "REAL"},
+		{"statement_minimum_due", "REAL"},
+		{"statement_due_date", "TEXT"},
+	} {
+		var exists int
+		if err := d.QueryRowContext(ctx, "SELECT count(*) FROM pragma_table_info('credit_accounts') WHERE name = ?", column.name).Scan(&exists); err != nil {
+			return fmt.Errorf("failed to inspect credit account column %s: %w", column.name, err)
 		}
-		for _, sql := range creditInstAlterations {
-			_, _ = d.ExecContext(ctx, sql)
+		if exists == 0 {
+			if _, err := d.ExecContext(ctx, "ALTER TABLE credit_accounts ADD COLUMN "+column.name+" "+column.kind); err != nil {
+				return fmt.Errorf("failed to add credit account column %s: %w", column.name, err)
+			}
 		}
-
-		// Alterations for credit_accounts calculation modes
-		creditAccountAlterations := []string{
-			"ALTER TABLE credit_accounts ADD COLUMN min_payment_calc_mode TEXT NOT NULL DEFAULT 'BALANCE_PERCENT'",
-		}
-		for _, sql := range creditAccountAlterations {
-			_, _ = d.ExecContext(ctx, sql)
-		}
+	}
 	// Fix orphaned transactions and categories by assigning them to their user's primary group
 	migrationSQL := []string{
 		`UPDATE transactions 

@@ -44,13 +44,14 @@ func (r *CreditRepository) CreateAccount(ctx context.Context, acc *models.Credit
 	query := `INSERT INTO credit_accounts (
 		id, name, type, bank, credit_limit, current_balance, statement_day, payment_due_day,
 		interest_rate, min_payment_rate, min_payment_floor, min_payment_calc_mode, status, notes, group_id, user_id,
-		created_at, updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		created_at, updated_at, statement_date, statement_balance, statement_minimum_due, statement_due_date
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	_, err := r.db.ExecContext(ctx, query,
 		acc.ID, acc.Name, acc.Type, acc.Bank, acc.CreditLimit, acc.CurrentBalance,
 		acc.StatementDay, acc.PaymentDueDay, acc.InterestRate, acc.MinPaymentRate, acc.MinPaymentFloor,
 		acc.MinPaymentCalcMode, acc.Status, acc.Notes, groupID, userID, now, now,
+		acc.StatementDate, acc.StatementBalance, acc.StatementMinimumDue, acc.StatementDueDate,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create credit account: %w", err)
@@ -63,7 +64,7 @@ func (r *CreditRepository) CreateAccount(ctx context.Context, acc *models.Credit
 func (r *CreditRepository) GetAccountByID(ctx context.Context, id, groupID string, filterUserID ...string) (*models.CreditAccount, error) {
 	query := `SELECT id, name, type, bank, credit_limit, current_balance, statement_day, payment_due_day,
 		interest_rate, min_payment_rate, min_payment_floor, min_payment_calc_mode, status, notes, group_id, user_id,
-		created_at, updated_at
+		created_at, updated_at, statement_date, statement_balance, statement_minimum_due, statement_due_date
 		FROM credit_accounts WHERE id = ? AND group_id = ?`
 	args := []interface{}{id, groupID}
 	if len(filterUserID) > 0 && filterUserID[0] != "" {
@@ -79,6 +80,7 @@ func (r *CreditRepository) GetAccountByID(ctx context.Context, id, groupID strin
 		&a.ID, &a.Name, &a.Type, &a.Bank, &a.CreditLimit, &a.CurrentBalance,
 		&a.StatementDay, &a.PaymentDueDay, &a.InterestRate, &a.MinPaymentRate, &a.MinPaymentFloor,
 		&a.MinPaymentCalcMode, &a.Status, &a.Notes, &a.GroupID, &a.UserID, &cAt, &uAt,
+		&a.StatementDate, &a.StatementBalance, &a.StatementMinimumDue, &a.StatementDueDate,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -96,7 +98,7 @@ func (r *CreditRepository) GetAccountByID(ctx context.Context, id, groupID strin
 func (r *CreditRepository) ListAccountsByGroup(ctx context.Context, groupID string, filterUserID ...string) ([]models.CreditAccount, error) {
 	query := `SELECT id, name, type, bank, credit_limit, current_balance, statement_day, payment_due_day,
 		interest_rate, min_payment_rate, min_payment_floor, min_payment_calc_mode, status, notes, group_id, user_id,
-		created_at, updated_at
+		created_at, updated_at, statement_date, statement_balance, statement_minimum_due, statement_due_date
 		FROM credit_accounts WHERE group_id = ?`
 	args := []interface{}{groupID}
 	if len(filterUserID) > 0 && filterUserID[0] != "" {
@@ -119,6 +121,7 @@ func (r *CreditRepository) ListAccountsByGroup(ctx context.Context, groupID stri
 			&a.ID, &a.Name, &a.Type, &a.Bank, &a.CreditLimit, &a.CurrentBalance,
 			&a.StatementDay, &a.PaymentDueDay, &a.InterestRate, &a.MinPaymentRate, &a.MinPaymentFloor,
 			&a.MinPaymentCalcMode, &a.Status, &a.Notes, &a.GroupID, &a.UserID, &cAt, &uAt,
+			&a.StatementDate, &a.StatementBalance, &a.StatementMinimumDue, &a.StatementDueDate,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan credit account: %w", err)
 		}
@@ -190,6 +193,12 @@ func (r *CreditRepository) UpdateAccount(ctx context.Context, id, groupID string
 		query += ", notes = ?"
 		args = append(args, *req.Notes)
 	}
+	if req.ClearStatement {
+		query += ", statement_date = NULL, statement_balance = NULL, statement_minimum_due = NULL, statement_due_date = NULL"
+	} else if req.StatementDate != nil {
+		query += ", statement_date = ?, statement_balance = ?, statement_minimum_due = ?, statement_due_date = ?"
+		args = append(args, req.StatementDate, req.StatementBalance, req.StatementMinimumDue, req.StatementDueDate)
+	}
 
 	query += " WHERE id = ? AND group_id = ?"
 	args = append(args, id, groupID)
@@ -260,6 +269,7 @@ func (r *CreditRepository) AddInstallment(ctx context.Context, inst *models.Cred
 	}
 	return nil
 }
+
 // ListInstallments returns all installment plans for an account.
 func (r *CreditRepository) ListInstallments(ctx context.Context, accountID string) ([]models.CreditInstallment, error) {
 	query := `SELECT id, account_id, item_name, total_amount, monthly_amount, total_terms, paid_terms,
@@ -337,6 +347,7 @@ func (r *CreditRepository) ListInstallmentsByAccountIDs(ctx context.Context, acc
 	}
 	return result, nil
 }
+
 // UpdateInstallment updates an installment plan.
 func (r *CreditRepository) UpdateInstallment(ctx context.Context, id, accountID string, req models.UpdateCreditInstallmentRequest) error {
 	now := time.Now().UTC().Format(time.RFC3339)
@@ -615,7 +626,7 @@ func (r *CreditRepository) DeleteTransaction(ctx context.Context, id, accountID 
 func (r *CreditRepository) FindAccountsByStatementDay(ctx context.Context, targetDay int) ([]models.CreditAccount, error) {
 	query := `SELECT id, name, type, bank, credit_limit, current_balance, statement_day, payment_due_day,
 		interest_rate, min_payment_rate, min_payment_floor, min_payment_calc_mode, status, notes, group_id, user_id,
-		created_at, updated_at
+		created_at, updated_at, statement_date, statement_balance, statement_minimum_due, statement_due_date
 		FROM credit_accounts WHERE status = 'ACTIVE' AND (statement_day = ? OR (? >= 28 AND statement_day > ?))`
 
 	rows, err := r.db.QueryContext(ctx, query, targetDay, targetDay, targetDay)
@@ -632,6 +643,7 @@ func (r *CreditRepository) FindAccountsByStatementDay(ctx context.Context, targe
 			&a.ID, &a.Name, &a.Type, &a.Bank, &a.CreditLimit, &a.CurrentBalance,
 			&a.StatementDay, &a.PaymentDueDay, &a.InterestRate, &a.MinPaymentRate, &a.MinPaymentFloor,
 			&a.MinPaymentCalcMode, &a.Status, &a.Notes, &a.GroupID, &a.UserID, &cAt, &uAt,
+			&a.StatementDate, &a.StatementBalance, &a.StatementMinimumDue, &a.StatementDueDate,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan credit account: %w", err)
 		}

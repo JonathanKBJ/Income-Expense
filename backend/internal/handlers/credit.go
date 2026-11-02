@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"expense-tracker/internal/middleware"
+	"expense-tracker/internal/models"
+	"expense-tracker/internal/repository"
 	"fmt"
 	"log"
 	"math"
@@ -11,13 +14,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"expense-tracker/internal/middleware"
-	"expense-tracker/internal/models"
-	"expense-tracker/internal/repository"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
+
+var creditBillingLocation = time.FixedZone("Asia/Bangkok", 7*60*60)
 
 type CreditHandler struct {
 	creditRepo   *repository.CreditRepository
@@ -375,24 +377,32 @@ func (h *CreditHandler) CreateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := validateStatementSnapshot(req.StatementDate, req.StatementBalance, req.StatementMinimumDue, req.StatementDueDate, false); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	calcMode := models.CalcModeBalancePercent
 	if req.MinPaymentCalcMode != nil && *req.MinPaymentCalcMode != "" {
 		calcMode = *req.MinPaymentCalcMode
 	}
 
 	acc := models.CreditAccount{
-		Name:               req.Name,
-		Type:               req.Type,
-		Bank:               strings.TrimSpace(req.Bank),
-		CreditLimit:        req.CreditLimit,
-		CurrentBalance:     req.CurrentBalance,
-		StatementDay:       req.StatementDay,
-		PaymentDueDay:      req.PaymentDueDay,
-		InterestRate:       req.InterestRate,
-		MinPaymentRate:     req.MinPaymentRate,
-		MinPaymentFloor:    req.MinPaymentFloor,
-		MinPaymentCalcMode: calcMode,
-		Notes:              strings.TrimSpace(req.Notes),
+		Name:                req.Name,
+		Type:                req.Type,
+		Bank:                strings.TrimSpace(req.Bank),
+		CreditLimit:         req.CreditLimit,
+		CurrentBalance:      req.CurrentBalance,
+		StatementDay:        req.StatementDay,
+		PaymentDueDay:       req.PaymentDueDay,
+		StatementDate:       req.StatementDate,
+		StatementBalance:    req.StatementBalance,
+		StatementMinimumDue: req.StatementMinimumDue,
+		StatementDueDate:    req.StatementDueDate,
+		InterestRate:        req.InterestRate,
+		MinPaymentRate:      req.MinPaymentRate,
+		MinPaymentFloor:     req.MinPaymentFloor,
+		MinPaymentCalcMode:  calcMode,
+		Notes:               strings.TrimSpace(req.Notes),
 	}
 
 	if err := h.creditRepo.CreateAccount(r.Context(), &acc, userID, groupID); err != nil {
@@ -446,6 +456,10 @@ func (h *CreditHandler) UpdateAccount(w http.ResponseWriter, r *http.Request) {
 	var req models.UpdateCreditAccountRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if err := validateStatementSnapshot(req.StatementDate, req.StatementBalance, req.StatementMinimumDue, req.StatementDueDate, req.ClearStatement); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -727,6 +741,52 @@ func getBillingCycleStartDate(statementDay *int, refDate ...time.Time) string {
 	return time.Date(year, month, day, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
 }
 
+// validateStatementSnapshot accepts an omitted snapshot or a complete official
+// statement. Clearing and replacing in the same request is ambiguous.
+func validateStatementSnapshot(date *string, balance, minimum *float64, due *string, clear bool) error {
+	count := 0
+	for _, present := range []bool{date != nil, balance != nil, minimum != nil, due != nil} {
+		if present {
+			count++
+		}
+	}
+	if clear && count > 0 {
+		return fmt.Errorf("clearStatement cannot be combined with statement fields")
+	}
+	if count == 0 {
+		return nil
+	}
+	if count != 4 {
+		return fmt.Errorf("all four statement fields are required together")
+	}
+	statementDate, err := time.Parse("2006-01-02", *date)
+	if err != nil || statementDate.Format("2006-01-02") != *date {
+		return fmt.Errorf("statementDate must be a valid YYYY-MM-DD date")
+	}
+	dueDate, err := time.Parse("2006-01-02", *due)
+	if err != nil || dueDate.Format("2006-01-02") != *due || dueDate.Before(statementDate) {
+		return fmt.Errorf("statementDueDate must be a valid YYYY-MM-DD date on or after statementDate")
+	}
+	if math.IsNaN(*balance) || math.IsInf(*balance, 0) || *balance < 0 ||
+		math.IsNaN(*minimum) || math.IsInf(*minimum, 0) || *minimum < 0 || *minimum > *balance {
+		return fmt.Errorf("statement amounts must be finite and nonnegative, with minimum no greater than balance")
+	}
+	return nil
+}
+
+// currentStatementCutoff clamps short months before deciding which cycle is
+// current (a day-31 account closes on February's last day).
+func currentStatementCutoff(day int, asOf time.Time) string {
+	cutoff := func(year int, month time.Month) time.Time {
+		last := time.Date(year, month+1, 0, 0, 0, 0, 0, time.UTC).Day()
+		return time.Date(year, month, min(day, last), 0, 0, 0, 0, time.UTC)
+	}
+	current := cutoff(asOf.Year(), asOf.Month())
+	if asOf.Format("2006-01-02") < current.Format("2006-01-02") {
+		current = cutoff(asOf.Year(), asOf.Month()-1)
+	}
+	return current.Format("2006-01-02")
+}
 
 func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstallment, txs []models.CreditTransaction, refDate ...time.Time) models.CreditAccountDetail {
 	// Active installments monthly sum and unbilled future installments blocking credit limit
@@ -772,11 +832,23 @@ func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstall
 
 	// Cycle payments & charges
 	cycleStart := getBillingCycleStartDate(acc.StatementDay, refDate...)
+	asOf := time.Now().In(creditBillingLocation)
+	if len(refDate) > 0 && !refDate[0].IsZero() {
+		asOf = refDate[0].In(creditBillingLocation)
+	}
+	usesStatementMinimum := acc.StatementDay != nil && *acc.StatementDay >= 1 && *acc.StatementDay <= 31 &&
+		acc.StatementDate != nil && acc.StatementBalance != nil && acc.StatementMinimumDue != nil && acc.StatementDueDate != nil &&
+		validateStatementSnapshot(acc.StatementDate, acc.StatementBalance, acc.StatementMinimumDue, acc.StatementDueDate, false) == nil &&
+		*acc.StatementDate == currentStatementCutoff(*acc.StatementDay, asOf)
+	if usesStatementMinimum {
+		cycleStart = *acc.StatementDate
+	}
+	asOfDate := asOf.Format("2006-01-02")
 	var paidThisCycle float64
 	var chargesThisCycle float64
 	var interestChargesThisCycle float64
 	for _, tx := range txs {
-		if tx.Date >= cycleStart {
+		if tx.Date >= cycleStart && (!usesStatementMinimum || tx.Date <= asOfDate) {
 			if tx.Type == models.CreditTxPayment {
 				paidThisCycle += tx.Amount
 			} else if tx.Type == models.CreditTxCharge {
@@ -803,6 +875,9 @@ func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstall
 	if statementBal < 0 {
 		statementBal = 0
 	}
+	if usesStatementMinimum {
+		statementBal = *acc.StatementBalance
+	}
 
 	// 2. Minimum payment required for the current statement cycle
 	rate := acc.MinPaymentRate
@@ -824,7 +899,7 @@ func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstall
 	}
 
 	var minPayForCycle float64
-	if statementBal > 0 {
+	if statementBal > 0 && !usesStatementMinimum {
 		revolvingBalStmt := statementBal - monthlyInstDue
 		if revolvingBalStmt < 0 {
 			revolvingBalStmt = 0
@@ -836,19 +911,19 @@ func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstall
 			cycleInterest := interestChargesThisCycle
 			if cycleInterest == 0 && acc.InterestRate > 0 {
 				rawInterest := revolvingBalStmt * (acc.InterestRate / 100.0) * (30.0 / 365.0)
-				cycleInterest = math.Round(rawInterest * 100) / 100
+				cycleInterest = math.Round(rawInterest*100) / 100
 			}
-			revMinStmt = math.Round(((revolvingBalStmt * (rate / 100.0)) + cycleInterest) * 100) / 100
+			revMinStmt = math.Round(((revolvingBalStmt*(rate/100.0))+cycleInterest)*100) / 100
 			if floor > 0 && revMinStmt < floor && revolvingBalStmt > 0 {
 				revMinStmt = floor
 			}
-			minPayForCycle = math.Round((monthlyInstDue + revMinStmt) * 100) / 100
+			minPayForCycle = math.Round((monthlyInstDue+revMinStmt)*100) / 100
 
 		case models.CalcModeInterestOnly:
 			// Interest only 100% (e.g. Finnix)
 			if acc.InterestRate > 0 {
 				rawInterest := revolvingBalStmt * (acc.InterestRate / 100.0) * (30.0 / 365.0)
-				revMinStmt = math.Round(rawInterest * 100) / 100
+				revMinStmt = math.Round(rawInterest*100) / 100
 			}
 			if floor > 0 && revMinStmt < floor && revolvingBalStmt > 0 {
 				revMinStmt = floor
@@ -861,7 +936,7 @@ func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstall
 				revMinStmt = revolvingBalStmt * (rate / 100.0)
 			} else if acc.InterestRate > 0 {
 				rawInterest := revolvingBalStmt * (acc.InterestRate / 100.0) * (30.0 / 365.0)
-				revMinStmt = math.Round(rawInterest * 100) / 100
+				revMinStmt = math.Round(rawInterest*100) / 100
 			}
 			if floor > 0 && revMinStmt < floor && revolvingBalStmt > 0 {
 				revMinStmt = floor
@@ -877,11 +952,14 @@ func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstall
 			minPayForCycle = statementTotal
 		}
 	}
+	if usesStatementMinimum {
+		minPayForCycle = *acc.StatementMinimumDue
+	}
 
 	// 3. Remaining due for the current cycle
 	hasMinOrFullPayment := false
 	for _, tx := range txs {
-		if tx.Date >= cycleStart && tx.Type == models.CreditTxPayment {
+		if !usesStatementMinimum && tx.Date >= cycleStart && tx.Type == models.CreditTxPayment {
 			if tx.PaymentType != nil && (*tx.PaymentType == models.CreditPayMinimum || *tx.PaymentType == models.CreditPayFull) {
 				hasMinOrFullPayment = true
 				break
@@ -894,6 +972,12 @@ func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstall
 		remainingDue = 0
 	}
 	isPaidThisMonth := (minPayForCycle > 0 && (paidThisCycle >= minPayForCycle || hasMinOrFullPayment || remainingDue == 0)) || (acc.CurrentBalance == 0 && statementBal == 0)
+	if usesStatementMinimum {
+		// An official minimum is settled by money, not payment labels or the
+		// legacy estimated-payment tolerance. Keep the bank's original cents.
+		remainingDue = math.Max(0, math.Round((minPayForCycle-paidThisCycle)*100)/100)
+		isPaidThisMonth = remainingDue == 0
+	}
 
 	// 4. Estimated minimum payment for NEXT cycle (based on remaining current balance and interest accrued to next statement date)
 	var nextCycleMin float64
@@ -915,14 +999,14 @@ func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstall
 			rawInterest := revolvingBalCurr * (acc.InterestRate / 100.0) * (30.0 / 365.0)
 			if acc.Type == models.CreditAccountCreditCard {
 				// Thai banks add 7% VAT on credit card interest
-				nextCycleInterest = math.Round(rawInterest * 1.07 * 100) / 100
+				nextCycleInterest = math.Round(rawInterest*1.07*100) / 100
 			} else {
 				// Personal loans / nano finance: interest is exempt from VAT
-				nextCycleInterest = math.Round(rawInterest * 100) / 100
+				nextCycleInterest = math.Round(rawInterest*100) / 100
 			}
 		}
 
-		nextCycleEstimatedStmt = math.Round((acc.CurrentBalance + nextCycleInterest) * 100) / 100
+		nextCycleEstimatedStmt = math.Round((acc.CurrentBalance+nextCycleInterest)*100) / 100
 
 		// Next cycle minimum calculation includes revolving balance plus accrued interest
 		revolvingBaseNext := revolvingBalCurr + nextCycleInterest
@@ -954,25 +1038,26 @@ func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstall
 	totalDue := remainingDue
 
 	return models.CreditAccountDetail{
-		CreditAccount:          acc,
-		AvailableCredit:        availableCredit,
-		CreditUtilization:      utilization,
-		UnbilledInstallments:   unbilledInstallments,
-		MonthlyInstallmentDue:  monthlyInstDue,
-		TotalDueThisMonth:      totalDue,
+		CreditAccount:               acc,
+		AvailableCredit:             availableCredit,
+		CreditUtilization:           utilization,
+		UnbilledInstallments:        unbilledInstallments,
+		MonthlyInstallmentDue:       monthlyInstDue,
+		TotalDueThisMonth:           totalDue,
 		EstimatedMinPayment:         minPayForCycle,
+		UsesStatementMinimum:        usesStatementMinimum,
 		PaidThisMonth:               paidThisCycle,
 		IsPaidThisMonth:             isPaidThisMonth,
 		NextCycleEstimatedMin:       nextCycleMin,
 		NextCycleEstimatedInterest:  nextCycleInterest,
 		NextCycleEstimatedStatement: nextCycleEstimatedStmt,
 		ActiveInstallmentCount:      activeInstCount,
-		Installments:           insts,
-		Transactions:           txs,
+		Installments:                insts,
+		Transactions:                txs,
 	}
 }
 
 // ComputeAccountDetailPublic exposes computeAccountDetail for external verification.
-func ComputeAccountDetailPublic(acc models.CreditAccount, insts []models.CreditInstallment, txs []models.CreditTransaction) models.CreditAccountDetail {
-	return computeAccountDetail(acc, insts, txs)
+func ComputeAccountDetailPublic(acc models.CreditAccount, insts []models.CreditInstallment, txs []models.CreditTransaction, refDate ...time.Time) models.CreditAccountDetail {
+	return computeAccountDetail(acc, insts, txs, refDate...)
 }

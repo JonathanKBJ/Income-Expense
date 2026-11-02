@@ -1045,5 +1045,61 @@
         ],
         "logic_changed": "Added credit_account_id and loan_id columns to transactions table. Created GET /api/transactions/sync-credit-dues to preview and fuzzy-match dashboard expenses against credit accounts & borrow loans with calculated minimum/monthly dues. Created POST /api/transactions/apply-sync-dues to atomically batch-update amounts and link IDs. In TransactionHandler UpdateTransaction & CreateTransaction, added two-way payment reflection: when a transaction linked to creditAccountId or loanId transitions to PAID status, it automatically records a PAYMENT transaction on the credit card (advancing installment terms) or an INSTALLMENT entry on the loan. Added SyncCreditDuesModal and Sync button in TransactionList header controls.",
         "ai_warning": "Transactions bound to creditAccountId or loanId will automatically deduct balance from the corresponding account when marked PAID. Do not manually record payments in CreditTracker if already marked PAID in Dashboard."
+    },
+    {
+        "date": "2026-10-26",
+        "task": "Set authorized First choice Uchoose balance baseline from the 23 October statement",
+        "files_touched": ["AI_HISTORY.json"],
+        "logic_changed": "Data-only Turso update: replaced current_balance 25299.52 with statement closing balance 25648.94, changed payment_due_day 13 to 12, and annotated notes with statement date 2026-10-23, actual minimum 898.21, due date 2026-11-12, confirmed payment/refund and no-double-entry warning. Verified GRAB 1641 was already dated 2026-09-30 and no post-cutoff activity existed. Preserved all four credit transactions, both installment plans and the linked dashboard transaction; no application logic changed. Pre-update JSON backup saved in Downloads/firstchoice-before-update-20261026T084402Z.json; persisted fields checked and live server dry-run returned balance 25648.94 with installment SKIPPED_ALREADY_CHARGED.",
+        "ai_warning": "Actual minimum 898.21 is recorded in notes only; Est. Due remains formula-derived. Historical payment rows were intentionally not reconciled. Editing/deleting pre-baseline transactions changes the anchored balance and requires a fresh reconciliation. Do not repost statement charges, interest, payments or refunds already incorporated into this balance."
+    },
+    {
+        "date": "2026-10-26",
+        "task": "Reset First choice Uchoose to its October statement and use cycle-scoped actual minimum payments",
+        "files_touched": [
+            "backend/internal/database/schema.go",
+            "backend/internal/models/credit.go",
+            "backend/internal/repository/credit.go",
+            "backend/internal/handlers/credit.go",
+            "backend/internal/handlers/credit_test.go",
+            "backend/internal/handlers/transaction.go",
+            "frontend/src/types/credit.ts",
+            "frontend/src/components/CreditTracker.tsx",
+            "frontend/src/translations/index.ts",
+            "frontend/README.md",
+            "AI_HISTORY.json"
+        ],
+        "logic_changed": "Added nullable official statement date/balance/minimum/due-date fields with atomic all-or-none input and explicit clearing. Current-cycle actual minimum retains cents, subtracts payments through today, ignores FULL/MINIMUM labels and estimated-payment tolerance, and expires at the next cutoff. UI distinguishes original actual minimum, remaining due and next-cycle estimates; official minimum shortcuts are not date-prorated. Sync-dues no longer reopens settled actual minima. With user authorization, replaced this card's four legacy transactions and two installment plans with seven reconstructed rows: opening 28202.79 plus statement activity totals 25648.94. Stored actual minimum 898.21 (300+598.21), statement 2026-10-23, due 2026-11-12; updated its linked pending dashboard bill from 1208 on Oct31 to 898.21 on Nov12. Other cards unchanged. Backup: Downloads/firstchoice-before-clean-reset-20261026T090238Z.json. Verified backend suite, frontend build, live repository/calculation smoke and desktop/mobile incumbent UI against real read-only account data.",
+        "ai_warning": "This reset supersedes the preceding notes-only baseline. Do not restore the old 4701/162 payments or insurance plans without reconciling them. Opening balance is represented once in the ledger; never add the closing balance as another charge. Refund 1308 uses explicitly labeled PAYMENT/CUSTOM because there is no refund transaction type. Future official minima require each new statement, not retuning the global 3.706% estimate. Statement calendar boundaries and payment comparisons use Asia/Bangkok; dashboard PAID transitions must use the actual payment day, not the scheduled bill date. Browser verification used a disposable loopback read-only data surface because no authenticated user browser session was available; production auth was not changed."
+    }
+    ,
+    {
+        "date": "2026-11-02",
+        "task": "Migrate project MCP from graft to Trail",
+        "files_touched": [".mcp.json", "AI_HISTORY.json"],
+        "logic_changed": "Replaced graft server with trail using npx -y --ignore-scripts @trailhq/trail-code mcp. Normal installation failed in tree-sitter-kotlin install; disabling install scripts allowed Trail 0.28.1 to return a successful MCP initialize response.",
+        "ai_warning": "Verified MCP initialization only, not code-map rebuilding. System Node is 20.19.5; transitive dependencies warn that Node 22 is required. Trail startup reported automatically refreshing Claude agent wiring."
+    },
+    {
+        "date": "2026-11-02",
+        "task": "Prevent legacy Graft MCP from returning after Trail startup",
+        "files_touched": [".mcp.json", ".omp/mcp.json", "C:/Users/khach/.omp/agent/mcp.json", "AI_HISTORY.json"],
+        "logic_changed": "Removed reintroduced graft entry, registered Trail in OMP-native project config, and added graft to the OMP user disabledServers denylist. Fresh OMP RPC /mcp list returned rea and trail only; /mcp test trail connected and listed all six trail_* tools.",
+        "ai_warning": "Trail 0.28.1 boot upkeep rewrites legacy Claude wiring on version/stamp changes, so removing graft from root .mcp.json alone is not durable and --ignore-scripts does not stop that writer. User denylist applies to every default-profile OMP project on this machine; .omp/mcp.json preserves Trail independently of root config rewrites. Root fallback alone was not discovered in the fresh RPC smoke; native project config was. No third-party source or Claude hooks were modified."
+    }
+    ,
+    {
+        "date": "2026-11-02",
+        "task": "Migrate repository graph and Claude wiring from graft to Trail",
+        "files_touched": [".claude/settings.json", ".claude/settings.local.json", ".claude/helpers/graft-hooks.cjs", ".claude/helpers/graft-statusline.cjs", ".claude/skills/graft/SKILL.md", ".mcp.json", ".gitignore", ".ignore", ".git/info/exclude", ".trail/README.md", ".trail/.gitignore", ".trail/hook.cjs", ".trail/statusline.cjs", "graft/", ".trail/cache/", "AI_HISTORY.json"],
+        "logic_changed": "Ran canonical Trail 0.28.1 init with explicit repository root, claude host, no-global, no-build and no-mcp under process-scoped migration/privacy guards. Official init moved the existing map into .trail/cache, replaced legacy Claude helpers with .trail hooks/statusline, and removed the root MCP config. Removed stale enabledMcpjsonServers graft entry and obsolete graft ignore blocks; retained unrelated permissions and native .omp/mcp.json Trail registration. No application logic changed.",
+        "ai_warning": "Main verified Trail build and map on all 12 D-drive maps, Claude SessionStart/statusline hooks on all 12, and native OMP Trail MCP in Income-Expense and scs-forecast-ai. Income-Expense has zero structural drift but inherited deep summaries remain stale (238 symbols, 33 files); build --check therefore still exits 1. Keep .omp/mcp.json: official init removes root .mcp.json. Generated compatibility allowlists, MCP matchers and footer regex may contain graft identifiers by design."
+    },
+    {
+        "date": "2026-11-02",
+        "task": "Migrate all discovered D-drive Graft maps and active command wiring to Trail",
+        "files_touched": ["D:/PERSONAL/Income-Expense/.trail/", "D:/HAPYpick/HapyPick-Scenario-Lab-v2/.trail/", "D:/SIAMCHAI/CODE/scs_import_payment/.trail/", "D:/SIAMCHAI/CODE/scs-schedule/.trail/", "D:/SIAMCHAI/CODE/Securestock/.trail/", "D:/SIAMCHAI/CODE/scs-mobile-inspect/scs_new_mobile_app/.trail/", "D:/SIAMCHAI/CODE/scs-mobile-inspect/api-inspection-go/.trail/", "D:/SIAMCHAI/CODE/scs-forecast-ai/.trail/", "D:/SIAMCHAI/CODE/scs-forecast-ai/.omp/mcp.json", "D:/SIAMCHAI/CODE/scs-forecast-ai/web_demo_scs/.trail/", "D:/SIAMCHAI/PROTOTYPE/DCR 2026/DCR ตรวจสอบประวัติและทำสัญญาออนไลน์/pwa/.trail/", "D:/SIAMCHAI/CODE/SECURE_ON_CLOUD/secure-stock-on-cloud/.trail/", "D:/SIAMCHAI/CODE/SECURE_ON_CLOUD/api-warehouse/.trail/", "C:/Users/khach/.claude/settings.json", "C:/Users/khach/.claude.json", "C:/Users/khach/.mcp.json", "C:/Users/khach/.gemini/settings.json", "C:/Users/khach/.kiro/settings/mcp.json", "C:/Users/khach/.kiro/steering/trail.md", "AI_HISTORY.json"],
+        "logic_changed": "Installed canonical Trail 0.28.1, removed obsolete current-PATH Graft package/shims, used official init to migrate ten legacy maps and their active agent settings, and rebuilt all twelve maps including two already on Trail. Moved six cache-only directories to .trail/cache with byte-identical files instead of deleting sessions. Retired active shared-home Graft MCP/steering/duplicate skill references, preserved unrelated REA/settings and official compatibility internals. All twelve builds/maps and 24 Claude hook/statusline smokes passed; OMP MCP connected six Trail tools in both prior MCP-wired projects. Final read-only scan of 4536 directories found twelve Trail maps, six Trail cache-only roots and no legacy map roots; no application code changed.",
+        "ai_warning": "Use trail build without --deep for keyless structural refresh. Income-Expense build --check exits 1 solely on inherited meaning-layer drift: zero structural additions/removals/changes, 238 stale summaries and 33 drifted/9 uncovered manifest files; do not delete that evidence or claim full freshness. scs_import_payment still has zero supported indexed files. Ten other projects intentionally remain CLI/hooks-only, not newly OMP-MCP wired. Scan excluded protected Windows/recycle roots and dependency/VCS internals. Node20.19.5 remains unchanged; install scripts were skipped because native tree-sitter-kotlin installation fails, and some dependencies warn they require Node22. Shared global hook filenames and generated compatibility permissions may still say graft; they load Trail, not the retired package."
     }
 ]

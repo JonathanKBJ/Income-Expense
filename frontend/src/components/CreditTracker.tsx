@@ -93,8 +93,12 @@ function generateAmortizationSchedule(inst: CreditInstallment): AmortizationRow[
 function getCycleDueDate(
   statementDay?: number | null,
   paymentDueDay?: number | null,
-  refDate = dayjs()
+  refDate = dayjs(),
+  officialStatement?: Pick<CreditAccountDetail, "usesStatementMinimum" | "statementDueDate">
 ): dayjs.Dayjs | null {
+  if (officialStatement?.usesStatementMinimum && officialStatement.statementDueDate) {
+    return dayjs(officialStatement.statementDueDate);
+  }
   if (!paymentDueDay) return null;
   const stmtDay = statementDay && statementDay >= 1 && statementDay <= 31 ? statementDay : 1;
   let stmtYear = refDate.year();
@@ -131,7 +135,10 @@ function computeDateAdjustedMinPayment(
   dueDate: dayjs.Dayjs | null;
 } {
   const baseMin = acc.estimatedMinPayment;
-  const dueDate = getCycleDueDate(acc.statementDay, acc.paymentDueDay, payDate);
+  const dueDate = getCycleDueDate(acc.statementDay, acc.paymentDueDay, payDate, acc);
+  if (acc.usesStatementMinimum) {
+    return { amount: acc.totalDueThisMonth, baseMin, interestDiff: 0, daysDiff: 0, dueDate };
+  }
   if (!dueDate || !baseMin || baseMin <= 0) {
     return { amount: baseMin, baseMin, interestDiff: 0, daysDiff: 0, dueDate };
   }
@@ -218,6 +225,10 @@ export default function CreditTracker() {
   const [accMinFloor, setAccMinFloor] = useState<number>(0);
   const [accCalcMode, setAccCalcMode] = useState<CreditMinPaymentCalcMode>("BALANCE_PERCENT");
   const [accNotes, setAccNotes] = useState("");
+  const [accStatementDate, setAccStatementDate] = useState<dayjs.Dayjs | null>(null);
+  const [accStatementBalance, setAccStatementBalance] = useState<number | null>(null);
+  const [accStatementMinimumDue, setAccStatementMinimumDue] = useState<number | null>(null);
+  const [accStatementDueDate, setAccStatementDueDate] = useState<dayjs.Dayjs | null>(null);
 
   // Form states: Installment
   const [instItemName, setInstItemName] = useState("");
@@ -338,6 +349,10 @@ export default function CreditTracker() {
     setAccMinFloor(0);
     setAccCalcMode("BALANCE_PERCENT");
     setAccNotes("");
+    setAccStatementDate(null);
+    setAccStatementBalance(null);
+    setAccStatementMinimumDue(null);
+    setAccStatementDueDate(null);
     setShowAccountModal(true);
   }
 
@@ -355,6 +370,10 @@ export default function CreditTracker() {
     setAccMinFloor(acc.minPaymentFloor);
     setAccCalcMode(acc.minPaymentCalcMode || (acc.minPaymentRate === 0 ? "INTEREST_ONLY" : "BALANCE_PERCENT"));
     setAccNotes(acc.notes || "");
+    setAccStatementDate(acc.statementDate ? dayjs(acc.statementDate) : null);
+    setAccStatementBalance(acc.statementBalance ?? null);
+    setAccStatementMinimumDue(acc.statementMinimumDue ?? null);
+    setAccStatementDueDate(acc.statementDueDate ? dayjs(acc.statementDueDate) : null);
     setShowAccountModal(true);
   }
 
@@ -363,6 +382,19 @@ export default function CreditTracker() {
       if (!accName.trim()) message.warning(t.creditPage.accountName);
       return;
     }
+    const statementValues = [accStatementDate, accStatementBalance, accStatementMinimumDue, accStatementDueDate];
+    const hasStatement = statementValues.some((value) => value !== null);
+    if (hasStatement && statementValues.some((value) => value === null)) {
+      message.warning(t.creditPage.statementFieldsRequired);
+      return;
+    }
+    const statementFields = hasStatement ? {
+      statementDate: accStatementDate!.format("YYYY-MM-DD"),
+      statementBalance: accStatementBalance!,
+      statementMinimumDue: accStatementMinimumDue!,
+      statementDueDate: accStatementDueDate!.format("YYYY-MM-DD"),
+    } : {};
+    const existingStatement = accounts.find((account) => account.id === editingAccountId)?.statementDate;
 
     setSavingAccount(true);
     try {
@@ -380,6 +412,8 @@ export default function CreditTracker() {
           minPaymentFloor: accMinFloor,
           minPaymentCalcMode: accCalcMode,
           notes: accNotes.trim(),
+          ...statementFields,
+          ...(!hasStatement && existingStatement ? { clearStatement: true } : {}),
         });
         message.success(t.creditPage.updated);
       } else {
@@ -396,6 +430,7 @@ export default function CreditTracker() {
           minPaymentFloor: accMinFloor,
           minPaymentCalcMode: accCalcMode,
           notes: accNotes.trim(),
+          ...statementFields,
         };
         const created = await api.createCreditAccount(payload);
         message.success(t.creditPage.created);
@@ -599,9 +634,11 @@ export default function CreditTracker() {
     } else if (opt === "MINIMUM") {
       const minCalc = computeDateAdjustedMinPayment(selectedAccount, date);
       setTxAmount(minCalc.amount);
-      const activeInst = selectedAccount.installments.find((i) => i.status === "ACTIVE");
-      if (activeInst) {
-        setTxInstallmentId(activeInst.id);
+      if (!selectedAccount.usesStatementMinimum) {
+        const activeInst = selectedAccount.installments.find((i) => i.status === "ACTIVE");
+        if (activeInst) setTxInstallmentId(activeInst.id);
+      } else {
+        setTxInstallmentId(undefined);
       }
     } else if (opt === "INSTALLMENT") {
       setTxAmount(selectedAccount.monthlyInstallmentDue);
@@ -739,13 +776,15 @@ export default function CreditTracker() {
 
         <div style={{ marginTop: 12, paddingTop: 10, borderTop: isDark ? "1px solid rgba(255, 255, 255, 0.06)" : "1px solid var(--border-subtle)", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "var(--text-secondary)" }}>
           <span>
-            {acc.paymentDueDay ? `${t.creditPage.dueDay}: ${acc.paymentDueDay}` : ""}
+            {acc.usesStatementMinimum && acc.statementDueDate
+              ? `${t.creditPage.statementDueDate}: ${dayjs(acc.statementDueDate).format("DD MMM YYYY")}`
+              : acc.paymentDueDay ? `${t.creditPage.dueDay}: ${acc.paymentDueDay}` : ""}
           </span>
           {acc.isPaidThisMonth ? (
             <Tag color="success" style={{ margin: 0 }}>ชำระรอบนี้แล้ว ✓</Tag>
           ) : (
             <span style={{ color: isDark ? "#f59e0b" : "#d97706", fontWeight: 500 }}>
-              {t.creditPage.totalDueThisMonth}: ฿{formatMoney(acc.totalDueThisMonth)}
+              {acc.usesStatementMinimum ? t.creditPage.remainingStatementDue : t.creditPage.totalDueThisMonth}: ฿{formatMoney(acc.totalDueThisMonth)}
             </span>
           )}
         </div>
@@ -842,7 +881,7 @@ export default function CreditTracker() {
             <div style={{ fontSize: isMobile ? 14 : 15, fontWeight: 600, color: "#ef4444" }}>฿{formatMoney(account.currentBalance)}</div>
           </Col>
           <Col xs={12} sm={6}>
-            <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>{t.creditPage.totalDueThisMonth}</div>
+            <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>{account.usesStatementMinimum ? t.creditPage.remainingStatementDue : t.creditPage.estimatedMinimum}</div>
             {account.isPaidThisMonth ? (
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <Tag color="success" style={{ margin: 0 }}>ชำระแล้ว ✓</Tag>
@@ -853,7 +892,7 @@ export default function CreditTracker() {
             )}
           </Col>
           <Col xs={12} sm={6}>
-            <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>ประมาณการขั้นต่ำรอบถัดไป</div>
+            <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>{t.creditPage.nextCycleEstimatedMinimum}</div>
             <div style={{ fontSize: isMobile ? 14 : 15, fontWeight: 600, color: isDark ? "#f59e0b" : "#d97706" }}>฿{formatMoney(account.nextCycleEstimatedMin)}</div>
           </Col>
           <Col xs={12} sm={6}>
@@ -861,8 +900,8 @@ export default function CreditTracker() {
             <div style={{ fontSize: isMobile ? 13 : 14, color: "var(--text-primary)" }}>{account.statementDay ? `วันที่ ${account.statementDay}` : "-"}</div>
           </Col>
           <Col xs={12} sm={6}>
-            <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>{t.creditPage.dueDay}</div>
-            <div style={{ fontSize: isMobile ? 13 : 14, color: "var(--text-primary)" }}>{account.paymentDueDay ? `วันที่ ${account.paymentDueDay}` : "-"}</div>
+            <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>{account.usesStatementMinimum ? t.creditPage.statementDueDate : t.creditPage.dueDay}</div>
+            <div style={{ fontSize: isMobile ? 13 : 14, color: "var(--text-primary)" }}>{account.usesStatementMinimum && account.statementDueDate ? dayjs(account.statementDueDate).format("D MMM YYYY") : account.paymentDueDay ? `วันที่ ${account.paymentDueDay}` : "-"}</div>
           </Col>
           <Col xs={12} sm={6}>
             <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>{t.creditPage.interestRate}</div>
@@ -871,6 +910,27 @@ export default function CreditTracker() {
             </div>
           </Col>
         </Row>
+
+        {account.statementDate && (
+          <div style={{ marginBottom: 20 }}>
+            <Tag color={account.usesStatementMinimum ? "blue" : "default"}>
+              {account.usesStatementMinimum ? t.creditPage.officialStatement : t.creditPage.savedStatement}
+            </Tag>
+            <Row gutter={[16, 12]} style={{ marginTop: 10 }}>
+              {[
+                [t.creditPage.statementDate, dayjs(account.statementDate).format("D MMM YYYY")],
+                [t.creditPage.statementBalance, `฿${formatMoney(account.statementBalance)}`],
+                [t.creditPage.statementMinimumDue, `฿${formatMoney(account.statementMinimumDue)}`],
+                [t.creditPage.statementDueDate, account.statementDueDate ? dayjs(account.statementDueDate).format("D MMM YYYY") : "-"],
+              ].map(([label, value]) => (
+                <Col xs={12} sm={6} key={label}>
+                  <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>{label}</div>
+                  <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>{value}</div>
+                </Col>
+              ))}
+            </Row>
+          </div>
+        )}
 
         {/* Breakdown explanation card */}
         {(account.currentBalance > 0 || account.activeInstallmentCount > 0 || account.isPaidThisMonth || account.paidThisMonth > 0) && (
@@ -1551,6 +1611,68 @@ export default function CreditTracker() {
             </Col>
           </Row>
 
+          <fieldset style={{ border: "1px solid var(--border-subtle)", borderRadius: 8, padding: 12, margin: 0, minWidth: 0 }}>
+            <legend style={{ width: "auto", padding: "0 4px", fontSize: 14, fontWeight: 600 }}>{t.creditPage.officialStatement}</legend>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 12 }}>{t.creditPage.statementSnapshotHelp}</div>
+            <Row gutter={[12, 12]}>
+              <Col xs={24} sm={12}>
+                <label htmlFor="credit-statement-date" style={{ display: "block", marginBottom: 4, fontWeight: 500 }}>{t.creditPage.statementDate}</label>
+                <DatePicker
+                  id="credit-statement-date"
+                  value={accStatementDate}
+                  onChange={setAccStatementDate}
+                  format="YYYY-MM-DD"
+                  style={{ width: "100%" }}
+                />
+              </Col>
+              <Col xs={24} sm={12}>
+                <label htmlFor="credit-statement-due-date" style={{ display: "block", marginBottom: 4, fontWeight: 500 }}>{t.creditPage.statementDueDate}</label>
+                <DatePicker
+                  id="credit-statement-due-date"
+                  value={accStatementDueDate}
+                  onChange={setAccStatementDueDate}
+                  format="YYYY-MM-DD"
+                  style={{ width: "100%" }}
+                />
+              </Col>
+              <Col xs={24} sm={12}>
+                <label htmlFor="credit-statement-balance" style={{ display: "block", marginBottom: 4, fontWeight: 500 }}>{t.creditPage.statementBalance}</label>
+                <InputNumber
+                  id="credit-statement-balance"
+                  value={accStatementBalance}
+                  onChange={setAccStatementBalance}
+                  min={0}
+                  precision={2}
+                  style={{ width: "100%" }}
+                />
+              </Col>
+              <Col xs={24} sm={12}>
+                <label htmlFor="credit-statement-minimum" style={{ display: "block", marginBottom: 4, fontWeight: 500 }}>{t.creditPage.statementMinimumDue}</label>
+                <InputNumber
+                  id="credit-statement-minimum"
+                  value={accStatementMinimumDue}
+                  onChange={setAccStatementMinimumDue}
+                  min={0}
+                  precision={2}
+                  style={{ width: "100%" }}
+                />
+              </Col>
+            </Row>
+            <Button
+              size="small"
+              style={{ marginTop: 12 }}
+              disabled={[accStatementDate, accStatementBalance, accStatementMinimumDue, accStatementDueDate].every((value) => value === null)}
+              onClick={() => {
+                setAccStatementDate(null);
+                setAccStatementBalance(null);
+                setAccStatementMinimumDue(null);
+                setAccStatementDueDate(null);
+              }}
+            >
+              {t.creditPage.clearStatement}
+            </Button>
+          </fieldset>
+
           <Row gutter={12}>
             <Col span={8}>
               <label style={{ display: "block", marginBottom: 4, fontWeight: 500 }}>{t.creditPage.interestRate}</label>
@@ -1900,7 +2022,7 @@ export default function CreditTracker() {
                       type={txPaymentOption === "MINIMUM" ? "primary" : "default"}
                       onClick={() => handleSelectPaymentOption("MINIMUM")}
                     >
-                      {t.creditPage.payMinimum} (฿{formatMoney(minCalc.amount)})
+                      {selectedAccount.usesStatementMinimum ? t.creditPage.remainingStatementDue : t.creditPage.estimatedMinimum} (฿{formatMoney(minCalc.amount)})
                     </Button>
                   );
                 })()}
@@ -2008,6 +2130,17 @@ export default function CreditTracker() {
             {txType === "PAYMENT" && txPaymentOption === "MINIMUM" && selectedAccount && (() => {
               const minCalc = computeDateAdjustedMinPayment(selectedAccount, txDate);
               if (!minCalc.dueDate) return null;
+              if (selectedAccount.usesStatementMinimum) {
+                return (
+                  <div style={{ marginTop: 8, fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+                    <strong>{t.creditPage.officialStatement}</strong>
+                    <div>{t.creditPage.statementMinimumDue}: ฿{formatMoney(minCalc.baseMin)}</div>
+                    <div>{t.creditPage.remainingStatementDue}: ฿{formatMoney(minCalc.amount)}</div>
+                    <div>{t.creditPage.statementDueDate}: {minCalc.dueDate.format("D MMM YYYY")}</div>
+                    <div>{t.creditPage.statementMinimumHelp}</div>
+                  </div>
+                );
+              }
               return (
                 <div style={{ marginTop: 8, padding: "8px 12px", background: isDark ? "rgba(59, 130, 246, 0.1)" : "rgba(59, 130, 246, 0.06)", borderRadius: 6, border: isDark ? "1px solid rgba(59, 130, 246, 0.3)" : "1px solid rgba(59, 130, 246, 0.25)", fontSize: 12 }}>
                   <div style={{ fontWeight: 600, color: isDark ? "#93c5fd" : "#1d4ed8", marginBottom: 3 }}>

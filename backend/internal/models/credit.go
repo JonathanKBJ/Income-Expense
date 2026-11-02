@@ -49,42 +49,46 @@ const (
 type CreditMinPaymentCalcMode string
 
 const (
-	CalcModeBalancePercent          CreditMinPaymentCalcMode = "BALANCE_PERCENT"
-	CalcModePrincipalPlusInterest   CreditMinPaymentCalcMode = "PRINCIPAL_PERCENT_PLUS_INTEREST"
-	CalcModeInterestOnly            CreditMinPaymentCalcMode = "INTEREST_ONLY"
+	CalcModeBalancePercent        CreditMinPaymentCalcMode = "BALANCE_PERCENT"
+	CalcModePrincipalPlusInterest CreditMinPaymentCalcMode = "PRINCIPAL_PERCENT_PLUS_INTEREST"
+	CalcModeInterestOnly          CreditMinPaymentCalcMode = "INTEREST_ONLY"
 )
 
 // CreditAccount represents a credit card or personal loan account.
 type CreditAccount struct {
-	ID              string            `json:"id"`
-	Name            string            `json:"name"`
-	Type            CreditAccountType `json:"type"`
-	Bank            string            `json:"bank"`
-	CreditLimit     float64           `json:"creditLimit"`
-	CurrentBalance  float64           `json:"currentBalance"`
-	StatementDay    *int              `json:"statementDay,omitempty"`
-	PaymentDueDay   *int              `json:"paymentDueDay,omitempty"`
-	InterestRate    float64           `json:"interestRate"`
-	MinPaymentRate  float64           `json:"minPaymentRate"`
-	MinPaymentFloor    float64                  `json:"minPaymentFloor"`
-	MinPaymentCalcMode CreditMinPaymentCalcMode `json:"minPaymentCalcMode"`
-	Status             CreditStatus             `json:"status"`
-	Notes              string                   `json:"notes"`
-	GroupID         string            `json:"groupId"`
-	UserID          string            `json:"userId"`
-	CreatedAt       time.Time         `json:"createdAt"`
-	UpdatedAt       time.Time         `json:"updatedAt"`
+	ID                  string                   `json:"id"`
+	Name                string                   `json:"name"`
+	Type                CreditAccountType        `json:"type"`
+	Bank                string                   `json:"bank"`
+	CreditLimit         float64                  `json:"creditLimit"`
+	CurrentBalance      float64                  `json:"currentBalance"`
+	StatementDay        *int                     `json:"statementDay,omitempty"`
+	PaymentDueDay       *int                     `json:"paymentDueDay,omitempty"`
+	StatementDate       *string                  `json:"statementDate"`
+	StatementBalance    *float64                 `json:"statementBalance"`
+	StatementMinimumDue *float64                 `json:"statementMinimumDue"`
+	StatementDueDate    *string                  `json:"statementDueDate"`
+	InterestRate        float64                  `json:"interestRate"`
+	MinPaymentRate      float64                  `json:"minPaymentRate"`
+	MinPaymentFloor     float64                  `json:"minPaymentFloor"`
+	MinPaymentCalcMode  CreditMinPaymentCalcMode `json:"minPaymentCalcMode"`
+	Status              CreditStatus             `json:"status"`
+	Notes               string                   `json:"notes"`
+	GroupID             string                   `json:"groupId"`
+	UserID              string                   `json:"userId"`
+	CreatedAt           time.Time                `json:"createdAt"`
+	UpdatedAt           time.Time                `json:"updatedAt"`
 }
 
 // CreditInstallment represents a fixed term installment plan under a credit account.
 type CreditInstallment struct {
-	ID            string            `json:"id"`
-	AccountID     string            `json:"accountId"`
-	ItemName      string            `json:"itemName"`
-	TotalAmount   float64           `json:"totalAmount"`
-	MonthlyAmount float64           `json:"monthlyAmount"`
-	TotalTerms    int               `json:"totalTerms"`
-	PaidTerms     int               `json:"paidTerms"`
+	ID               string            `json:"id"`
+	AccountID        string            `json:"accountId"`
+	ItemName         string            `json:"itemName"`
+	TotalAmount      float64           `json:"totalAmount"`
+	MonthlyAmount    float64           `json:"monthlyAmount"`
+	TotalTerms       int               `json:"totalTerms"`
+	PaidTerms        int               `json:"paidTerms"`
 	InterestRate     float64           `json:"interestRate"`
 	InterestType     string            `json:"interestType"`
 	RemainingBalance float64           `json:"remainingBalance"`
@@ -92,8 +96,8 @@ type CreditInstallment struct {
 	EndDate          *string           `json:"endDate,omitempty"`
 	Status           InstallmentStatus `json:"status"`
 	Notes            string            `json:"notes"`
-	CreatedAt     time.Time         `json:"createdAt"`
-	UpdatedAt     time.Time         `json:"updatedAt"`
+	CreatedAt        time.Time         `json:"createdAt"`
+	UpdatedAt        time.Time         `json:"updatedAt"`
 }
 
 // CreditTransaction records an expenditure or payment.
@@ -114,72 +118,82 @@ type CreditTransaction struct {
 // CreditAccountDetail wraps a credit account with installments, transactions, and computed metrics.
 type CreditAccountDetail struct {
 	CreditAccount
-	AvailableCredit        float64             `json:"availableCredit"`
-	CreditUtilization      float64             `json:"creditUtilization"`
-	UnbilledInstallments   float64             `json:"unbilledInstallments"`
-	MonthlyInstallmentDue  float64             `json:"monthlyInstallmentDue"`
-	TotalDueThisMonth      float64             `json:"totalDueThisMonth"`
+	AvailableCredit             float64             `json:"availableCredit"`
+	CreditUtilization           float64             `json:"creditUtilization"`
+	UnbilledInstallments        float64             `json:"unbilledInstallments"`
+	MonthlyInstallmentDue       float64             `json:"monthlyInstallmentDue"`
+	TotalDueThisMonth           float64             `json:"totalDueThisMonth"`
 	EstimatedMinPayment         float64             `json:"estimatedMinPayment"`
+	UsesStatementMinimum        bool                `json:"usesStatementMinimum"`
 	PaidThisMonth               float64             `json:"paidThisMonth"`
 	IsPaidThisMonth             bool                `json:"isPaidThisMonth"`
 	NextCycleEstimatedMin       float64             `json:"nextCycleEstimatedMin"`
 	NextCycleEstimatedInterest  float64             `json:"nextCycleEstimatedInterest"`
 	NextCycleEstimatedStatement float64             `json:"nextCycleEstimatedStatement"`
-	ActiveInstallmentCount int                 `json:"activeInstallmentCount"`
-	Installments           []CreditInstallment `json:"installments"`
-	Transactions           []CreditTransaction `json:"transactions"`
+	ActiveInstallmentCount      int                 `json:"activeInstallmentCount"`
+	Installments                []CreditInstallment `json:"installments"`
+	Transactions                []CreditTransaction `json:"transactions"`
 }
 
 // CreditDashboardSummary represents the top-level aggregates for the credit cards & loans dashboard.
 type CreditDashboardSummary struct {
-	TotalCreditLimit     float64 `json:"totalCreditLimit"`
-	TotalCurrentBalance  float64 `json:"totalCurrentBalance"`
-	TotalAvailableCredit float64 `json:"totalAvailableCredit"`
-	TotalEstimatedDue           float64 `json:"totalEstimatedDue"`
-	TotalNextCycleOutstanding   float64 `json:"totalNextCycleOutstanding"`
-	TotalNextCycleEstimatedDue  float64 `json:"totalNextCycleEstimatedDue"`
-	TotalAccounts               int     `json:"totalAccounts"`
-	ActiveAccounts              int     `json:"activeAccounts"`
+	TotalCreditLimit           float64 `json:"totalCreditLimit"`
+	TotalCurrentBalance        float64 `json:"totalCurrentBalance"`
+	TotalAvailableCredit       float64 `json:"totalAvailableCredit"`
+	TotalEstimatedDue          float64 `json:"totalEstimatedDue"`
+	TotalNextCycleOutstanding  float64 `json:"totalNextCycleOutstanding"`
+	TotalNextCycleEstimatedDue float64 `json:"totalNextCycleEstimatedDue"`
+	TotalAccounts              int     `json:"totalAccounts"`
+	ActiveAccounts             int     `json:"activeAccounts"`
 }
 
 // --- Request DTOs ---
 
 type CreateCreditAccountRequest struct {
-	Name            string            `json:"name"`
-	Type            CreditAccountType `json:"type"`
-	Bank            string            `json:"bank"`
-	CreditLimit     float64           `json:"creditLimit"`
-	CurrentBalance  float64           `json:"currentBalance"`
-	StatementDay    *int              `json:"statementDay,omitempty"`
-	PaymentDueDay   *int              `json:"paymentDueDay,omitempty"`
-	InterestRate    float64           `json:"interestRate"`
-	MinPaymentRate  float64           `json:"minPaymentRate"`
-	MinPaymentFloor    float64                   `json:"minPaymentFloor"`
-	MinPaymentCalcMode *CreditMinPaymentCalcMode `json:"minPaymentCalcMode,omitempty"`
-	Notes              string                    `json:"notes"`
+	Name                string                    `json:"name"`
+	Type                CreditAccountType         `json:"type"`
+	Bank                string                    `json:"bank"`
+	CreditLimit         float64                   `json:"creditLimit"`
+	CurrentBalance      float64                   `json:"currentBalance"`
+	StatementDay        *int                      `json:"statementDay,omitempty"`
+	PaymentDueDay       *int                      `json:"paymentDueDay,omitempty"`
+	StatementDate       *string                   `json:"statementDate,omitempty"`
+	StatementBalance    *float64                  `json:"statementBalance,omitempty"`
+	StatementMinimumDue *float64                  `json:"statementMinimumDue,omitempty"`
+	StatementDueDate    *string                   `json:"statementDueDate,omitempty"`
+	InterestRate        float64                   `json:"interestRate"`
+	MinPaymentRate      float64                   `json:"minPaymentRate"`
+	MinPaymentFloor     float64                   `json:"minPaymentFloor"`
+	MinPaymentCalcMode  *CreditMinPaymentCalcMode `json:"minPaymentCalcMode,omitempty"`
+	Notes               string                    `json:"notes"`
 }
 
 type UpdateCreditAccountRequest struct {
-	Name            *string            `json:"name,omitempty"`
-	Type            *CreditAccountType `json:"type,omitempty"`
-	Bank            *string            `json:"bank,omitempty"`
-	CreditLimit     *float64           `json:"creditLimit,omitempty"`
-	CurrentBalance  *float64           `json:"currentBalance,omitempty"`
-	StatementDay    *int               `json:"statementDay,omitempty"`
-	PaymentDueDay   *int               `json:"paymentDueDay,omitempty"`
-	InterestRate    *float64           `json:"interestRate,omitempty"`
-	MinPaymentRate  *float64           `json:"minPaymentRate,omitempty"`
-	MinPaymentFloor    *float64                  `json:"minPaymentFloor,omitempty"`
-	MinPaymentCalcMode *CreditMinPaymentCalcMode `json:"minPaymentCalcMode,omitempty"`
-	Status             *CreditStatus             `json:"status,omitempty"`
-	Notes              *string                   `json:"notes,omitempty"`
+	Name                *string                   `json:"name,omitempty"`
+	Type                *CreditAccountType        `json:"type,omitempty"`
+	Bank                *string                   `json:"bank,omitempty"`
+	CreditLimit         *float64                  `json:"creditLimit,omitempty"`
+	CurrentBalance      *float64                  `json:"currentBalance,omitempty"`
+	StatementDay        *int                      `json:"statementDay,omitempty"`
+	PaymentDueDay       *int                      `json:"paymentDueDay,omitempty"`
+	StatementDate       *string                   `json:"statementDate,omitempty"`
+	StatementBalance    *float64                  `json:"statementBalance,omitempty"`
+	StatementMinimumDue *float64                  `json:"statementMinimumDue,omitempty"`
+	StatementDueDate    *string                   `json:"statementDueDate,omitempty"`
+	ClearStatement      bool                      `json:"clearStatement,omitempty"`
+	InterestRate        *float64                  `json:"interestRate,omitempty"`
+	MinPaymentRate      *float64                  `json:"minPaymentRate,omitempty"`
+	MinPaymentFloor     *float64                  `json:"minPaymentFloor,omitempty"`
+	MinPaymentCalcMode  *CreditMinPaymentCalcMode `json:"minPaymentCalcMode,omitempty"`
+	Status              *CreditStatus             `json:"status,omitempty"`
+	Notes               *string                   `json:"notes,omitempty"`
 }
 
 type CreateCreditInstallmentRequest struct {
-	ItemName      string  `json:"itemName"`
-	TotalAmount   float64 `json:"totalAmount"`
-	MonthlyAmount float64 `json:"monthlyAmount"`
-	TotalTerms    int     `json:"totalTerms"`
+	ItemName         string   `json:"itemName"`
+	TotalAmount      float64  `json:"totalAmount"`
+	MonthlyAmount    float64  `json:"monthlyAmount"`
+	TotalTerms       int      `json:"totalTerms"`
 	PaidTerms        int      `json:"paidTerms"`
 	InterestRate     *float64 `json:"interestRate,omitempty"`
 	InterestType     *string  `json:"interestType,omitempty"`
@@ -190,10 +204,10 @@ type CreateCreditInstallmentRequest struct {
 }
 
 type UpdateCreditInstallmentRequest struct {
-	ItemName      *string            `json:"itemName,omitempty"`
-	TotalAmount   *float64           `json:"totalAmount,omitempty"`
-	MonthlyAmount *float64           `json:"monthlyAmount,omitempty"`
-	TotalTerms    *int               `json:"totalTerms,omitempty"`
+	ItemName         *string            `json:"itemName,omitempty"`
+	TotalAmount      *float64           `json:"totalAmount,omitempty"`
+	MonthlyAmount    *float64           `json:"monthlyAmount,omitempty"`
+	TotalTerms       *int               `json:"totalTerms,omitempty"`
 	PaidTerms        *int               `json:"paidTerms,omitempty"`
 	InterestRate     *float64           `json:"interestRate,omitempty"`
 	InterestType     *string            `json:"interestType,omitempty"`

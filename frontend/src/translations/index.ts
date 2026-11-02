@@ -260,6 +260,19 @@ export interface TranslationKeys {
     estimatedMinPayment: string;
     monthlyInstallmentDue: string;
     totalDueThisMonth: string;
+    officialStatement: string;
+    statementSnapshotHelp: string;
+    statementDate: string;
+    statementBalance: string;
+    statementMinimumDue: string;
+    statementDueDate: string;
+    statementFieldsRequired: string;
+    clearStatement: string;
+    remainingStatementDue: string;
+    estimatedMinimum: string;
+    nextCycleEstimatedMinimum: string;
+    savedStatement: string;
+    statementMinimumHelp: string;
     activeInstallmentCount: string;
     installments: string;
     newInstallment: string;
@@ -615,6 +628,19 @@ export const translations: Record<Language, TranslationKeys> = {
       estimatedMinPayment: "Est. Min Payment",
       monthlyInstallmentDue: "Installments Due",
       totalDueThisMonth: "Est. Due This Month",
+      officialStatement: "Official bank statement",
+      statementSnapshotHelp: "Optional: enter all four values from one statement. This minimum applies only to its current billing cycle; later cycles remain estimates.",
+      statementDate: "Statement date",
+      statementBalance: "Statement closing balance",
+      statementMinimumDue: "Actual statement minimum",
+      statementDueDate: "Payment due date",
+      statementFieldsRequired: "Enter all four statement fields, or clear all four to remove the statement.",
+      clearStatement: "Remove statement",
+      remainingStatementDue: "Remaining statement minimum",
+      estimatedMinimum: "Estimated minimum",
+      nextCycleEstimatedMinimum: "Next cycle estimated minimum",
+      savedStatement: "Saved statement (not active this cycle)",
+      statementMinimumHelp: "The bank's original minimum is fixed. Remaining due subtracts payments recorded through today; changing the payment date does not prorate it.",
       activeInstallmentCount: "Active Installments",
       installments: "Installment Plans",
       newInstallment: "Add Installment",
@@ -971,6 +997,19 @@ export const translations: Record<Language, TranslationKeys> = {
       estimatedMinPayment: "ประมาณการจ่ายขั้นต่ำ",
       monthlyInstallmentDue: "ค่างวดผ่อนประจำเดือน",
       totalDueThisMonth: "ยอดที่ต้องจ่ายเดือนนี้",
+      officialStatement: "ใบแจ้งยอดจริงจากธนาคาร",
+      statementSnapshotHelp: "ไม่บังคับ: กรอกข้อมูลทั้ง 4 ช่องจากใบแจ้งยอดเดียวกัน ยอดขั้นต่ำนี้ใช้เฉพาะรอบบิลปัจจุบัน ส่วนรอบถัดไปยังเป็นประมาณการ",
+      statementDate: "วันที่ออกใบแจ้งยอด",
+      statementBalance: "ยอดปิดรอบตามใบแจ้งยอด",
+      statementMinimumDue: "ขั้นต่ำจริงตามใบแจ้งยอด",
+      statementDueDate: "วันที่ครบกำหนดชำระ",
+      statementFieldsRequired: "กรอกข้อมูลใบแจ้งยอดให้ครบทั้ง 4 ช่อง หรือล้างทั้ง 4 ช่องเพื่อลบใบแจ้งยอด",
+      clearStatement: "ลบข้อมูลใบแจ้งยอด",
+      remainingStatementDue: "ขั้นต่ำตามใบแจ้งยอดที่ยังต้องชำระ",
+      estimatedMinimum: "ยอดขั้นต่ำประมาณการ",
+      nextCycleEstimatedMinimum: "ประมาณการขั้นต่ำรอบถัดไป",
+      savedStatement: "ใบแจ้งยอดที่บันทึกไว้ (ไม่ใช่รอบปัจจุบัน)",
+      statementMinimumHelp: "ยอดขั้นต่ำเดิมของธนาคารไม่เปลี่ยน ยอดที่ยังต้องชำระหักการจ่ายที่บันทึกถึงวันนี้แล้ว การเปลี่ยนวันจ่ายจะไม่ปรับลดหรือเพิ่มขั้นต่ำจริง",
       activeInstallmentCount: "รายการผ่อนที่ยังดำเนินอยู่",
       installments: "รายการผ่อนชำระ (Installments)",
       newInstallment: "เพิ่มรายการผ่อน",
