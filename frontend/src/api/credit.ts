@@ -7,6 +7,7 @@ import type {
   CreditInstallment,
   CreateCreditInstallmentRequest,
   UpdateCreditInstallmentRequest,
+  SettleInstallmentEarlyRequest,
   CreateCreditTxRequest,
 } from "../types/credit";
 
@@ -55,6 +56,17 @@ export async function updateInstallment(
 ): Promise<void> {
   return apiFetch(`/api/credit-accounts/${accountId}/installments/${installmentId}`, {
     method: "PATCH",
+    body: JSON.stringify(req),
+  });
+}
+
+export async function settleInstallmentEarly(
+  accountId: string,
+  installmentId: string,
+  req: SettleInstallmentEarlyRequest
+): Promise<void> {
+  await apiFetch(`/api/credit-accounts/${accountId}/installments/${installmentId}/settle-early`, {
+    method: "POST",
     body: JSON.stringify(req),
   });
 }

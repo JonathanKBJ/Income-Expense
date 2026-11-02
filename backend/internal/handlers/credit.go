@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"expense-tracker/internal/middleware"
 	"expense-tracker/internal/models"
 	"expense-tracker/internal/repository"
@@ -585,11 +586,62 @@ func (h *CreditHandler) UpdateInstallment(w http.ResponseWriter, r *http.Request
 
 	if err := h.creditRepo.UpdateInstallment(r.Context(), iid, id, req); err != nil {
 		log.Printf("ERROR: UpdateInstallment: %v", err)
+		if writeInstallmentMutationError(w, err) {
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "failed to update installment")
 		return
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "installment updated successfully"})
+}
+
+// SettleInstallmentEarly closes future obligations after a separately recorded payment.
+func (h *CreditHandler) SettleInstallmentEarly(w http.ResponseWriter, r *http.Request) {
+	groupID := middleware.GetGroupID(r.Context())
+	userID := middleware.GetUserID(r.Context())
+	id := chi.URLParam(r, "id")
+	iid := chi.URLParam(r, "iid")
+	if groupID == "" || userID == "" {
+		writeError(w, http.StatusForbidden, "group identification required")
+		return
+	}
+	scopedUser := h.getScopedUserID(r.Context(), groupID, userID)
+	acc, err := h.creditRepo.GetAccountByID(r.Context(), id, groupID, scopedUser)
+	if err != nil || acc == nil {
+		writeError(w, http.StatusNotFound, "credit account not found")
+		return
+	}
+	var req models.SettleCreditInstallmentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	req.Note = strings.TrimSpace(req.Note)
+	if err := h.creditRepo.SettleInstallmentEarly(r.Context(), iid, id, req); err != nil {
+		if !writeInstallmentMutationError(w, err) {
+			log.Printf("ERROR: SettleInstallmentEarly: %v", err)
+			writeError(w, http.StatusInternalServerError, "failed to settle installment")
+		}
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"message": "installment settled early successfully"})
+}
+
+func writeInstallmentMutationError(w http.ResponseWriter, err error) bool {
+	switch {
+	case errors.Is(err, repository.ErrInstallmentNotFound):
+		writeError(w, http.StatusNotFound, repository.ErrInstallmentNotFound.Error())
+	case errors.Is(err, repository.ErrInvalidSettlementDate):
+		writeError(w, http.StatusBadRequest, repository.ErrInvalidSettlementDate.Error())
+	case errors.Is(err, repository.ErrInstallmentSettledEarly):
+		writeError(w, http.StatusConflict, repository.ErrInstallmentSettledEarly.Error())
+	case errors.Is(err, repository.ErrInstallmentNotActive):
+		writeError(w, http.StatusConflict, repository.ErrInstallmentNotActive.Error())
+	default:
+		return false
+	}
+	return true
 }
 
 // DeleteInstallment handles DELETE /api/credit-accounts/{id}/installments/{iid}
@@ -611,6 +663,9 @@ func (h *CreditHandler) DeleteInstallment(w http.ResponseWriter, r *http.Request
 
 	if err := h.creditRepo.DeleteInstallment(r.Context(), iid, id); err != nil {
 		log.Printf("ERROR: DeleteInstallment: %v", err)
+		if writeInstallmentMutationError(w, err) {
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "failed to delete installment")
 		return
 	}
@@ -668,6 +723,9 @@ func (h *CreditHandler) AddTransaction(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.creditRepo.AddTransaction(r.Context(), &tx, id); err != nil {
 		log.Printf("ERROR: AddTransaction: %v", err)
+		if writeInstallmentMutationError(w, err) {
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "failed to record transaction")
 		return
 	}
@@ -700,6 +758,9 @@ func (h *CreditHandler) DeleteTransaction(w http.ResponseWriter, r *http.Request
 
 	if err := h.creditRepo.DeleteTransaction(r.Context(), tid, id); err != nil {
 		log.Printf("ERROR: DeleteTransaction: %v", err)
+		if writeInstallmentMutationError(w, err) {
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "failed to delete transaction")
 		return
 	}

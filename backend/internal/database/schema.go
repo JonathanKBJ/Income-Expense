@@ -276,6 +276,8 @@ CREATE TABLE IF NOT EXISTS credit_installments (
     end_date       TEXT,
     status         TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'COMPLETED')),
     notes          TEXT DEFAULT '',
+    early_settlement_date TEXT,
+    early_settlement_note TEXT NOT NULL DEFAULT '',
     created_at     TEXT NOT NULL,
     updated_at     TEXT NOT NULL,
     FOREIGN KEY (account_id) REFERENCES credit_accounts(id) ON DELETE CASCADE
@@ -497,6 +499,22 @@ func (d *DB) Migrate() error {
 	}
 	for _, sql := range creditInstAlterations {
 		_, _ = d.ExecContext(ctx, sql)
+	}
+
+	// Settlement metadata must be available before serving any credit queries.
+	for _, column := range []struct{ name, kind string }{
+		{"early_settlement_date", "TEXT"},
+		{"early_settlement_note", "TEXT NOT NULL DEFAULT ''"},
+	} {
+		var exists int
+		if err := d.QueryRowContext(ctx, "SELECT count(*) FROM pragma_table_info('credit_installments') WHERE name = ?", column.name).Scan(&exists); err != nil {
+			return fmt.Errorf("failed to inspect installment column %s: %w", column.name, err)
+		}
+		if exists == 0 {
+			if _, err := d.ExecContext(ctx, "ALTER TABLE credit_installments ADD COLUMN "+column.name+" "+column.kind); err != nil {
+				return fmt.Errorf("failed to add installment column %s: %w", column.name, err)
+			}
+		}
 	}
 
 	// Alterations for credit_accounts calculation modes

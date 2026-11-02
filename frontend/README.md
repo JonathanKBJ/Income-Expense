@@ -85,3 +85,13 @@ The API accepts nullable `statementDate`, `statementBalance`, `statementMinimumD
 When rebuilding an account from a statement, back up its card ledger, installment plans, and linked dashboard bills first. Represent the opening balance once and import each statement transaction once; the signed ledger total must equal the closing balance. Do not also add the closing balance as another charge. Refunds currently use `PAYMENT`/`CUSTOM`; label them explicitly rather than treating them as cash transfers. Review dates and amounts on linked pending dashboard bills, and do not remove unrelated paid financial history.
 
 Statement cutoffs and payment-day comparisons use the Bangkok calendar (`UTC+7`). Marking a linked dashboard bill paid records the credit payment on the actual payment day, independently of that bill's scheduled due date. This allows early payments to settle the current minimum without treating genuinely future-dated card payments as already paid.
+
+## Early installment settlement
+
+In an active installment's actions, choose **Settle early**, select the actual closure date, and optionally record a note. Record the real bank payment separately first: settlement does not create another payment, adjust the account's current balance, or close the credit account.
+
+Settlement retains the original contract amounts, schedule dates, notes, actual paid-term count, and transaction history. It sets the plan to `COMPLETED`, clears its remaining balance, and records `earlySettlementDate` and `earlySettlementNote`. The plan no longer reserves future credit or contributes future installment dues; closed-early rows remain visible without presenting the unpaid terms as payments made. This is a permanent, read-only state, including linked historical ledger entries.
+
+The API is `POST /api/credit-accounts/{accountId}/installments/{installmentId}/settle-early` with `{ "settlementDate": "YYYY-MM-DD", "note": "optional" }`. It requires the existing editor/group/account permissions and an active plan with unpaid terms. The date must be a valid calendar date no later than today in Bangkok. It may precede the first scheduled installment: the plan's start date is not proof of when funds were disbursed. Invalid dates return 400, missing or inaccessible plans return 404, and repeated settlement or mutations of an early-settled plan return 409.
+
+Already-created Dashboard bills are account-level aggregates, not individual-plan records. Review them separately; settlement never deletes or rewrites them automatically. Existing payment receipts and unrelated active plans are preserved. The backend migration adds nullable settlement-date and default-empty settlement-note columns to existing installment records; deploy the backend before the frontend.

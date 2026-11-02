@@ -48,6 +48,8 @@ export interface CreditInstallment {
   startDate: string;
   endDate?: string | null;
   status: InstallmentStatus;
+  earlySettlementDate?: string | null;
+  earlySettlementNote?: string;
   notes: string;
   createdAt: string;
   updatedAt: string;
@@ -167,6 +169,11 @@ export interface UpdateCreditInstallmentRequest {
   endDate?: string;
   status?: InstallmentStatus;
   notes?: string;
+}
+
+export interface SettleInstallmentEarlyRequest {
+  settlementDate: string;
+  note?: string;
 }
 
 export interface CreateCreditTxRequest {

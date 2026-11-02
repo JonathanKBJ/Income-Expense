@@ -3,12 +3,22 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"expense-tracker/internal/models"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+var (
+	ErrInstallmentNotFound     = errors.New("installment not found")
+	ErrInstallmentSettledEarly = errors.New("early-settled installment is read-only")
+	ErrInstallmentNotActive    = errors.New("installment must be active with unpaid terms")
+	ErrInvalidSettlementDate   = errors.New("settlement date must be a real YYYY-MM-DD date no later than today in Bangkok")
+)
+
+var installmentBillingLocation = time.FixedZone("Asia/Bangkok", 7*60*60)
 
 type CreditRepository struct {
 	db *sql.DB
@@ -273,7 +283,8 @@ func (r *CreditRepository) AddInstallment(ctx context.Context, inst *models.Cred
 // ListInstallments returns all installment plans for an account.
 func (r *CreditRepository) ListInstallments(ctx context.Context, accountID string) ([]models.CreditInstallment, error) {
 	query := `SELECT id, account_id, item_name, total_amount, monthly_amount, total_terms, paid_terms,
-		interest_rate, interest_type, remaining_balance, start_date, end_date, status, notes, created_at, updated_at
+		interest_rate, interest_type, remaining_balance, start_date, end_date, status, notes,
+		early_settlement_date, early_settlement_note, created_at, updated_at
 		FROM credit_installments WHERE account_id = ? ORDER BY created_at DESC`
 
 	rows, err := r.db.QueryContext(ctx, query, accountID)
@@ -290,6 +301,7 @@ func (r *CreditRepository) ListInstallments(ctx context.Context, accountID strin
 			&item.ID, &item.AccountID, &item.ItemName, &item.TotalAmount, &item.MonthlyAmount,
 			&item.TotalTerms, &item.PaidTerms, &item.InterestRate, &item.InterestType, &item.RemainingBalance,
 			&item.StartDate, &item.EndDate, &item.Status, &item.Notes,
+			&item.EarlySettlementDate, &item.EarlySettlementNote,
 			&cAt, &uAt,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan installment: %w", err)
@@ -315,7 +327,8 @@ func (r *CreditRepository) ListInstallmentsByAccountIDs(ctx context.Context, acc
 	}
 
 	query := `SELECT id, account_id, item_name, total_amount, monthly_amount, total_terms, paid_terms,
-		interest_rate, interest_type, remaining_balance, start_date, end_date, status, notes, created_at, updated_at
+		interest_rate, interest_type, remaining_balance, start_date, end_date, status, notes,
+		early_settlement_date, early_settlement_note, created_at, updated_at
 		FROM credit_installments WHERE account_id IN (` + placeholders(len(accountIDs)) + `)
 		ORDER BY created_at DESC`
 
@@ -337,6 +350,7 @@ func (r *CreditRepository) ListInstallmentsByAccountIDs(ctx context.Context, acc
 			&item.ID, &item.AccountID, &item.ItemName, &item.TotalAmount, &item.MonthlyAmount,
 			&item.TotalTerms, &item.PaidTerms, &item.InterestRate, &item.InterestType, &item.RemainingBalance,
 			&item.StartDate, &item.EndDate, &item.Status, &item.Notes,
+			&item.EarlySettlementDate, &item.EarlySettlementNote,
 			&cAt, &uAt,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan installment: %w", err)
@@ -399,7 +413,7 @@ func (r *CreditRepository) UpdateInstallment(ctx context.Context, id, accountID 
 		args = append(args, *req.Notes)
 	}
 
-	query += " WHERE id = ? AND account_id = ?"
+	query += " WHERE id = ? AND account_id = ? AND early_settlement_date IS NULL"
 	args = append(args, id, accountID)
 
 	res, err := r.db.ExecContext(ctx, query, args...)
@@ -408,22 +422,116 @@ func (r *CreditRepository) UpdateInstallment(ctx context.Context, id, accountID 
 	}
 	rows, _ := res.RowsAffected()
 	if rows == 0 {
-		return fmt.Errorf("installment not found")
+		return r.installmentMutationError(ctx, id, accountID)
 	}
 	return nil
 }
 
 // DeleteInstallment deletes an installment plan.
 func (r *CreditRepository) DeleteInstallment(ctx context.Context, id, accountID string) error {
-	res, err := r.db.ExecContext(ctx, `DELETE FROM credit_installments WHERE id = ? AND account_id = ?`, id, accountID)
+	res, err := r.db.ExecContext(ctx, `DELETE FROM credit_installments WHERE id = ? AND account_id = ? AND early_settlement_date IS NULL`, id, accountID)
 	if err != nil {
 		return fmt.Errorf("failed to delete installment: %w", err)
 	}
 	rows, _ := res.RowsAffected()
 	if rows == 0 {
-		return fmt.Errorf("installment not found")
+		return r.installmentMutationError(ctx, id, accountID)
 	}
 	return nil
+}
+
+// installmentMutationError classifies a failed conditional write without mutating history.
+func (r *CreditRepository) installmentMutationError(ctx context.Context, id, accountID string) error {
+	var settled sql.NullString
+	err := r.db.QueryRowContext(ctx, `SELECT early_settlement_date FROM credit_installments WHERE id = ? AND account_id = ?`, id, accountID).Scan(&settled)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrInstallmentNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("failed to inspect installment: %w", err)
+	}
+	if settled.Valid {
+		return ErrInstallmentSettledEarly
+	}
+	return ErrInstallmentNotActive
+}
+
+func validateEarlySettlementDate(date string, now time.Time) error {
+	settlement, err := time.Parse("2006-01-02", date)
+	if err != nil || settlement.Format("2006-01-02") != date || date > now.In(installmentBillingLocation).Format("2006-01-02") {
+		return ErrInvalidSettlementDate
+	}
+	return nil
+}
+
+// SettleInstallmentEarly releases future plan obligations only. The caller must
+// record the real payment separately; no ledger or account balance is changed.
+func (r *CreditRepository) SettleInstallmentEarly(ctx context.Context, id, accountID string, req models.SettleCreditInstallmentRequest) error {
+	var status models.InstallmentStatus
+	var paidTerms, totalTerms int
+	var settled sql.NullString
+	err := r.db.QueryRowContext(ctx, `SELECT status, paid_terms, total_terms, early_settlement_date
+		FROM credit_installments WHERE id = ? AND account_id = ?`, id, accountID).
+		Scan(&status, &paidTerms, &totalTerms, &settled)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrInstallmentNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("failed to find installment: %w", err)
+	}
+	if settled.Valid {
+		return ErrInstallmentSettledEarly
+	}
+	if status != models.InstallmentStatusActive || paidTerms >= totalTerms {
+		return ErrInstallmentNotActive
+	}
+	now := time.Now()
+	if err := validateEarlySettlementDate(req.SettlementDate, now); err != nil {
+		return err
+	}
+	res, err := r.db.ExecContext(ctx, `UPDATE credit_installments
+		SET status = 'COMPLETED', remaining_balance = 0, early_settlement_date = ?, early_settlement_note = ?, updated_at = ?
+		WHERE id = ? AND account_id = ? AND status = 'ACTIVE' AND paid_terms < total_terms
+		  AND early_settlement_date IS NULL`,
+		req.SettlementDate, req.Note, now.UTC().Format(time.RFC3339), id, accountID)
+	if err != nil {
+		return fmt.Errorf("failed to settle installment: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to inspect installment settlement: %w", err)
+	}
+	if rows == 0 {
+		return r.installmentMutationError(ctx, id, accountID)
+	}
+	return nil
+}
+
+// lockUnsettledInstallment is a conditional write inside the ledger transaction,
+// so settlement cannot race a stale cron charge, payment, or historical deletion.
+func lockUnsettledInstallment(ctx context.Context, tx *sql.Tx, id, accountID string) error {
+	res, err := tx.ExecContext(ctx, `UPDATE credit_installments SET updated_at = updated_at
+		WHERE id = ? AND account_id = ? AND early_settlement_date IS NULL`, id, accountID)
+	if err != nil {
+		return fmt.Errorf("failed to guard installment history: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to inspect installment guard: %w", err)
+	}
+	if rows > 0 {
+		return nil
+	}
+	var settled sql.NullString
+	err = tx.QueryRowContext(ctx, `SELECT early_settlement_date FROM credit_installments WHERE id = ? AND account_id = ?`, id, accountID).Scan(&settled)
+	if errors.Is(err, sql.ErrNoRows) {
+		// Preserve existing behavior for legacy missing links; only settlement freezes history.
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("failed to inspect installment history: %w", err)
+	}
+	return ErrInstallmentSettledEarly
 }
 
 // --- Transactions & Balance Handling ---
@@ -442,6 +550,12 @@ func (r *CreditRepository) AddTransaction(ctx context.Context, tx *models.Credit
 		return fmt.Errorf("failed to begin db tx: %w", err)
 	}
 	defer dbTx.Rollback()
+
+	if tx.InstallmentID != nil && *tx.InstallmentID != "" {
+		if err := lockUnsettledInstallment(ctx, dbTx, *tx.InstallmentID, accountID); err != nil {
+			return err
+		}
+	}
 
 	// Guard against rapid duplicate submission (e.g. double click within 3 seconds)
 	var dupID string
@@ -573,11 +687,18 @@ func (r *CreditRepository) ListTransactionsByAccountIDs(ctx context.Context, acc
 
 // DeleteTransaction deletes a transaction and reverses its balance impact.
 func (r *CreditRepository) DeleteTransaction(ctx context.Context, id, accountID string) error {
-	// First get the transaction to know type and amount
+	now := time.Now().UTC().Format(time.RFC3339)
+	dbTx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin db tx: %w", err)
+	}
+	defer dbTx.Rollback()
+
+	// Read and guard history in the same transaction as its balance reversal.
 	var txType models.CreditTxType
 	var amount float64
 	var instID sql.NullString
-	err := r.db.QueryRowContext(ctx, `SELECT type, amount, installment_id FROM credit_transactions WHERE id = ? AND account_id = ?`, id, accountID).Scan(&txType, &amount, &instID)
+	err = dbTx.QueryRowContext(ctx, `SELECT type, amount, installment_id FROM credit_transactions WHERE id = ? AND account_id = ?`, id, accountID).Scan(&txType, &amount, &instID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return fmt.Errorf("transaction not found")
@@ -585,12 +706,11 @@ func (r *CreditRepository) DeleteTransaction(ctx context.Context, id, accountID 
 		return fmt.Errorf("failed to find transaction: %w", err)
 	}
 
-	now := time.Now().UTC().Format(time.RFC3339)
-	dbTx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("failed to begin db tx: %w", err)
+	if instID.Valid && instID.String != "" {
+		if err := lockUnsettledInstallment(ctx, dbTx, instID.String, accountID); err != nil {
+			return err
+		}
 	}
-	defer dbTx.Rollback()
 
 	// Reverse balance impact
 	if txType == models.CreditTxCharge {
@@ -604,13 +724,16 @@ func (r *CreditRepository) DeleteTransaction(ctx context.Context, id, accountID 
 
 	// Reverse installment term if was payment linked to installment
 	if txType == models.CreditTxPayment && instID.Valid && instID.String != "" {
-		_, _ = dbTx.ExecContext(ctx, `
+		_, err = dbTx.ExecContext(ctx, `
 			UPDATE credit_installments
 			SET paid_terms = MAX(0, paid_terms - 1),
 			    status = 'ACTIVE',
 			    updated_at = ?
 			WHERE id = ? AND account_id = ?
 		`, now, instID.String, accountID)
+		if err != nil {
+			return fmt.Errorf("failed to reverse installment term: %w", err)
+		}
 	}
 
 	// Delete row

@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Button, Table, Tag, Modal, Input, InputNumber, DatePicker, Select,
-  Progress, Card, Statistic, Row, Col, App, Popconfirm, Upload, Image, Empty, Tabs, Space,
+  Progress, Card, Statistic, Row, Col, App, Popconfirm, Upload, Image, Empty, Tabs, Space, Alert,
 } from "antd";
 import {
   PlusOutlined, DeleteOutlined, PictureOutlined, EditOutlined,
@@ -26,6 +26,10 @@ import { useLanguage } from "../contexts/LanguageContext";
 import { useTheme } from "../contexts/ThemeContext";
 
 const MOBILE_BP = 768;
+
+function bangkokToday() {
+  return dayjs(new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Bangkok" }).format(new Date()));
+}
 
 function formatMoney(n?: number | null): string {
   if (n === undefined || n === null || isNaN(n)) return "0.00";
@@ -209,6 +213,12 @@ export default function CreditTracker() {
   const [editingInstallmentId, setEditingInstallmentId] = useState<string | null>(null);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [scheduleInstallment, setScheduleInstallment] = useState<CreditInstallment | null>(null);
+  const [settlementPlan, setSettlementPlan] = useState<CreditInstallment | null>(null);
+  const [settlementDate, setSettlementDate] = useState<dayjs.Dayjs | null>(null);
+  const [settlementNote, setSettlementNote] = useState("");
+  const [settlementError, setSettlementError] = useState("");
+  const [settling, setSettling] = useState(false);
+  const settlementInFlight = useRef(false);
 
   const [showTxModal, setShowTxModal] = useState(false);
 
@@ -479,6 +489,7 @@ export default function CreditTracker() {
   }
 
   function openEditInstallmentModal(inst: CreditInstallment) {
+    if (inst.earlySettlementDate) return;
     setEditingInstallmentId(inst.id);
     setInstItemName(inst.itemName);
     setInstTotalAmount(inst.totalAmount);
@@ -494,13 +505,49 @@ export default function CreditTracker() {
     setShowInstallmentModal(true);
   }
   function openScheduleModal(inst: CreditInstallment) {
+    if (inst.earlySettlementDate) return;
     setScheduleInstallment(inst);
     setShowScheduleModal(true);
+  }
+
+  function openSettlementModal(inst: CreditInstallment) {
+    if (inst.status !== "ACTIVE" || inst.paidTerms >= inst.totalTerms || inst.earlySettlementDate) return;
+    setSettlementPlan(inst);
+    setSettlementDate(bangkokToday());
+    setSettlementNote("");
+    setSettlementError("");
+  }
+
+  async function handleSettleEarly() {
+    if (!settlementPlan || settlementInFlight.current) return;
+    if (!settlementDate?.isValid()
+      || settlementDate.isAfter(bangkokToday(), "day")) {
+      setSettlementError(t.creditPage.settlementInvalidDate);
+      return;
+    }
+    settlementInFlight.current = true;
+    setSettling(true);
+    setSettlementError("");
+    try {
+      await api.settleInstallmentEarly(settlementPlan.accountId, settlementPlan.id, {
+        settlementDate: settlementDate.format("YYYY-MM-DD"),
+        note: settlementNote.trim(),
+      });
+      setSettlementPlan(null);
+      message.success(t.creditPage.settlementSuccess);
+      await fetchAccounts();
+    } catch (e: unknown) {
+      setSettlementError(getErrorMessage(e) || t.creditPage.settlementFailed);
+    } finally {
+      settlementInFlight.current = false;
+      setSettling(false);
+    }
   }
 
 
   async function handleSaveInstallment() {
     if (!selectedAccount) return;
+    if (editingInstallmentId && selectedAccount.installments.find((i) => i.id === editingInstallmentId)?.earlySettlementDate) return;
     if (!instItemName.trim() || instTotalAmount <= 0 || instMonthlyAmount <= 0 || savingInstallment) {
       if (!instItemName.trim()) message.warning(t.creditPage.itemName);
       return;
@@ -538,7 +585,7 @@ export default function CreditTracker() {
   }
 
   async function handleAdvanceTerm(inst: CreditInstallment) {
-    if (!selectedAccount || advancingInstId) return;
+    if (!selectedAccount || advancingInstId || inst.earlySettlementDate || inst.status !== "ACTIVE" || inst.paidTerms >= inst.totalTerms) return;
     setAdvancingInstId(inst.id);
     try {
       const nextPaid = Math.min(inst.totalTerms, inst.paidTerms + 1);
@@ -574,7 +621,7 @@ export default function CreditTracker() {
   }
 
   function openChargeInstallmentModal(inst: CreditInstallment) {
-    if (!selectedAccount) return;
+    if (!selectedAccount || inst.earlySettlementDate || inst.status !== "ACTIVE" || inst.paidTerms >= inst.totalTerms) return;
     setTxType("CHARGE");
     setTxPaymentOption("CUSTOM");
     setTxAmount(inst.monthlyAmount);
@@ -651,6 +698,10 @@ export default function CreditTracker() {
 
   async function handleSaveTransaction() {
     if (!selectedAccount || savingTx) return;
+    if (txInstallmentId && selectedAccount.installments.some((i) => i.id === txInstallmentId && i.earlySettlementDate)) {
+      message.error(t.creditPage.settlementIrreversible);
+      return;
+    }
     if (txAmount <= 0) {
       message.warning(t.common.amount);
       return;
@@ -680,6 +731,8 @@ export default function CreditTracker() {
 
   async function handleDeleteTx(txId: string) {
     if (!selectedAccount) return;
+    const linkedPlanId = selectedAccount.transactions.find((tx) => tx.id === txId)?.installmentId;
+    if (linkedPlanId && selectedAccount.installments.some((i) => i.id === linkedPlanId && i.earlySettlementDate)) return;
     try {
       await api.deleteCreditTransaction(selectedAccount.id, txId);
       message.success(t.creditPage.deleted);
@@ -1085,6 +1138,13 @@ export default function CreditTracker() {
                             <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 2 }}>
                               เริ่ม {record.startDate}{record.endDate ? ` → สิ้นสุด ${record.endDate}` : ""} {record.notes ? `• ${record.notes}` : ""}
                             </div>
+                            {record.earlySettlementDate && (
+                              <div style={{ fontSize: 12, marginTop: 6, overflowWrap: "anywhere" }}>
+                                <Tag color="cyan">{t.creditPage.earlySettled}</Tag>
+                                <span>{t.creditPage.settlementDate}: {record.earlySettlementDate}</span>
+                                {record.earlySettlementNote && <div>{record.earlySettlementNote}</div>}
+                              </div>
+                            )}
                           </div>
                         ),
                        },
@@ -1092,7 +1152,7 @@ export default function CreditTracker() {
                         title: "ยอดรวม / คงค้าง",
                         key: "amounts",
                         render: (_, record) => {
-                          if (record.interestType === "RECURRING") {
+                          if (record.interestType === "RECURRING" && !record.earlySettlementDate) {
                             return (
                               <div>
                                 <div style={{ color: isDark ? "#c084fc" : "#7c3aed", fontWeight: 500 }}>฿{formatMoney(record.monthlyAmount)} / เดือน</div>
@@ -1102,7 +1162,7 @@ export default function CreditTracker() {
                               </div>
                             );
                           }
-                          const rem = record.remainingBalance && record.remainingBalance > 0
+                          const rem = record.earlySettlementDate ? 0 : record.remainingBalance && record.remainingBalance > 0
                             ? record.remainingBalance
                             : Math.max(0, record.totalAmount - record.paidTerms * record.monthlyAmount);
                           return (
@@ -1119,7 +1179,7 @@ export default function CreditTracker() {
                         title: "ค่างวดรอบนี้",
                         dataIndex: "monthlyAmount",
                         key: "monthlyAmount",
-                        render: (amt) => <span style={{ color: isDark ? "#f59e0b" : "#d97706", fontWeight: 600 }}>฿{formatMoney(amt)}</span>,
+                        render: (amt, record) => <span style={{ color: isDark ? "#f59e0b" : "#d97706", fontWeight: 600 }}>฿{formatMoney(record.earlySettlementDate ? 0 : amt)}</span>,
                       },
                       {
                         title: t.creditPage.termsProgress,
@@ -1131,12 +1191,12 @@ export default function CreditTracker() {
                             <div>
                               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--text-secondary)" }}>
                                 <span>{record.paidTerms} / {record.totalTerms} งวด</span>
-                                {record.status === "COMPLETED" && <Tag color="success">COMPLETED</Tag>}
+                                {record.status === "COMPLETED" && !record.earlySettlementDate && <Tag color="success">COMPLETED</Tag>}
                               </div>
                               <Progress
                                 percent={pct}
                                 size="small"
-                                status={record.status === "COMPLETED" ? "success" : "active"}
+                                status={record.earlySettlementDate ? "normal" : record.status === "COMPLETED" ? "success" : "active"}
                                 trailColor={isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.06)"}
                               />
                             </div>
@@ -1148,6 +1208,7 @@ export default function CreditTracker() {
                         key: "actions",
                         width: isMobile ? 200 : 340,
                         render: (_, record) => {
+                          if (record.earlySettlementDate) return null;
                           const isCharged = isInstallmentChargedThisCycle(record);
                           return (
                             <Space wrap size="small">
@@ -1160,7 +1221,7 @@ export default function CreditTracker() {
                                   ตารางผ่อน
                                 </Button>
                               )}
-                              {record.status !== "COMPLETED" && (
+                              {record.status === "ACTIVE" && record.paidTerms < record.totalTerms && (
                                 <>
                                   {isCharged ? (
                                     <Button
@@ -1189,6 +1250,9 @@ export default function CreditTracker() {
                                     onClick={() => handleAdvanceTerm(record)}
                                   >
                                     {t.creditPage.advanceTerm}
+                                  </Button>
+                                  <Button size="small" onClick={() => openSettlementModal(record)}>
+                                    {t.creditPage.settleEarly}
                                   </Button>
                                 </>
                               )}
@@ -1291,7 +1355,7 @@ export default function CreditTracker() {
                         title: t.common.actions,
                         key: "actions",
                         width: 60,
-                        render: (_, record) => (
+                        render: (_, record) => record.installmentId && account.installments.some((i) => i.id === record.installmentId && i.earlySettlementDate) ? null : (
                           <Popconfirm
                             title={t.creditPage.deleteTransactionConfirm}
                             onConfirm={() => handleDeleteTx(record.id)}
@@ -1747,6 +1811,52 @@ export default function CreditTracker() {
             />
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        title={t.creditPage.settleEarly}
+        open={!!settlementPlan}
+        onOk={handleSettleEarly}
+        onCancel={() => { if (!settlementInFlight.current) setSettlementPlan(null); }}
+        okText={t.creditPage.settleEarly}
+        cancelText={t.common.cancel}
+        confirmLoading={settling}
+        okButtonProps={{ disabled: settling || !settlementDate }}
+        cancelButtonProps={{ disabled: settling }}
+        closable={!settling}
+        maskClosable={!settling}
+        keyboard={!settling}
+        width={560}
+      >
+        {settlementPlan && (
+          <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+            <div>
+              <strong>{settlementPlan.itemName}</strong>
+              <div>{t.creditPage.paidTerms}: {settlementPlan.paidTerms} / {settlementPlan.totalTerms}</div>
+            </div>
+            <Alert type="warning" showIcon title={t.creditPage.settlementWarning} />
+            <Alert type="info" showIcon title={t.creditPage.settlementBillsNotice} />
+            <div>{t.creditPage.settlementIrreversible}</div>
+            <div>
+              <label htmlFor="early-settlement-date" style={{ display: "block", marginBottom: 4 }}>{t.creditPage.settlementDate} *</label>
+              <DatePicker
+                id="early-settlement-date"
+                value={settlementDate}
+                onChange={(date) => { setSettlementDate(date); setSettlementError(""); }}
+                format="YYYY-MM-DD"
+                disabled={settling}
+                inputReadOnly
+                disabledDate={(date) => date.isAfter(bangkokToday(), "day")}
+                style={{ width: "100%" }}
+              />
+            </div>
+            <div>
+              <label htmlFor="early-settlement-note" style={{ display: "block", marginBottom: 4 }}>{t.creditPage.settlementNote}</label>
+              <Input.TextArea id="early-settlement-note" value={settlementNote} onChange={(e) => setSettlementNote(e.target.value)} disabled={settling} rows={3} />
+            </div>
+            {settlementError && <div role="alert"><Alert type="error" showIcon title={settlementError} /></div>}
+          </Space>
+        )}
       </Modal>
 
       {/* Modal: Add Installment */}

@@ -283,6 +283,16 @@ export interface TranslationKeys {
     paidTerms: string;
     termsProgress: string;
     advanceTerm: string;
+    settleEarly: string;
+    earlySettled: string;
+    settlementDate: string;
+    settlementNote: string;
+    settlementWarning: string;
+    settlementBillsNotice: string;
+    settlementIrreversible: string;
+    settlementInvalidDate: string;
+    settlementSuccess: string;
+    settlementFailed: string;
     billInstallment: string;
     billedThisCycle: string;
     transactions: string;
@@ -651,6 +661,16 @@ export const translations: Record<Language, TranslationKeys> = {
       paidTerms: "Paid Terms",
       termsProgress: "Terms Progress",
       advanceTerm: "Pay 1 Term",
+      settleEarly: "Settle early",
+      earlySettled: "Settled early",
+      settlementDate: "Settlement date",
+      settlementNote: "Settlement note (optional)",
+      settlementWarning: "PAYMENT ALREADY RECORDED: Record the actual payment separately before continuing. This action does not create a payment or reduce the account balance. It only stops future installments and releases this plan's reserved credit.",
+      settlementBillsNotice: "Review existing pending Dashboard bills separately. They are account-level bills and will not be automatically deleted or adjusted.",
+      settlementIrreversible: "This closes the plan permanently. The original terms, amounts and payment history are retained; the plan cannot be edited or reopened.",
+      settlementInvalidDate: "Choose a valid date no later than today (Bangkok).",
+      settlementSuccess: "Installment plan settled early",
+      settlementFailed: "Unable to settle this plan. Review the details and try again.",
       billInstallment: "Post to Statement",
       billedThisCycle: "Billed This Cycle",
       transactions: "Transactions & Payments",
@@ -1020,6 +1040,16 @@ export const translations: Record<Language, TranslationKeys> = {
       paidTerms: "งวดที่จ่ายแล้ว",
       termsProgress: "ความคืบหน้างวด",
       advanceTerm: "บันทึกจ่าย 1 งวด",
+      settleEarly: "ปิดแผนก่อนกำหนด",
+      earlySettled: "ปิดแผนก่อนกำหนดแล้ว",
+      settlementDate: "วันที่ปิดแผน",
+      settlementNote: "หมายเหตุการปิดแผน (ไม่บังคับ)",
+      settlementWarning: "ต้องบันทึกการชำระเงินจริงแล้ว: กรุณาบันทึกการชำระเงินแยกต่างหากก่อนดำเนินการ การปิดแผนนี้ไม่สร้างรายการชำระเงินและไม่ลดยอดหนี้ปัจจุบันของบัญชี แต่จะหยุดงวดในอนาคตและคืนวงเงินที่แผนนี้กันไว้เท่านั้น",
+      settlementBillsNotice: "กรุณาตรวจสอบบิลค้างชำระที่สร้างไว้ใน Dashboard แยกต่างหาก บิลเหล่านี้เป็นยอดรวมระดับบัญชีและจะไม่ถูกลบหรือปรับยอดอัตโนมัติ",
+      settlementIrreversible: "การปิดแผนมีผลถาวร ไม่สามารถแก้ไขหรือเปิดแผนใหม่ได้ จำนวนงวด ยอดเงิน และประวัติการชำระเดิมจะยังคงอยู่",
+      settlementInvalidDate: "เลือกวันที่ที่ถูกต้องและไม่เกินวันนี้ (เวลาประเทศไทย)",
+      settlementSuccess: "ปิดแผนก่อนกำหนดเรียบร้อยแล้ว",
+      settlementFailed: "ปิดแผนไม่สำเร็จ กรุณาตรวจสอบข้อมูลแล้วลองอีกครั้ง",
       billInstallment: "ลงยอดหนี้งวดนี้",
       billedThisCycle: "ลงยอดหนี้แล้ว",
       transactions: "รายการใช้จ่าย & การชำระเงิน",

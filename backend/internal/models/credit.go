@@ -82,22 +82,24 @@ type CreditAccount struct {
 
 // CreditInstallment represents a fixed term installment plan under a credit account.
 type CreditInstallment struct {
-	ID               string            `json:"id"`
-	AccountID        string            `json:"accountId"`
-	ItemName         string            `json:"itemName"`
-	TotalAmount      float64           `json:"totalAmount"`
-	MonthlyAmount    float64           `json:"monthlyAmount"`
-	TotalTerms       int               `json:"totalTerms"`
-	PaidTerms        int               `json:"paidTerms"`
-	InterestRate     float64           `json:"interestRate"`
-	InterestType     string            `json:"interestType"`
-	RemainingBalance float64           `json:"remainingBalance"`
-	StartDate        string            `json:"startDate"`
-	EndDate          *string           `json:"endDate,omitempty"`
-	Status           InstallmentStatus `json:"status"`
-	Notes            string            `json:"notes"`
-	CreatedAt        time.Time         `json:"createdAt"`
-	UpdatedAt        time.Time         `json:"updatedAt"`
+	ID                  string            `json:"id"`
+	AccountID           string            `json:"accountId"`
+	ItemName            string            `json:"itemName"`
+	TotalAmount         float64           `json:"totalAmount"`
+	MonthlyAmount       float64           `json:"monthlyAmount"`
+	TotalTerms          int               `json:"totalTerms"`
+	PaidTerms           int               `json:"paidTerms"`
+	InterestRate        float64           `json:"interestRate"`
+	InterestType        string            `json:"interestType"`
+	RemainingBalance    float64           `json:"remainingBalance"`
+	StartDate           string            `json:"startDate"`
+	EndDate             *string           `json:"endDate,omitempty"`
+	Status              InstallmentStatus `json:"status"`
+	Notes               string            `json:"notes"`
+	EarlySettlementDate *string           `json:"earlySettlementDate"`
+	EarlySettlementNote string            `json:"earlySettlementNote"`
+	CreatedAt           time.Time         `json:"createdAt"`
+	UpdatedAt           time.Time         `json:"updatedAt"`
 }
 
 // CreditTransaction records an expenditure or payment.
@@ -215,6 +217,11 @@ type UpdateCreditInstallmentRequest struct {
 	EndDate          *string            `json:"endDate,omitempty"`
 	Status           *InstallmentStatus `json:"status,omitempty"`
 	Notes            *string            `json:"notes,omitempty"`
+}
+
+type SettleCreditInstallmentRequest struct {
+	SettlementDate string `json:"settlementDate"`
+	Note           string `json:"note,omitempty"`
 }
 
 type CreateCreditTxRequest struct {

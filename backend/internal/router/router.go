@@ -28,10 +28,10 @@ func New(
 	r := chi.NewRouter()
 
 	// --- Global Middleware ---
-	r.Use(chimiddleware.Logger)       // Log every request
-	r.Use(chimiddleware.Recoverer)    // Recover from panics
-	r.Use(chimiddleware.RequestID)    // Inject request ID
-	r.Use(chimiddleware.RealIP)       // Get real client IP
+	r.Use(chimiddleware.Logger)               // Log every request
+	r.Use(chimiddleware.Recoverer)            // Recover from panics
+	r.Use(chimiddleware.RequestID)            // Inject request ID
+	r.Use(chimiddleware.RealIP)               // Get real client IP
 	r.Use(chimiddleware.Heartbeat("/health")) // Health check endpoint
 
 	// CORS configuration for React frontend
@@ -83,7 +83,7 @@ func New(
 				// Write: EDITOR+
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Post("/", txHandler.CreateTransaction)
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Post("/batch", txHandler.CreateTransactionsBatch)
-					r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Post("/batch-to-group", txHandler.CreateTransactionsBatchToGroup)
+				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Post("/batch-to-group", txHandler.CreateTransactionsBatchToGroup)
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Patch("/{id}", txHandler.UpdateTransaction)
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Delete("/{id}", txHandler.DeleteTransaction)
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Delete("/batch", txHandler.DeleteTransactionsBatch)
@@ -143,6 +143,7 @@ func New(
 
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Post("/{id}/installments", creditHandler.AddInstallment)
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Patch("/{id}/installments/{iid}", creditHandler.UpdateInstallment)
+				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Post("/{id}/installments/{iid}/settle-early", creditHandler.SettleInstallmentEarly)
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Delete("/{id}/installments/{iid}", creditHandler.DeleteInstallment)
 
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Post("/{id}/transactions", creditHandler.AddTransaction)
