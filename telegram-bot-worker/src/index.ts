@@ -33,6 +33,7 @@ interface TelegramMessage {
   text?: string;
   caption?: string;
   photo?: TelegramPhotoSize[];
+  reply_to_message?: TelegramMessage;
 }
 
 interface TelegramCallbackQuery {
@@ -56,6 +57,7 @@ interface TelegramInlineKeyboardButton {
 
 interface TelegramSendMessageOptions {
   parse_mode?: "Markdown" | "HTML";
+  reply_parameters?: { message_id: number };
   reply_markup?: {
     inline_keyboard?: TelegramInlineKeyboardButton[][];
     keyboard?: Array<Array<{ text: string; web_app?: { url: string } }>>;
@@ -312,6 +314,41 @@ async function handleLinkCommand(chatId: number, user: TelegramUser, code: strin
   }
 }
 
+async function downloadSlipPhoto(
+  photos: TelegramPhotoSize[] | undefined,
+  env: Env
+): Promise<string> {
+  const photo = photos?.[photos.length - 1];
+  if (!photo) {
+    throw new Error("ไม่พบรูปสลิปต้นฉบับ กรุณาส่งรูปสลิปอีกครั้งแล้วกดยืนยันจากข้อความใหม่");
+  }
+
+  try {
+    const fileRes = await fetch(
+      `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/getFile?file_id=${encodeURIComponent(photo.file_id)}`
+    );
+    if (!fileRes.ok) throw new Error("Telegram file lookup failed");
+    const fileData = (await fileRes.json()) as TelegramApiResponse<TelegramFileResult>;
+    if (!fileData.ok || !fileData.result?.file_path) {
+      throw new Error("Telegram photo unavailable");
+    }
+
+    const imageRes = await fetch(
+      `https://api.telegram.org/file/bot${env.TELEGRAM_BOT_TOKEN}/${fileData.result.file_path}`
+    );
+    if (!imageRes.ok) throw new Error("Telegram photo download failed");
+    const bytes = new Uint8Array(await imageRes.arrayBuffer());
+    if (!bytes.byteLength) throw new Error("Telegram photo is empty");
+    let binary = "";
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  } catch {
+    throw new Error("ดาวน์โหลดรูปสลิปไม่ได้ กรุณาส่งรูปสลิปอีกครั้งแล้วกดยืนยันจากข้อความใหม่");
+  }
+}
+
 /**
  * Handle bank slip image parsing using Gemini AI.
  */
@@ -325,26 +362,8 @@ async function handlePhotoSlip(msg: TelegramMessage, env: Env): Promise<void> {
   const progressMsgId = progressMsg.result?.message_id;
 
   try {
-    // 1. Get highest resolution photo file
-    const photo = msg.photo[msg.photo.length - 1];
-    const fileRes = await fetch(
-      `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/getFile?file_id=${photo.file_id}`
-    );
-    const fileData = (await fileRes.json()) as TelegramApiResponse<TelegramFileResult>;
-    if (!fileData.ok || !fileData.result?.file_path) {
-      throw new Error("Failed to get photo from Telegram");
-    }
-
-    // 2. Download photo as base64
-    const photoUrl = `https://api.telegram.org/file/bot${env.TELEGRAM_BOT_TOKEN}/${fileData.result.file_path}`;
-    const imgBlob = await fetch(photoUrl);
-    const arrayBuffer = await imgBlob.arrayBuffer();
-    const bytes = new Uint8Array(arrayBuffer);
-    let binary = "";
-    for (let i = 0; i < bytes.byteLength; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    const base64Data = btoa(binary);
+    // Reuse the original Telegram photo for both parsing and confirmed receipts.
+    const base64Data = await downloadSlipPhoto(msg.photo, env);
 
     // 3. Send to Gemini 2.0 Flash Vision
     const parsedSlip = await parseSlipWithGemini(base64Data, env.GEMINI_API_KEY);
@@ -411,6 +430,7 @@ async function handlePhotoSlip(msg: TelegramMessage, env: Env): Promise<void> {
 
     await sendTelegramMessage(env, chatId, responseText, {
       parse_mode: "Markdown",
+      reply_parameters: { message_id: msg.message_id },
       reply_markup: { inline_keyboard: inlineKeyboard },
     });
   } catch (err: unknown) {
@@ -450,6 +470,7 @@ async function handleCallbackQuery(cb: TelegramCallbackQuery, env: Env): Promise
     await answerCallbackQuery(env, cb.id, "กำลังตัดจ่ายบิล...");
 
     try {
+      const receiptImage = `data:image/jpeg;base64,${await downloadSlipPhoto(cb.message?.reply_to_message?.photo, env)}`;
       const res = await fetch(`${backendUrl}/api/telegram/pay-bill`, {
         method: "POST",
         headers: {
@@ -459,6 +480,7 @@ async function handleCallbackQuery(cb: TelegramCallbackQuery, env: Env): Promise
         body: JSON.stringify({
           transactionId: txId,
           telegramUserId: String(user.id),
+          receiptImage,
         }),
       });
 
@@ -490,6 +512,7 @@ async function handleCallbackQuery(cb: TelegramCallbackQuery, env: Env): Promise
     await answerCallbackQuery(env, cb.id, "กำลังบันทึกรายการ...");
 
     try {
+      const receiptImage = `data:image/jpeg;base64,${await downloadSlipPhoto(cb.message?.reply_to_message?.photo, env)}`;
       const res = await fetch(`${backendUrl}/api/telegram/transactions`, {
         method: "POST",
         headers: {
@@ -504,6 +527,7 @@ async function handleCallbackQuery(cb: TelegramCallbackQuery, env: Env): Promise
           description: "สลิปโอนเงิน (Telegram)",
           amount,
           status: "PAID",
+          receiptImage,
         }),
       });
 
