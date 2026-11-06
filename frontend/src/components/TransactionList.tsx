@@ -209,9 +209,6 @@ export default function TransactionList({
       }
       req.receiptImage = editReceiptImage;
       await onUpdate(tx.id, req);
-      if (isExpense(tx) && editStatus === "PAID" && (tx.creditAccountId || tx.loanId)) {
-        message.success("บันทึกการชำระเงินและตัดยอดหนี้ในหน้าบัตร/สินเชื่อเรียบร้อยแล้ว 💳");
-      }
       resetEditState();
     } catch {
       // Error handled by parent

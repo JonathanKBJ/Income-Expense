@@ -27,6 +27,7 @@ interface BaseTransaction {
   billingCycle?: string;      // YYYY-MM accounting/budget cycle
   creditAccountId?: string | null;
   loanId?: string | null;
+  creditPostingStatus?: "MANUAL_REQUIRED";
   createdAt: string;
   updatedAt: string;
 }

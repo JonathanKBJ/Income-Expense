@@ -32,6 +32,12 @@ func NewCreditRepository(db *sql.DB) *CreditRepository {
 
 // CreateAccount inserts a new credit account.
 func (r *CreditRepository) CreateAccount(ctx context.Context, acc *models.CreditAccount, userID, groupID string) error {
+	if acc.BalanceMode != "" && acc.BalanceMode != models.CreditBalanceLegacy || acc.InterestBalance != 0 || acc.FeeBalance != 0 || acc.BalanceAsOfDate != nil || acc.BalanceNote != "" {
+		return fmt.Errorf("%w: create a legacy account then reconcile its official balances", ErrCreditInvalidAllocation)
+	}
+	acc.BalanceMode = models.CreditBalanceLegacy
+	acc.CreditLimitBasis = models.CreditLimitPrincipal
+	acc.AllocationOrder = models.AllocationFeesInterestPrincipal
 	now := time.Now().UTC().Format(time.RFC3339)
 	acc.ID = uuid.New().String()
 	acc.UserID = userID
@@ -74,7 +80,8 @@ func (r *CreditRepository) CreateAccount(ctx context.Context, acc *models.Credit
 func (r *CreditRepository) GetAccountByID(ctx context.Context, id, groupID string, filterUserID ...string) (*models.CreditAccount, error) {
 	query := `SELECT id, name, type, bank, credit_limit, current_balance, statement_day, payment_due_day,
 		interest_rate, min_payment_rate, min_payment_floor, min_payment_calc_mode, status, notes, group_id, user_id,
-		created_at, updated_at, statement_date, statement_balance, statement_minimum_due, statement_due_date
+		created_at, updated_at, statement_date, statement_balance, statement_minimum_due, statement_due_date,
+		balance_mode, interest_balance, fee_balance, credit_limit_basis, allocation_order, balance_as_of_date, balance_note
 		FROM credit_accounts WHERE id = ? AND group_id = ?`
 	args := []interface{}{id, groupID}
 	if len(filterUserID) > 0 && filterUserID[0] != "" {
@@ -91,6 +98,7 @@ func (r *CreditRepository) GetAccountByID(ctx context.Context, id, groupID strin
 		&a.StatementDay, &a.PaymentDueDay, &a.InterestRate, &a.MinPaymentRate, &a.MinPaymentFloor,
 		&a.MinPaymentCalcMode, &a.Status, &a.Notes, &a.GroupID, &a.UserID, &cAt, &uAt,
 		&a.StatementDate, &a.StatementBalance, &a.StatementMinimumDue, &a.StatementDueDate,
+		&a.BalanceMode, &a.InterestBalance, &a.FeeBalance, &a.CreditLimitBasis, &a.AllocationOrder, &a.BalanceAsOfDate, &a.BalanceNote,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -100,6 +108,7 @@ func (r *CreditRepository) GetAccountByID(ctx context.Context, id, groupID strin
 	}
 	a.CreatedAt, _ = time.Parse(time.RFC3339, cAt)
 	a.UpdatedAt, _ = time.Parse(time.RFC3339, uAt)
+	normalizeCreditAccount(&a)
 	return &a, nil
 }
 
@@ -108,7 +117,8 @@ func (r *CreditRepository) GetAccountByID(ctx context.Context, id, groupID strin
 func (r *CreditRepository) ListAccountsByGroup(ctx context.Context, groupID string, filterUserID ...string) ([]models.CreditAccount, error) {
 	query := `SELECT id, name, type, bank, credit_limit, current_balance, statement_day, payment_due_day,
 		interest_rate, min_payment_rate, min_payment_floor, min_payment_calc_mode, status, notes, group_id, user_id,
-		created_at, updated_at, statement_date, statement_balance, statement_minimum_due, statement_due_date
+		created_at, updated_at, statement_date, statement_balance, statement_minimum_due, statement_due_date,
+		balance_mode, interest_balance, fee_balance, credit_limit_basis, allocation_order, balance_as_of_date, balance_note
 		FROM credit_accounts WHERE group_id = ?`
 	args := []interface{}{groupID}
 	if len(filterUserID) > 0 && filterUserID[0] != "" {
@@ -132,11 +142,13 @@ func (r *CreditRepository) ListAccountsByGroup(ctx context.Context, groupID stri
 			&a.StatementDay, &a.PaymentDueDay, &a.InterestRate, &a.MinPaymentRate, &a.MinPaymentFloor,
 			&a.MinPaymentCalcMode, &a.Status, &a.Notes, &a.GroupID, &a.UserID, &cAt, &uAt,
 			&a.StatementDate, &a.StatementBalance, &a.StatementMinimumDue, &a.StatementDueDate,
+			&a.BalanceMode, &a.InterestBalance, &a.FeeBalance, &a.CreditLimitBasis, &a.AllocationOrder, &a.BalanceAsOfDate, &a.BalanceNote,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan credit account: %w", err)
 		}
 		a.CreatedAt, _ = time.Parse(time.RFC3339, cAt)
 		a.UpdatedAt, _ = time.Parse(time.RFC3339, uAt)
+		normalizeCreditAccount(&a)
 		accounts = append(accounts, a)
 	}
 	if accounts == nil {
@@ -147,6 +159,26 @@ func (r *CreditRepository) ListAccountsByGroup(ctx context.Context, groupID stri
 
 // UpdateAccount updates specified fields of a credit account.
 func (r *CreditRepository) UpdateAccount(ctx context.Context, id, groupID string, req models.UpdateCreditAccountRequest, filterUserID ...string) error {
+	dbTx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer dbTx.Rollback()
+	state, err := lockCreditAccount(ctx, dbTx, id, groupID, filterUserID...)
+	if err != nil {
+		return err
+	}
+	if req.BalanceMode != nil && *req.BalanceMode != state.mode || req.InterestBalance != nil || req.FeeBalance != nil || req.BalanceAsOfDate != nil || req.BalanceNote != nil || state.mode == models.CreditBalancePrincipalSplit && req.CurrentBalance != nil {
+		return fmt.Errorf("%w: balance changes require reconciliation", ErrCreditConflict)
+	}
+	if err := validateCreditConfig(req.CreditLimitBasis, req.AllocationOrder); err != nil {
+		return err
+	}
+	if state.mode == models.CreditBalancePrincipalSplit && req.CreditLimit != nil {
+		if _, err := creditCents(*req.CreditLimit); err != nil {
+			return err
+		}
+	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	query := "UPDATE credit_accounts SET updated_at = ?"
 	args := []interface{}{now}
@@ -203,6 +235,14 @@ func (r *CreditRepository) UpdateAccount(ctx context.Context, id, groupID string
 		query += ", notes = ?"
 		args = append(args, *req.Notes)
 	}
+	if req.CreditLimitBasis != nil {
+		query += ", credit_limit_basis = ?"
+		args = append(args, *req.CreditLimitBasis)
+	}
+	if req.AllocationOrder != nil {
+		query += ", allocation_order = ?"
+		args = append(args, *req.AllocationOrder)
+	}
 	if req.ClearStatement {
 		query += ", statement_date = NULL, statement_balance = NULL, statement_minimum_due = NULL, statement_due_date = NULL"
 	} else if req.StatementDate != nil {
@@ -217,15 +257,15 @@ func (r *CreditRepository) UpdateAccount(ctx context.Context, id, groupID string
 		args = append(args, filterUserID[0])
 	}
 
-	res, err := r.db.ExecContext(ctx, query, args...)
+	res, err := dbTx.ExecContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("failed to update credit account: %w", err)
 	}
 	rows, _ := res.RowsAffected()
 	if rows == 0 {
-		return fmt.Errorf("credit account not found")
+		return ErrCreditNotFound
 	}
-	return nil
+	return dbTx.Commit()
 }
 
 // DeleteAccount deletes a credit account and cascades to installments and transactions.
@@ -537,82 +577,20 @@ func lockUnsettledInstallment(ctx context.Context, tx *sql.Tx, id, accountID str
 // --- Transactions & Balance Handling ---
 
 // AddTransaction inserts a charge or payment, updating account balance atomically.
-func (r *CreditRepository) AddTransaction(ctx context.Context, tx *models.CreditTransaction, accountID string) error {
-	now := time.Now().UTC().Format(time.RFC3339)
-	tx.ID = uuid.New().String()
-	tx.AccountID = accountID
-	tx.CreatedAt = time.Now().UTC()
-	tx.UpdatedAt = time.Now().UTC()
+func (r *CreditRepository) AddTransaction(ctx context.Context, transaction *models.CreditTransaction, accountID string) error {
+	return r.addAllocatedTransaction(ctx, transaction, accountID, false)
+}
 
-	// Begin DB transaction
-	dbTx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("failed to begin db tx: %w", err)
-	}
-	defer dbTx.Rollback()
-
-	if tx.InstallmentID != nil && *tx.InstallmentID != "" {
-		if err := lockUnsettledInstallment(ctx, dbTx, *tx.InstallmentID, accountID); err != nil {
-			return err
-		}
-	}
-
-	// Guard against rapid duplicate submission (e.g. double click within 3 seconds)
-	var dupID string
-	_ = dbTx.QueryRowContext(ctx, `
-		SELECT id FROM credit_transactions
-		WHERE account_id = ? AND type = ? AND amount = ? AND date = ? AND description = ?
-		  AND created_at >= datetime('now', '-3 seconds')
-		LIMIT 1
-	`, accountID, tx.Type, tx.Amount, tx.Date, tx.Description).Scan(&dupID)
-	if dupID != "" {
-		return nil
-	}
-	// 1. Insert transaction
-	insertQuery := `INSERT INTO credit_transactions (
-		id, account_id, type, amount, date, description, payment_type, installment_id, receipt_image,
-		created_at, updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-
-	_, err = dbTx.ExecContext(ctx, insertQuery,
-		tx.ID, accountID, tx.Type, tx.Amount, tx.Date, tx.Description,
-		tx.PaymentType, tx.InstallmentID, tx.ReceiptImage, now, now,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to insert credit transaction: %w", err)
-	}
-
-	// 2. Adjust balance
-	if tx.Type == models.CreditTxCharge {
-		_, err = dbTx.ExecContext(ctx, `UPDATE credit_accounts SET current_balance = current_balance + ?, updated_at = ? WHERE id = ?`, tx.Amount, now, accountID)
-	} else if tx.Type == models.CreditTxPayment {
-		_, err = dbTx.ExecContext(ctx, `UPDATE credit_accounts SET current_balance = MAX(0, current_balance - ?), updated_at = ? WHERE id = ?`, tx.Amount, now, accountID)
-	}
-	if err != nil {
-		return fmt.Errorf("failed to adjust credit balance: %w", err)
-	}
-
-	// 3. If payment is linked to installment, increment paid_terms
-	if tx.Type == models.CreditTxPayment && tx.InstallmentID != nil && *tx.InstallmentID != "" {
-		_, err = dbTx.ExecContext(ctx, `
-			UPDATE credit_installments
-			SET paid_terms = MIN(total_terms, paid_terms + 1),
-			    status = CASE WHEN paid_terms + 1 >= total_terms THEN 'COMPLETED' ELSE status END,
-			    updated_at = ?
-			WHERE id = ? AND account_id = ?
-		`, now, *tx.InstallmentID, accountID)
-		if err != nil {
-			return fmt.Errorf("failed to advance installment term: %w", err)
-		}
-	}
-
-	return dbTx.Commit()
+// AddLegacyTransaction inserts a charge or payment for legacy accounts only.
+// If the account has been converted to split mode, it returns ErrCreditConflict under the account lock without writing.
+func (r *CreditRepository) AddLegacyTransaction(ctx context.Context, transaction *models.CreditTransaction, accountID string) error {
+	return r.addAllocatedTransaction(ctx, transaction, accountID, true)
 }
 
 // ListTransactions returns all transactions for an account, newest first.
 func (r *CreditRepository) ListTransactions(ctx context.Context, accountID string) ([]models.CreditTransaction, error) {
 	query := `SELECT id, account_id, type, amount, date, description, payment_type, installment_id, receipt_image,
-		created_at, updated_at
+		created_at, updated_at, principal_amount, interest_amount, fee_amount, allocation_source
 		FROM credit_transactions WHERE account_id = ? ORDER BY date DESC, created_at DESC`
 
 	rows, err := r.db.QueryContext(ctx, query, accountID)
@@ -629,6 +607,7 @@ func (r *CreditRepository) ListTransactions(ctx context.Context, accountID strin
 			&item.ID, &item.AccountID, &item.Type, &item.Amount, &item.Date, &item.Description,
 			&item.PaymentType, &item.InstallmentID, &item.ReceiptImage,
 			&cAt, &uAt,
+			&item.PrincipalAmount, &item.InterestAmount, &item.FeeAmount, &item.AllocationSource,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan credit transaction: %w", err)
 		}
@@ -653,7 +632,7 @@ func (r *CreditRepository) ListTransactionsByAccountIDs(ctx context.Context, acc
 	}
 
 	query := `SELECT id, account_id, type, amount, date, description, payment_type, installment_id, receipt_image,
-		created_at, updated_at
+		created_at, updated_at, principal_amount, interest_amount, fee_amount, allocation_source
 		FROM credit_transactions WHERE account_id IN (` + placeholders(len(accountIDs)) + `)
 		ORDER BY date DESC, created_at DESC`
 
@@ -675,6 +654,7 @@ func (r *CreditRepository) ListTransactionsByAccountIDs(ctx context.Context, acc
 			&item.ID, &item.AccountID, &item.Type, &item.Amount, &item.Date, &item.Description,
 			&item.PaymentType, &item.InstallmentID, &item.ReceiptImage,
 			&cAt, &uAt,
+			&item.PrincipalAmount, &item.InterestAmount, &item.FeeAmount, &item.AllocationSource,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan credit transaction: %w", err)
 		}
@@ -687,69 +667,15 @@ func (r *CreditRepository) ListTransactionsByAccountIDs(ctx context.Context, acc
 
 // DeleteTransaction deletes a transaction and reverses its balance impact.
 func (r *CreditRepository) DeleteTransaction(ctx context.Context, id, accountID string) error {
-	now := time.Now().UTC().Format(time.RFC3339)
-	dbTx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("failed to begin db tx: %w", err)
-	}
-	defer dbTx.Rollback()
-
-	// Read and guard history in the same transaction as its balance reversal.
-	var txType models.CreditTxType
-	var amount float64
-	var instID sql.NullString
-	err = dbTx.QueryRowContext(ctx, `SELECT type, amount, installment_id FROM credit_transactions WHERE id = ? AND account_id = ?`, id, accountID).Scan(&txType, &amount, &instID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return fmt.Errorf("transaction not found")
-		}
-		return fmt.Errorf("failed to find transaction: %w", err)
-	}
-
-	if instID.Valid && instID.String != "" {
-		if err := lockUnsettledInstallment(ctx, dbTx, instID.String, accountID); err != nil {
-			return err
-		}
-	}
-
-	// Reverse balance impact
-	if txType == models.CreditTxCharge {
-		_, err = dbTx.ExecContext(ctx, `UPDATE credit_accounts SET current_balance = MAX(0, current_balance - ?), updated_at = ? WHERE id = ?`, amount, now, accountID)
-	} else if txType == models.CreditTxPayment {
-		_, err = dbTx.ExecContext(ctx, `UPDATE credit_accounts SET current_balance = current_balance + ?, updated_at = ? WHERE id = ?`, amount, now, accountID)
-	}
-	if err != nil {
-		return fmt.Errorf("failed to reverse balance impact: %w", err)
-	}
-
-	// Reverse installment term if was payment linked to installment
-	if txType == models.CreditTxPayment && instID.Valid && instID.String != "" {
-		_, err = dbTx.ExecContext(ctx, `
-			UPDATE credit_installments
-			SET paid_terms = MAX(0, paid_terms - 1),
-			    status = 'ACTIVE',
-			    updated_at = ?
-			WHERE id = ? AND account_id = ?
-		`, now, instID.String, accountID)
-		if err != nil {
-			return fmt.Errorf("failed to reverse installment term: %w", err)
-		}
-	}
-
-	// Delete row
-	_, err = dbTx.ExecContext(ctx, `DELETE FROM credit_transactions WHERE id = ? AND account_id = ?`, id, accountID)
-	if err != nil {
-		return fmt.Errorf("failed to delete credit transaction: %w", err)
-	}
-
-	return dbTx.Commit()
+	return r.deleteAllocatedTransaction(ctx, id, accountID)
 }
 
 // FindAccountsByStatementDay retrieves all active credit accounts whose statement_day matches targetDay.
 func (r *CreditRepository) FindAccountsByStatementDay(ctx context.Context, targetDay int) ([]models.CreditAccount, error) {
 	query := `SELECT id, name, type, bank, credit_limit, current_balance, statement_day, payment_due_day,
 		interest_rate, min_payment_rate, min_payment_floor, min_payment_calc_mode, status, notes, group_id, user_id,
-		created_at, updated_at, statement_date, statement_balance, statement_minimum_due, statement_due_date
+		created_at, updated_at, statement_date, statement_balance, statement_minimum_due, statement_due_date,
+		balance_mode, interest_balance, fee_balance, credit_limit_basis, allocation_order, balance_as_of_date, balance_note
 		FROM credit_accounts WHERE status = 'ACTIVE' AND (statement_day = ? OR (? >= 28 AND statement_day > ?))`
 
 	rows, err := r.db.QueryContext(ctx, query, targetDay, targetDay, targetDay)
@@ -767,11 +693,13 @@ func (r *CreditRepository) FindAccountsByStatementDay(ctx context.Context, targe
 			&a.StatementDay, &a.PaymentDueDay, &a.InterestRate, &a.MinPaymentRate, &a.MinPaymentFloor,
 			&a.MinPaymentCalcMode, &a.Status, &a.Notes, &a.GroupID, &a.UserID, &cAt, &uAt,
 			&a.StatementDate, &a.StatementBalance, &a.StatementMinimumDue, &a.StatementDueDate,
+			&a.BalanceMode, &a.InterestBalance, &a.FeeBalance, &a.CreditLimitBasis, &a.AllocationOrder, &a.BalanceAsOfDate, &a.BalanceNote,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan credit account: %w", err)
 		}
 		a.CreatedAt, _ = time.Parse(time.RFC3339, cAt)
 		a.UpdatedAt, _ = time.Parse(time.RFC3339, uAt)
+		normalizeCreditAccount(&a)
 		list = append(list, a)
 	}
 	return list, nil

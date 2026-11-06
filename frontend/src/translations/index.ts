@@ -328,6 +328,56 @@ export interface TranslationKeys {
     totalDueEstimated: string;
     totalNextCycleOutstanding: string;
     totalNextCycleEstimatedDue: string;
+    splitMode: string;
+    legacyMode: string;
+    reconcile: string;
+    reconcileHelp: string;
+    reconcileConfirm: string;
+    reconcileSuccess: string;
+    reconcileFailed: string;
+    baselineDate: string;
+    baselineNote: string;
+    baselineHelp: string;
+    principalBalance: string;
+    interestBalance: string;
+    feeBalance: string;
+    totalPostedDebt: string;
+    limitBasis: string;
+    principalBasis: string;
+    totalBasis: string;
+    allocationOrder: string;
+    feesFirst: string;
+    interestFirst: string;
+    historicalAllocations: string;
+    historicalHelp: string;
+    historicalSelect: string;
+    allocation: string;
+    principalAmount: string;
+    interestAmount: string;
+    feeAmount: string;
+    actualAllocation: string;
+    ruleAllocation: string;
+    ruleHelp: string;
+    allocationMismatch: string;
+    allocationRequired: string;
+    allocationExceedsBalance: string;
+    frozenHistory: string;
+    frozenEntry: string;
+    newEntryDate: string;
+    splitBalanceEdit: string;
+    legacyOptInHelp: string;
+    splitCashNotice: string;
+    splitInstallmentNotice: string;
+    forecastHelp: string;
+    forecastInterest: string;
+    forecastStatement: string;
+    dashboardManualNotice: string;
+    postedDebtHelp: string;
+    editTransaction: string;
+    installmentLink: string;
+    chargeInterest: string;
+    chargePrincipal: string;
+    installmentDescription: string;
   };
   auth: {
     welcomeBack: string;
@@ -706,6 +756,56 @@ export const translations: Record<Language, TranslationKeys> = {
       calcModeBalancePercent: "% of Total Debt (Standard Cards, UOB Cash Plus, First Choice)",
       calcModePrincipalPlusInterest: "% of Principal + 100% Interest (Money Thunder)",
       calcModeInterestOnly: "100% Interest Only (Finnix)",
+      splitMode: "Principal / interest / fees",
+      legacyMode: "Legacy accounting",
+      reconcile: "Reconcile balances",
+      reconcileHelp: "Opt in for this account only using confirmed balances from a bank statement or receipt. No other account changes. Reconciliation replaces this account's posted balances; it does not record a cash payment or replay history.",
+      reconcileConfirm: "Confirm reconciliation",
+      reconcileSuccess: "Balances reconciled",
+      reconcileFailed: "Unable to reconcile balances. Review the details and try again.",
+      baselineDate: "Balances as of",
+      baselineNote: "Statement / receipt reference and explanation",
+      baselineHelp: "Choose a date on or after all recorded transactions and the last baseline, no later than today (Bangkok). The snapshot is retained permanently.",
+      principalBalance: "Outstanding principal",
+      interestBalance: "Posted interest",
+      feeBalance: "Posted fees",
+      totalPostedDebt: "Total posted debt",
+      limitBasis: "Available credit basis",
+      principalBasis: "Principal only",
+      totalBasis: "Total posted debt",
+      allocationOrder: "Rule payment order",
+      feesFirst: "Fees → interest → principal",
+      interestFirst: "Interest → fees → principal",
+      historicalAllocations: "Annotate historical transactions (optional)",
+      historicalHelp: "Select existing entries and enter the exact breakdown from their receipts. Components must equal each entry's amount. This adds ACTUAL allocation metadata only; no payment is duplicated and balances are not replayed.",
+      historicalSelect: "Select a historical transaction",
+      allocation: "Allocation / source",
+      principalAmount: "Principal",
+      interestAmount: "Interest",
+      feeAmount: "Fees",
+      actualAllocation: "ACTUAL — exact receipt amounts",
+      ruleAllocation: "RULE — recorded-balance waterfall",
+      ruleHelp: "RULE uses only already posted liabilities in the configured order. It is not bank-confirmed and does not post estimated interest. Preview may change if another entry is saved first.",
+      allocationMismatch: "Principal + interest + fees must equal the amount, to the cent.",
+      allocationRequired: "Enter all three nonnegative amounts with no more than two decimal places.",
+      allocationExceedsBalance: "Payment exceeds the recorded balance in one or more components.",
+      frozenHistory: "History on or before the baseline date is frozen. Use a new reconciliation to correct historical allocation metadata; it does not replay balances.",
+      frozenEntry: "Frozen by baseline — cannot edit or delete",
+      newEntryDate: "New and edited entries must be dated after the baseline date.",
+      splitBalanceEdit: "Use Reconcile balances to change posted balances. Ordinary settings cannot change these totals.",
+      legacyOptInHelp: "New accounts start with legacy accounting. After saving, use Reconcile balances to opt this account into separate principal, interest and fee tracking.",
+      splitCashNotice: "Dashboard cash expenses do not automatically reduce this account's credit balance. Record the allocated credit payment separately here.",
+      splitInstallmentNotice: "Automatic installment posting is skipped for this account. Post each installment manually here with its actual principal, interest and fee breakdown.",
+      forecastHelp: "Forecasts are estimates only, not posted liabilities or bank-confirmed amounts. Posted interest and fees are included once in total debt.",
+      forecastInterest: "Additional estimated next-cycle interest",
+      forecastStatement: "Estimated next-cycle total debt",
+      dashboardManualNotice: "Cash payment saved. This account does not update credit automatically; record the allocated credit payment separately in Credit.",
+      postedDebtHelp: "Total posted debt = principal + posted interest + posted fees. Available credit uses the selected basis and any unbilled installment reservation.",
+      editTransaction: "Edit credit transaction",
+      installmentLink: "Linked installment (optional)",
+      chargeInterest: "Post statement interest",
+      chargePrincipal: "Borrowing / purchase",
+      installmentDescription: "Installment",
     },
     auth: {
       welcomeBack: "Welcome Back",
@@ -1085,6 +1185,56 @@ export const translations: Record<Language, TranslationKeys> = {
       calcModeBalancePercent: "คิด % จากยอดหนี้รวม (บัตรเครดิตทั่วไป, First Choice, UOB Cash Plus)",
       calcModePrincipalPlusInterest: "คิด % เงินต้น + ดอกเบี้ยรอบบิล 100% (เช่น Money Thunder)",
       calcModeInterestOnly: "จ่ายเฉพาะดอกเบี้ย 100% (เช่น Finnix)",
+      splitMode: "แยกเงินต้น / ดอกเบี้ย / ค่าธรรมเนียม",
+      legacyMode: "การคำนวณแบบเดิม",
+      reconcile: "กระทบยอดคงเหลือ",
+      reconcileHelp: "เปิดใช้เฉพาะบัญชีนี้ด้วยยอดยืนยันจากใบแจ้งยอดหรือใบเสร็จ ไม่กระทบบัญชีอื่น การกระทบยอดจะแทนที่ยอดหนี้ที่บันทึกของบัญชีนี้ ไม่สร้างรายการเงินสดหรือคำนวณประวัติย้อนหลังใหม่",
+      reconcileConfirm: "ยืนยันกระทบยอด",
+      reconcileSuccess: "กระทบยอดเรียบร้อยแล้ว",
+      reconcileFailed: "กระทบยอดไม่สำเร็จ กรุณาตรวจสอบข้อมูลแล้วลองอีกครั้ง",
+      baselineDate: "ยอดคงเหลือ ณ วันที่",
+      baselineNote: "เลขอ้างอิงใบแจ้งยอด / ใบเสร็จ และคำอธิบาย",
+      baselineHelp: "เลือกวันที่ไม่น้อยกว่ารายการล่าสุดและวันกระทบยอดล่าสุด และไม่เกินวันนี้ (เวลาประเทศไทย) ระบบเก็บภาพยอดนี้อย่างถาวร",
+      principalBalance: "เงินต้นคงเหลือ",
+      interestBalance: "ดอกเบี้ยที่ลงบัญชีแล้ว",
+      feeBalance: "ค่าธรรมเนียมที่ลงบัญชีแล้ว",
+      totalPostedDebt: "ยอดหนี้ที่ลงบัญชีรวม",
+      limitBasis: "ฐานคำนวณวงเงินคงเหลือ",
+      principalBasis: "เงินต้นเท่านั้น",
+      totalBasis: "ยอดหนี้ที่ลงบัญชีรวม",
+      allocationOrder: "ลำดับตัดชำระตามกฎ",
+      feesFirst: "ค่าธรรมเนียม → ดอกเบี้ย → เงินต้น",
+      interestFirst: "ดอกเบี้ย → ค่าธรรมเนียม → เงินต้น",
+      historicalAllocations: "ระบุส่วนประกอบรายการย้อนหลัง (ไม่บังคับ)",
+      historicalHelp: "เลือกรายการเดิมแล้วกรอกยอดแยกจริงจากใบเสร็จ ผลรวมต้องเท่ากับยอดรายการ ระบบเพิ่มเฉพาะข้อมูลการตัดชำระจริง (ACTUAL) ไม่สร้างรายการชำระซ้ำและไม่คำนวณยอดคงเหลือย้อนหลังใหม่",
+      historicalSelect: "เลือกรายการย้อนหลัง",
+      allocation: "การแบ่งยอด / แหล่งข้อมูล",
+      principalAmount: "เงินต้น",
+      interestAmount: "ดอกเบี้ย",
+      feeAmount: "ค่าธรรมเนียม",
+      actualAllocation: "ACTUAL — ยอดจริงตามใบเสร็จ",
+      ruleAllocation: "RULE — ตัดตามยอดหนี้ที่บันทึก",
+      ruleHelp: "RULE ตัดเฉพาะหนี้ที่ลงบัญชีแล้วตามลำดับที่ตั้งไว้ ไม่ใช่ยอดยืนยันจากธนาคารและไม่ลงดอกเบี้ยประมาณการ ตัวอย่างอาจเปลี่ยนหากมีการบันทึกรายการอื่นก่อน",
+      allocationMismatch: "เงินต้น + ดอกเบี้ย + ค่าธรรมเนียม ต้องเท่ากับยอดรายการถึงระดับสตางค์",
+      allocationRequired: "กรอกทั้งสามยอดเป็นศูนย์หรือจำนวนบวกที่มีทศนิยมไม่เกินสองตำแหน่ง",
+      allocationExceedsBalance: "ยอดชำระเกินยอดหนี้ที่บันทึกไว้ในส่วนประกอบอย่างน้อยหนึ่งส่วน",
+      frozenHistory: "ประวัติถึงวันกระทบยอดถูกล็อก ใช้การกระทบยอดใหม่เพื่อแก้ข้อมูลส่วนประกอบย้อนหลัง โดยไม่คำนวณยอดคงเหลือย้อนหลังใหม่",
+      frozenEntry: "ล็อกตามวันกระทบยอด — แก้ไขหรือลบไม่ได้",
+      newEntryDate: "รายการใหม่และรายการที่แก้ไขต้องลงวันที่หลังวันกระทบยอด",
+      splitBalanceEdit: "เปลี่ยนยอดหนี้ที่ลงบัญชีผ่านการกระทบยอดคงเหลือเท่านั้น การตั้งค่าทั่วไปแก้ยอดเหล่านี้ไม่ได้",
+      legacyOptInHelp: "บัญชีใหม่เริ่มด้วยการคำนวณแบบเดิม หลังบันทึกแล้ว ให้ใช้กระทบยอดคงเหลือเพื่อเปิดการแยกเงินต้น ดอกเบี้ย และค่าธรรมเนียมเฉพาะบัญชีนี้",
+      splitCashNotice: "รายจ่ายเงินสดใน Dashboard ไม่ลดยอดหนี้ของบัญชีนี้อัตโนมัติ กรุณาบันทึกการตัดชำระเครดิตแยกต่างหากที่หน้านี้",
+      splitInstallmentNotice: "บัญชีนี้ข้ามการลงยอดงวดอัตโนมัติ กรุณาลงยอดแต่ละงวดด้วยตนเองที่หน้านี้ โดยระบุเงินต้น ดอกเบี้ย และค่าธรรมเนียมจริง",
+      forecastHelp: "ประมาณการไม่ใช่หนี้ที่ลงบัญชีหรือยอดยืนยันจากธนาคาร ดอกเบี้ยและค่าธรรมเนียมที่ลงแล้วรวมในยอดหนี้เพียงครั้งเดียว",
+      forecastInterest: "ดอกเบี้ยเพิ่มเติมรอบหน้าประมาณการ",
+      forecastStatement: "ยอดหนี้รวมรอบหน้าประมาณการ",
+      dashboardManualNotice: "บันทึกการชำระเงินสดแล้ว บัญชีนี้ไม่อัปเดตยอดเครดิตอัตโนมัติ กรุณาบันทึกการตัดชำระเครดิตแยกต่างหากที่หน้าเครดิต",
+      postedDebtHelp: "ยอดหนี้รวม = เงินต้น + ดอกเบี้ยที่ลงบัญชี + ค่าธรรมเนียมที่ลงบัญชี วงเงินคงเหลือใช้ฐานที่เลือกและหักวงเงินกันไว้สำหรับงวดที่ยังไม่เรียกเก็บ",
+      editTransaction: "แก้ไขรายการเครดิต",
+      installmentLink: "รายการผ่อนที่เกี่ยวข้อง (ไม่บังคับ)",
+      chargeInterest: "ลงดอกเบี้ยตามใบแจ้งยอด",
+      chargePrincipal: "เบิกถอน / ซื้อสินค้า",
+      installmentDescription: "ค่างวด",
     },
     auth: {
       welcomeBack: "ยินดีต้อนรับกลับ",

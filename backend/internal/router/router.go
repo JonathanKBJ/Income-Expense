@@ -42,7 +42,7 @@ func New(
 			"http://localhost:5173",
 			"http://127.0.0.1:5173",
 		},
-		AllowedMethods:   []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-ID"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true,
@@ -140,6 +140,7 @@ func New(
 				r.Get("/{id}", creditHandler.GetAccountDetail)
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Patch("/{id}", creditHandler.UpdateAccount)
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Delete("/{id}", creditHandler.DeleteAccount)
+				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Post("/{id}/reconcile", creditHandler.ReconcileAccount)
 
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Post("/{id}/installments", creditHandler.AddInstallment)
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Patch("/{id}/installments/{iid}", creditHandler.UpdateInstallment)
@@ -147,6 +148,7 @@ func New(
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Delete("/{id}/installments/{iid}", creditHandler.DeleteInstallment)
 
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Post("/{id}/transactions", creditHandler.AddTransaction)
+				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Put("/{id}/transactions/{txId}", creditHandler.UpdateTransaction)
 				r.With(middleware.GroupRoleMiddleware(models.RoleEditor)).Delete("/{id}/transactions/{tid}", creditHandler.DeleteTransaction)
 				r.Post("/cron/post-installments", creditHandler.CronPostInstallments)
 				r.Get("/cron/post-installments", creditHandler.CronPostInstallments)

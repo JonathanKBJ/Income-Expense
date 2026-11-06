@@ -54,6 +54,22 @@ const (
 	CalcModeInterestOnly          CreditMinPaymentCalcMode = "INTEREST_ONLY"
 )
 
+type CreditBalanceMode string
+type CreditLimitBasis string
+type CreditAllocationOrder string
+type CreditAllocationSource string
+
+const (
+	CreditBalanceLegacy             CreditBalanceMode      = "LEGACY"
+	CreditBalancePrincipalSplit     CreditBalanceMode      = "PRINCIPAL_SPLIT"
+	CreditLimitPrincipal            CreditLimitBasis       = "PRINCIPAL"
+	CreditLimitTotal                CreditLimitBasis       = "TOTAL"
+	AllocationFeesInterestPrincipal CreditAllocationOrder  = "FEES_INTEREST_PRINCIPAL"
+	AllocationInterestFeesPrincipal CreditAllocationOrder  = "INTEREST_FEES_PRINCIPAL"
+	AllocationActual                CreditAllocationSource = "ACTUAL"
+	AllocationRule                  CreditAllocationSource = "RULE"
+)
+
 // CreditAccount represents a credit card or personal loan account.
 type CreditAccount struct {
 	ID                  string                   `json:"id"`
@@ -62,6 +78,13 @@ type CreditAccount struct {
 	Bank                string                   `json:"bank"`
 	CreditLimit         float64                  `json:"creditLimit"`
 	CurrentBalance      float64                  `json:"currentBalance"`
+	BalanceMode         CreditBalanceMode        `json:"balanceMode"`
+	InterestBalance     float64                  `json:"interestBalance"`
+	FeeBalance          float64                  `json:"feeBalance"`
+	CreditLimitBasis    CreditLimitBasis         `json:"creditLimitBasis"`
+	AllocationOrder     CreditAllocationOrder    `json:"allocationOrder"`
+	BalanceAsOfDate     *string                  `json:"balanceAsOfDate"`
+	BalanceNote         string                   `json:"balanceNote"`
 	StatementDay        *int                     `json:"statementDay,omitempty"`
 	PaymentDueDay       *int                     `json:"paymentDueDay,omitempty"`
 	StatementDate       *string                  `json:"statementDate"`
@@ -104,22 +127,27 @@ type CreditInstallment struct {
 
 // CreditTransaction records an expenditure or payment.
 type CreditTransaction struct {
-	ID            string             `json:"id"`
-	AccountID     string             `json:"accountId"`
-	Type          CreditTxType       `json:"type"`
-	Amount        float64            `json:"amount"`
-	Date          string             `json:"date"`
-	Description   string             `json:"description"`
-	PaymentType   *CreditPaymentType `json:"paymentType,omitempty"`
-	InstallmentID *string            `json:"installmentId,omitempty"`
-	ReceiptImage  *string            `json:"receiptImage,omitempty"`
-	CreatedAt     time.Time          `json:"createdAt"`
-	UpdatedAt     time.Time          `json:"updatedAt"`
+	ID               string                  `json:"id"`
+	AccountID        string                  `json:"accountId"`
+	Type             CreditTxType            `json:"type"`
+	Amount           float64                 `json:"amount"`
+	Date             string                  `json:"date"`
+	Description      string                  `json:"description"`
+	PaymentType      *CreditPaymentType      `json:"paymentType,omitempty"`
+	InstallmentID    *string                 `json:"installmentId,omitempty"`
+	ReceiptImage     *string                 `json:"receiptImage,omitempty"`
+	PrincipalAmount  *float64                `json:"principalAmount,omitempty"`
+	InterestAmount   *float64                `json:"interestAmount,omitempty"`
+	FeeAmount        *float64                `json:"feeAmount,omitempty"`
+	AllocationSource *CreditAllocationSource `json:"allocationSource,omitempty"`
+	CreatedAt        time.Time               `json:"createdAt"`
+	UpdatedAt        time.Time               `json:"updatedAt"`
 }
 
 // CreditAccountDetail wraps a credit account with installments, transactions, and computed metrics.
 type CreditAccountDetail struct {
 	CreditAccount
+	PrincipalBalance            float64             `json:"principalBalance"`
 	AvailableCredit             float64             `json:"availableCredit"`
 	CreditUtilization           float64             `json:"creditUtilization"`
 	UnbilledInstallments        float64             `json:"unbilledInstallments"`
@@ -176,6 +204,13 @@ type UpdateCreditAccountRequest struct {
 	Bank                *string                   `json:"bank,omitempty"`
 	CreditLimit         *float64                  `json:"creditLimit,omitempty"`
 	CurrentBalance      *float64                  `json:"currentBalance,omitempty"`
+	BalanceMode         *CreditBalanceMode        `json:"balanceMode,omitempty"`
+	InterestBalance     *float64                  `json:"interestBalance,omitempty"`
+	FeeBalance          *float64                  `json:"feeBalance,omitempty"`
+	CreditLimitBasis    *CreditLimitBasis         `json:"creditLimitBasis,omitempty"`
+	AllocationOrder     *CreditAllocationOrder    `json:"allocationOrder,omitempty"`
+	BalanceAsOfDate     *string                   `json:"balanceAsOfDate,omitempty"`
+	BalanceNote         *string                   `json:"balanceNote,omitempty"`
 	StatementDay        *int                      `json:"statementDay,omitempty"`
 	PaymentDueDay       *int                      `json:"paymentDueDay,omitempty"`
 	StatementDate       *string                   `json:"statementDate,omitempty"`
@@ -225,11 +260,33 @@ type SettleCreditInstallmentRequest struct {
 }
 
 type CreateCreditTxRequest struct {
-	Type          CreditTxType       `json:"type"`
-	Amount        float64            `json:"amount"`
-	Date          string             `json:"date"`
-	Description   string             `json:"description"`
-	PaymentType   *CreditPaymentType `json:"paymentType,omitempty"`
-	InstallmentID *string            `json:"installmentId,omitempty"`
-	ReceiptImage  *string            `json:"receiptImage,omitempty"`
+	Type             CreditTxType            `json:"type"`
+	Amount           float64                 `json:"amount"`
+	Date             string                  `json:"date"`
+	Description      string                  `json:"description"`
+	PaymentType      *CreditPaymentType      `json:"paymentType,omitempty"`
+	InstallmentID    *string                 `json:"installmentId,omitempty"`
+	ReceiptImage     *string                 `json:"receiptImage,omitempty"`
+	PrincipalAmount  *float64                `json:"principalAmount,omitempty"`
+	InterestAmount   *float64                `json:"interestAmount,omitempty"`
+	FeeAmount        *float64                `json:"feeAmount,omitempty"`
+	AllocationSource *CreditAllocationSource `json:"allocationSource,omitempty"`
+}
+
+type CreditHistoricalAllocation struct {
+	TransactionID   string  `json:"transactionId"`
+	PrincipalAmount float64 `json:"principalAmount"`
+	InterestAmount  float64 `json:"interestAmount"`
+	FeeAmount       float64 `json:"feeAmount"`
+}
+
+type ReconcileCreditAccountRequest struct {
+	AsOfDate              string                       `json:"asOfDate"`
+	PrincipalBalance      float64                      `json:"principalBalance"`
+	InterestBalance       float64                      `json:"interestBalance"`
+	FeeBalance            float64                      `json:"feeBalance"`
+	Note                  string                       `json:"note"`
+	CreditLimitBasis      *CreditLimitBasis            `json:"creditLimitBasis,omitempty"`
+	AllocationOrder       *CreditAllocationOrder       `json:"allocationOrder,omitempty"`
+	HistoricalAllocations []CreditHistoricalAllocation `json:"historicalAllocations,omitempty"`
 }

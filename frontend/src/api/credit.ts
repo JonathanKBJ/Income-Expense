@@ -9,6 +9,7 @@ import type {
   UpdateCreditInstallmentRequest,
   SettleInstallmentEarlyRequest,
   CreateCreditTxRequest,
+  ReconcileCreditAccountRequest,
 } from "../types/credit";
 
 export async function listCreditAccounts(): Promise<CreditAccountsResponse> {
@@ -96,5 +97,26 @@ export async function deleteCreditTransaction(
 ): Promise<void> {
   return apiFetch(`/api/credit-accounts/${accountId}/transactions/${txId}`, {
     method: "DELETE",
+  });
+}
+
+export async function reconcileCreditAccount(
+  accountId: string,
+  req: ReconcileCreditAccountRequest
+): Promise<CreditAccountDetail> {
+  return apiFetch(`/api/credit-accounts/${accountId}/reconcile`, {
+    method: "POST",
+    body: JSON.stringify(req),
+  });
+}
+
+export async function updateCreditTransaction(
+  accountId: string,
+  txId: string,
+  req: CreateCreditTxRequest
+): Promise<CreditAccountDetail> {
+  return apiFetch(`/api/credit-accounts/${accountId}/transactions/${txId}`, {
+    method: "PUT",
+    body: JSON.stringify(req),
   });
 }

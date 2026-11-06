@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { message } from "antd";
+import { useLanguage } from "../contexts/LanguageContext";
 import type {
   CompactTransaction,
   CreateTransactionRequest,
@@ -120,6 +122,7 @@ const defaultSummary: TransactionSummary = {
  *   after the API call succeeds, avoiding a full re-fetch. Falls back to full refresh on error.
  */
 export function useTransactions(): UseTransactionsReturn {
+  const { t } = useLanguage();
   const [month, setMonth] = useState(() => {
     const saved = localStorage.getItem("filter_month");
     return saved ? parseInt(saved, 10) : new Date().getMonth() + 1;
@@ -186,13 +189,16 @@ export function useTransactions(): UseTransactionsReturn {
           setSummary(computeSummary(next));
           return next;
         });
+        if (created.type === "EXPENSE" && created.status === "PAID" && created.creditPostingStatus === "MANUAL_REQUIRED") {
+          message.warning(t.creditPage.dashboardManualNotice, 8);
+        }
       } catch (err) {
         // On error, fall back to full refresh to ensure consistency
         await refresh();
         throw err;
       }
     },
-    [refresh]
+    [refresh, t.creditPage.dashboardManualNotice]
   );
 
   /**
@@ -221,12 +227,15 @@ export function useTransactions(): UseTransactionsReturn {
           setSummary(computeSummary(next));
           return next;
         });
+        if (updated.type === "EXPENSE" && updated.status === "PAID" && updated.creditPostingStatus === "MANUAL_REQUIRED") {
+          message.warning(t.creditPage.dashboardManualNotice, 8);
+        }
       } catch (err) {
         await refresh();
         throw err;
       }
     },
-    [refresh]
+    [refresh, t.creditPage.dashboardManualNotice]
   );
 
   /**

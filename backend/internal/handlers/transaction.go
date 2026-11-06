@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -230,12 +231,19 @@ func (h *TransactionHandler) CreateTransaction(w http.ResponseWriter, r *http.Re
 		ownerUserID = *req.UserID
 	}
 
+	creditPostingStatus, err := h.dashboardCreditPostingStatus(r.Context(), req.CreditAccountID, groupID, createdByID, req.CreditAccountID != nil && *req.CreditAccountID != "")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "cannot link credit account: "+err.Error())
+		return
+	}
+
 	transaction, err := h.repo.Create(r.Context(), req, ownerUserID, createdByID, groupID)
 	if err != nil {
 		log.Printf("ERROR: CreateTransaction: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to create transaction")
 		return
 	}
+	transaction.CreditPostingStatus = creditPostingStatus
 
 	// Log activity for multi-member groups
 	h.logActivity(r.Context(), groupID, createdByID, "CREATE_TRANSACTION", "transaction", transaction.ID,
@@ -247,7 +255,7 @@ func (h *TransactionHandler) CreateTransaction(w http.ResponseWriter, r *http.Re
 
 	// Two-way payment reflection to credit cards / loans if created directly as PAID
 	if transaction.Status != nil && *transaction.Status == models.StatusPaid {
-		if h.creditRepo != nil && transaction.CreditAccountID != nil && *transaction.CreditAccountID != "" {
+		if h.creditRepo != nil && transaction.CreditAccountID != nil && *transaction.CreditAccountID != "" && creditPostingStatus != creditPostingManualRequired {
 			go h.recordCreditCardPaymentFromDashboard(context.Background(), *transaction.CreditAccountID, transaction)
 		}
 		if h.loanRepo != nil && transaction.LoanID != nil && *transaction.LoanID != "" {
@@ -415,6 +423,17 @@ func (h *TransactionHandler) UpdateTransaction(w http.ResponseWriter, r *http.Re
 		}
 	}
 
+	creditAccountID := existing.CreditAccountID
+	if req.CreditAccountID != nil {
+		creditAccountID = req.CreditAccountID
+	}
+	newlySupplied := req.CreditAccountID != nil && (existing.CreditAccountID == nil || *existing.CreditAccountID != *req.CreditAccountID)
+	creditPostingStatus, err := h.dashboardCreditPostingStatus(r.Context(), creditAccountID, groupID, userID, newlySupplied)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "cannot link credit account: "+err.Error())
+		return
+	}
+
 	updated, err := h.repo.Update(r.Context(), id, groupID, req)
 	if err != nil {
 		log.Printf("ERROR: UpdateTransaction (update): %v", err)
@@ -425,11 +444,12 @@ func (h *TransactionHandler) UpdateTransaction(w http.ResponseWriter, r *http.Re
 		writeError(w, http.StatusNotFound, "transaction not found")
 		return
 	}
+	updated.CreditPostingStatus = creditPostingStatus
 
 	// Two-way payment reflection to credit cards / loans when marked as PAID
 	if (existing.Status == nil || *existing.Status != models.StatusPaid) &&
 		(updated.Status != nil && *updated.Status == models.StatusPaid) {
-		if h.creditRepo != nil && updated.CreditAccountID != nil && *updated.CreditAccountID != "" {
+		if h.creditRepo != nil && updated.CreditAccountID != nil && *updated.CreditAccountID != "" && creditPostingStatus != creditPostingManualRequired {
 			go h.recordCreditCardPaymentFromDashboard(context.Background(), *updated.CreditAccountID, updated)
 		}
 		if h.loanRepo != nil && updated.LoanID != nil && *updated.LoanID != "" {
@@ -641,6 +661,16 @@ func newDashboardCreditPayment(accountID string, tx *models.Transaction, paidAt 
 }
 
 func (h *TransactionHandler) recordCreditCardPaymentFromDashboard(ctx context.Context, accountID string, tx *models.Transaction) {
+	// Recheck after the async handoff in case the account was reconciled since
+	// the dashboard request. Never post an unlinked automatic split payment.
+	if tx.GroupID == nil {
+		return
+	}
+	account, err := h.creditRepo.GetAccountByID(ctx, accountID, *tx.GroupID)
+	if err != nil || account == nil || account.BalanceMode == models.CreditBalanceMode("PRINCIPAL_SPLIT") {
+		return
+	}
+
 	// The dashboard date is a bill's due date, not the PAID transition date.
 	creditTx := newDashboardCreditPayment(accountID, tx, time.Now())
 
@@ -658,7 +688,7 @@ func (h *TransactionHandler) recordCreditCardPaymentFromDashboard(ctx context.Co
 	payType := models.CreditPayCustom
 	creditTx.PaymentType = &payType
 
-	if err := h.creditRepo.AddTransaction(ctx, &creditTx, accountID); err != nil {
+	if err := h.creditRepo.AddLegacyTransaction(ctx, &creditTx, accountID); err != nil {
 		log.Printf("WARN: recordCreditCardPaymentFromDashboard failed: %v", err)
 	}
 }
@@ -780,10 +810,12 @@ func (h *TransactionHandler) GetSyncDuesPreview(w http.ResponseWriter, r *http.R
 
 	// 2. Fetch credit accounts
 	availAccounts := make([]models.SyncDueAvailableAccount, 0)
+	splitAccountIDs := make(map[string]bool)
 	if h.creditRepo != nil {
 		accs, err := h.creditRepo.ListAccountsByGroup(r.Context(), groupID)
 		if err == nil {
 			for _, acc := range accs {
+				splitAccountIDs[acc.ID] = acc.BalanceMode == models.CreditBalanceMode("PRINCIPAL_SPLIT")
 				insts, _ := h.creditRepo.ListInstallments(r.Context(), acc.ID)
 				txs, _ := h.creditRepo.ListTransactions(r.Context(), acc.ID)
 				detail := computeAccountDetail(acc, insts, txs)
@@ -860,6 +892,13 @@ func (h *TransactionHandler) GetSyncDuesPreview(w http.ResponseWriter, r *http.R
 		if matchedAcc == nil {
 			matchedAcc = matchAccountForDescription(tx.Description, availAccounts)
 		}
+		// Paid cash amounts are facts, not a target for estimate synchronization.
+		hasActualPayment := (tx.Status != nil && *tx.Status == models.StatusPaid) ||
+			(tx.PaidAmount != nil && *tx.PaidAmount > 0) || (tx.ReceiptImage != nil && *tx.ReceiptImage != "")
+		if hasActualPayment && ((tx.CreditAccountID != nil && splitAccountIDs[*tx.CreditAccountID]) ||
+			(matchedAcc != nil && matchedAcc.Type == "CREDIT_ACCOUNT" && splitAccountIDs[matchedAcc.ID])) {
+			continue
+		}
 
 		// Only include if matched, or if category suggests credit card / loan
 		isCreditCategory := strings.Contains(strings.ToLower(tx.Category), "บัตร") ||
@@ -921,6 +960,10 @@ func (h *TransactionHandler) ApplySyncDues(w http.ResponseWriter, r *http.Reques
 	}
 
 	if err := h.repo.BatchUpdateCreditLoanMapping(r.Context(), groupID, req.Updates); err != nil {
+		if errors.Is(err, repository.ErrPaidSplitSyncConflict) {
+			writeError(w, http.StatusConflict, err.Error())
+			return
+		}
 		log.Printf("ERROR: ApplySyncDues: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to apply sync updates: "+err.Error())
 		return

@@ -233,6 +233,13 @@ CREATE TABLE IF NOT EXISTS credit_accounts (
     bank              TEXT NOT NULL DEFAULT '',
     credit_limit      REAL NOT NULL DEFAULT 0 CHECK (credit_limit >= 0),
     current_balance   REAL NOT NULL DEFAULT 0 CHECK (current_balance >= 0),
+    balance_mode TEXT NOT NULL DEFAULT 'LEGACY',
+    interest_balance REAL NOT NULL DEFAULT 0,
+    fee_balance REAL NOT NULL DEFAULT 0,
+    credit_limit_basis TEXT NOT NULL DEFAULT 'PRINCIPAL',
+    allocation_order TEXT NOT NULL DEFAULT 'FEES_INTEREST_PRINCIPAL',
+    balance_as_of_date TEXT,
+    balance_note TEXT NOT NULL DEFAULT '',
     statement_day     INTEGER CHECK (statement_day IS NULL OR (statement_day >= 1 AND statement_day <= 31)),
     payment_due_day   INTEGER CHECK (payment_due_day IS NULL OR (payment_due_day >= 1 AND payment_due_day <= 31)),
     statement_date    TEXT,
@@ -300,6 +307,10 @@ CREATE TABLE IF NOT EXISTS credit_transactions (
     payment_type   TEXT CHECK (payment_type IS NULL OR payment_type IN ('FULL', 'MINIMUM', 'CUSTOM', 'INSTALLMENT')),
     installment_id TEXT,
     receipt_image  TEXT,
+    principal_amount REAL,
+    interest_amount REAL,
+    fee_amount REAL,
+    allocation_source TEXT,
     created_at     TEXT NOT NULL,
     updated_at     TEXT NOT NULL,
     FOREIGN KEY (account_id) REFERENCES credit_accounts(id) ON DELETE CASCADE,
@@ -309,6 +320,31 @@ CREATE TABLE IF NOT EXISTS credit_transactions (
 
 const createCreditTransactionsIndex = `
 CREATE INDEX IF NOT EXISTS idx_credit_transactions_account ON credit_transactions(account_id, date);
+`
+
+const createCreditReconciliationsTable = `
+CREATE TABLE IF NOT EXISTS credit_balance_reconciliations (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    group_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    as_of_date TEXT NOT NULL,
+    principal_balance REAL NOT NULL,
+    interest_balance REAL NOT NULL,
+    fee_balance REAL NOT NULL,
+    credit_limit_basis TEXT NOT NULL,
+    allocation_order TEXT NOT NULL,
+    note TEXT NOT NULL,
+    prior_balance REAL NOT NULL,
+    prior_mode TEXT NOT NULL,
+    historical_allocations TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_credit_reconciliations_account ON credit_balance_reconciliations(account_id, created_at);
+CREATE TRIGGER IF NOT EXISTS credit_reconciliations_no_update
+BEFORE UPDATE ON credit_balance_reconciliations BEGIN SELECT RAISE(ABORT, 'credit reconciliation audit is immutable'); END;
+CREATE TRIGGER IF NOT EXISTS credit_reconciliations_no_delete
+BEFORE DELETE ON credit_balance_reconciliations BEGIN SELECT RAISE(ABORT, 'credit reconciliation audit is immutable'); END;
 `
 
 // defaultCategories are seeded on first migration using INSERT OR IGNORE.
@@ -359,6 +395,7 @@ func (d *DB) Migrate() error {
 		{"credit_accounts", createCreditAccountsTable},
 		{"credit_installments", createCreditInstallmentsTable},
 		{"credit_transactions", createCreditTransactionsTable},
+		{"credit_balance_reconciliations", createCreditReconciliationsTable},
 		{"group_settings", createGroupSettingsTable},
 		{"telegram_link_codes", createTelegramLinkCodesTable},
 		{"daily_usage_stats", createDailyUsageStatsTable},
@@ -389,6 +426,9 @@ func (d *DB) Migrate() error {
 	for _, sql := range alterations {
 		// We ignore errors because the columns might already exist
 		_, _ = d.ExecContext(ctx, sql)
+	}
+	if err := d.migrateCreditAllocations(ctx); err != nil {
+		return err
 	}
 	// Migration for categories to update UNIQUE constraint and add user_id
 	var hasUserID int

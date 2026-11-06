@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Button, Table, Tag, Modal, Input, InputNumber, DatePicker, Select,
   Progress, Card, Statistic, Row, Col, App, Popconfirm, Upload, Image, Empty, Tabs, Space, Alert,
+  Tooltip,
 } from "antd";
 import {
   PlusOutlined, DeleteOutlined, PictureOutlined, EditOutlined,
@@ -19,11 +20,16 @@ import type {
   CreditDashboardSummary,
   CreditPaymentType,
   CreditMinPaymentCalcMode,
+  CreditTransaction,
+  CreditAllocationSource,
+  CreditAllocationOrder,
+  CreditLimitBasis,
 } from "../types/credit";
 import * as api from "../api/credit";
 import { useAuth } from "../contexts/AuthContext";
 import { useLanguage } from "../contexts/LanguageContext";
 import { useTheme } from "../contexts/ThemeContext";
+import CreditReconciliation from "./CreditReconciliation";
 
 const MOBILE_BP = 768;
 
@@ -39,6 +45,20 @@ function getErrorMessage(e: unknown): string {
   if (e instanceof Error) return e.message;
   if (typeof e === "string") return e;
   return "";
+}
+
+function moneyCents(value: number | null): number | null {
+  if (value === null || !Number.isFinite(value) || value < 0) return null;
+  const cents = Math.round(value * 100);
+  return Math.abs(value * 100 - cents) < 0.000001 ? cents : null;
+}
+
+function principalOf(account: CreditAccountDetail): number {
+  return account.principalBalance ?? account.currentBalance - (account.interestBalance ?? 0) - (account.feeBalance ?? 0);
+}
+
+function isFrozenTransaction(account: CreditAccountDetail, tx: CreditTransaction): boolean {
+  return account.balanceMode === "PRINCIPAL_SPLIT" && Boolean(account.balanceAsOfDate && tx.date.slice(0, 10) <= account.balanceAsOfDate.slice(0, 10));
 }
 
 interface AmortizationRow {
@@ -140,7 +160,7 @@ function computeDateAdjustedMinPayment(
 } {
   const baseMin = acc.estimatedMinPayment;
   const dueDate = getCycleDueDate(acc.statementDay, acc.paymentDueDay, payDate, acc);
-  if (acc.usesStatementMinimum) {
+  if (acc.usesStatementMinimum || acc.balanceMode === "PRINCIPAL_SPLIT") {
     return { amount: acc.totalDueThisMonth, baseMin, interestDiff: 0, daysDiff: 0, dueDate };
   }
   if (!dueDate || !baseMin || baseMin <= 0) {
@@ -222,6 +242,7 @@ export default function CreditTracker() {
 
   const [showTxModal, setShowTxModal] = useState(false);
 
+  const [reconcileAccount, setReconcileAccount] = useState<CreditAccountDetail | null>(null);
   // Form states: Account
   const [accName, setAccName] = useState("");
   const [accType, setAccType] = useState<CreditAccountType>("CREDIT_CARD");
@@ -239,6 +260,8 @@ export default function CreditTracker() {
   const [accStatementBalance, setAccStatementBalance] = useState<number | null>(null);
   const [accStatementMinimumDue, setAccStatementMinimumDue] = useState<number | null>(null);
   const [accStatementDueDate, setAccStatementDueDate] = useState<dayjs.Dayjs | null>(null);
+  const [accLimitBasis, setAccLimitBasis] = useState<CreditLimitBasis>("PRINCIPAL");
+  const [accAllocationOrder, setAccAllocationOrder] = useState<CreditAllocationOrder>("FEES_INTEREST_PRINCIPAL");
 
   // Form states: Installment
   const [instItemName, setInstItemName] = useState("");
@@ -262,6 +285,13 @@ export default function CreditTracker() {
   const [txPaymentOption, setTxPaymentOption] = useState<CreditPaymentType>("FULL");
   const [txInstallmentId, setTxInstallmentId] = useState<string | undefined>();
   const [txReceipt, setTxReceipt] = useState<string | undefined>();
+  const [editingTx, setEditingTx] = useState<CreditTransaction | null>(null);
+  const [txAllocationSource, setTxAllocationSource] = useState<CreditAllocationSource>("ACTUAL");
+  const [txPrincipal, setTxPrincipal] = useState<number | null>(0);
+  const [txInterest, setTxInterest] = useState<number | null>(0);
+  const [txFees, setTxFees] = useState<number | null>(0);
+  const [txAllocationTouched, setTxAllocationTouched] = useState(false);
+  const [txError, setTxError] = useState("");
 
   // Submission loading states to prevent double submission
   const [savingAccount, setSavingAccount] = useState(false);
@@ -300,6 +330,39 @@ export default function CreditTracker() {
   const selectedAccount = useMemo(() => {
     return accounts.find((a) => a.id === selectedAccountId) || null;
   }, [accounts, selectedAccountId]);
+  const splitAccount = selectedAccount?.balanceMode === "PRINCIPAL_SPLIT";
+  const editingSplitAccount = accounts.find((account) => account.id === editingAccountId)?.balanceMode === "PRINCIPAL_SPLIT";
+
+  useEffect(() => {
+    if (showTxModal && splitAccount && txType === "CHARGE" && !txAllocationTouched) {
+      setTxPrincipal(txAmount);
+      setTxInterest(0);
+      setTxFees(0);
+    }
+  }, [showTxModal, splitAccount, txType, txAmount, txAllocationTouched]);
+
+  const paymentBalances = useMemo(() => {
+    if (!selectedAccount) return [0, 0, 0];
+    const balances = [principalOf(selectedAccount), selectedAccount.interestBalance ?? 0, selectedAccount.feeBalance ?? 0].map((value) => Math.round(value * 100));
+    if (editingTx) {
+      const direction = editingTx.type === "PAYMENT" ? 1 : -1;
+      [editingTx.principalAmount ?? 0, editingTx.interestAmount ?? 0, editingTx.feeAmount ?? 0].forEach((value, index) => {
+        balances[index] += direction * Math.round(value * 100);
+      });
+    }
+    return balances;
+  }, [selectedAccount, editingTx]);
+
+  const ruleAllocation = useMemo(() => {
+    const parts = [0, 0, 0];
+    let remaining = moneyCents(txAmount) ?? 0;
+    const order = selectedAccount?.allocationOrder === "INTEREST_FEES_PRINCIPAL" ? [1, 2, 0] : [2, 1, 0];
+    for (const index of order) {
+      parts[index] = Math.min(remaining, Math.max(0, paymentBalances[index]));
+      remaining -= parts[index];
+    }
+    return parts.map((value) => value / 100);
+  }, [selectedAccount?.allocationOrder, paymentBalances, txAmount]);
 
   const computedSummary = useMemo(() => {
     if (!summary) return null;
@@ -384,6 +447,8 @@ export default function CreditTracker() {
     setAccStatementBalance(acc.statementBalance ?? null);
     setAccStatementMinimumDue(acc.statementMinimumDue ?? null);
     setAccStatementDueDate(acc.statementDueDate ? dayjs(acc.statementDueDate) : null);
+    setAccLimitBasis(acc.creditLimitBasis || "PRINCIPAL");
+    setAccAllocationOrder(acc.allocationOrder || "FEES_INTEREST_PRINCIPAL");
     setShowAccountModal(true);
   }
 
@@ -414,7 +479,10 @@ export default function CreditTracker() {
           type: accType,
           bank: accBank,
           creditLimit: accLimit,
-          currentBalance: accBalance,
+          ...(!editingSplitAccount ? { currentBalance: accBalance } : {
+            creditLimitBasis: accLimitBasis,
+            allocationOrder: accAllocationOrder,
+          }),
           statementDay: accStatementDay,
           paymentDueDay: accDueDay,
           interestRate: accInterestRate,
@@ -586,6 +654,14 @@ export default function CreditTracker() {
 
   async function handleAdvanceTerm(inst: CreditInstallment) {
     if (!selectedAccount || advancingInstId || inst.earlySettlementDate || inst.status !== "ACTIVE" || inst.paidTerms >= inst.totalTerms) return;
+    if (selectedAccount.balanceMode === "PRINCIPAL_SPLIT") {
+      openRecordTxModal("PAYMENT");
+      setTxPaymentOption("INSTALLMENT");
+      setTxInstallmentId(inst.id);
+      setTxAmount(inst.monthlyAmount);
+      setTxDescription(`${t.creditPage.installmentDescription} ${inst.itemName} (${inst.paidTerms + 1}/${inst.totalTerms})`);
+      return;
+    }
     setAdvancingInstId(inst.id);
     try {
       const nextPaid = Math.min(inst.totalTerms, inst.paidTerms + 1);
@@ -622,12 +698,19 @@ export default function CreditTracker() {
 
   function openChargeInstallmentModal(inst: CreditInstallment) {
     if (!selectedAccount || inst.earlySettlementDate || inst.status !== "ACTIVE" || inst.paidTerms >= inst.totalTerms) return;
+    setEditingTx(null);
+    setTxError("");
+    setTxAllocationSource("ACTUAL");
+    setTxAllocationTouched(false);
+    setTxPrincipal(inst.monthlyAmount);
+    setTxInterest(0);
+    setTxFees(0);
     setTxType("CHARGE");
     setTxPaymentOption("CUSTOM");
     setTxAmount(inst.monthlyAmount);
     setTxInstallmentId(inst.id);
     const termNum = (inst.paidTerms || 0) + 1;
-    setTxDescription(`ค่างวด ${inst.itemName} (งวดที่ ${termNum}/${inst.totalTerms})`);
+    setTxDescription(`${t.creditPage.installmentDescription} ${inst.itemName} (${termNum}/${inst.totalTerms})`);
 
     if (selectedAccount.statementDay) {
       let stmtDate = dayjs().date(selectedAccount.statementDay);
@@ -639,6 +722,9 @@ export default function CreditTracker() {
       setTxDate(dayjs());
     }
     setTxReceipt(undefined);
+    if (selectedAccount.balanceMode === "PRINCIPAL_SPLIT") {
+      setTxDate(bangkokToday());
+    }
     setShowTxModal(true);
   }
 
@@ -657,6 +743,13 @@ export default function CreditTracker() {
 
   function openRecordTxModal(defaultType: "CHARGE" | "PAYMENT" = "PAYMENT") {
     if (!selectedAccount) return;
+    setEditingTx(null);
+    setTxError("");
+    setTxAllocationSource("ACTUAL");
+    setTxAllocationTouched(false);
+    setTxPrincipal(0);
+    setTxInterest(0);
+    setTxFees(0);
     setTxType(defaultType);
     setTxDate(dayjs());
     setTxDescription("");
@@ -673,25 +766,44 @@ export default function CreditTracker() {
     setShowTxModal(true);
   }
 
+  function openEditTransaction(tx: CreditTransaction) {
+    if (!selectedAccount || isFrozenTransaction(selectedAccount, tx)) return;
+    setEditingTx(tx);
+    setTxType(tx.type);
+    setTxAmount(tx.amount);
+    setTxDate(dayjs(tx.date));
+    setTxDescription(tx.description || "");
+    setTxPaymentOption(tx.paymentType || "CUSTOM");
+    setTxInstallmentId(tx.installmentId || undefined);
+    setTxReceipt(tx.receiptImage || undefined);
+    setTxAllocationSource(tx.allocationSource || "ACTUAL");
+    setTxPrincipal(tx.principalAmount ?? 0);
+    setTxInterest(tx.interestAmount ?? 0);
+    setTxFees(tx.feeAmount ?? 0);
+    setTxAllocationTouched(true);
+    setTxError("");
+    setShowTxModal(true);
+  }
+
   function handleSelectPaymentOption(opt: CreditPaymentType, date = txDate) {
     if (!selectedAccount) return;
     setTxPaymentOption(opt);
     if (opt === "FULL") {
-      setTxAmount(selectedAccount.currentBalance);
+      setTxAmount(splitAccount && editingTx ? paymentBalances.reduce((sum, value) => sum + value, 0) / 100 : selectedAccount.currentBalance);
     } else if (opt === "MINIMUM") {
       const minCalc = computeDateAdjustedMinPayment(selectedAccount, date);
       setTxAmount(minCalc.amount);
-      if (!selectedAccount.usesStatementMinimum) {
+      if (!selectedAccount.usesStatementMinimum && selectedAccount.balanceMode !== "PRINCIPAL_SPLIT") {
         const activeInst = selectedAccount.installments.find((i) => i.status === "ACTIVE");
         if (activeInst) setTxInstallmentId(activeInst.id);
-      } else {
+      } else if (!editingTx) {
         setTxInstallmentId(undefined);
       }
     } else if (opt === "INSTALLMENT") {
       setTxAmount(selectedAccount.monthlyInstallmentDue);
-      const activeInst = selectedAccount.installments.find((i) => i.status === "ACTIVE");
-      if (activeInst) {
-        setTxInstallmentId(activeInst.id);
+      if (selectedAccount.balanceMode !== "PRINCIPAL_SPLIT") {
+        const activeInst = selectedAccount.installments.find((i) => i.status === "ACTIVE");
+        if (activeInst) setTxInstallmentId(activeInst.id);
       }
     }
   }
@@ -706,6 +818,21 @@ export default function CreditTracker() {
       message.warning(t.common.amount);
       return;
     }
+    if (splitAccount) {
+      if (moneyCents(txAmount) === null || !txDate.isValid() || !selectedAccount.balanceAsOfDate || txDate.format("YYYY-MM-DD") <= selectedAccount.balanceAsOfDate.slice(0, 10)) {
+        setTxError(t.creditPage.newEntryDate);
+        return;
+      }
+      if (txType === "CHARGE" || txAllocationSource === "ACTUAL") {
+        const parts = [txPrincipal, txInterest, txFees].map(moneyCents);
+        if (parts.some((value) => value === null)) { setTxError(t.creditPage.allocationRequired); return; }
+        if (parts.reduce<number>((sum, value) => sum + value!, 0) !== moneyCents(txAmount)) { setTxError(t.creditPage.allocationMismatch); return; }
+        if (txType === "PAYMENT" && parts.some((value, index) => value! > paymentBalances[index])) { setTxError(t.creditPage.allocationExceedsBalance); return; }
+      } else if (moneyCents(txAmount)! > paymentBalances.reduce((sum, value) => sum + value, 0)) {
+        setTxError(t.creditPage.allocationExceedsBalance);
+        return;
+      }
+    }
 
     setSavingTx(true);
     try {
@@ -717,13 +844,20 @@ export default function CreditTracker() {
         paymentType: txType === "PAYMENT" ? txPaymentOption : undefined,
         installmentId: txInstallmentId,
         receiptImage: txReceipt,
+        ...(splitAccount && (txType === "CHARGE" || txAllocationSource === "ACTUAL") ? {
+          principalAmount: txPrincipal!, interestAmount: txInterest!, feeAmount: txFees!,
+        } : {}),
       };
-      await api.addCreditTransaction(selectedAccount.id, payload);
-      message.success(t.creditPage.created);
+      if (editingTx) {
+        await api.updateCreditTransaction(selectedAccount.id, editingTx.id, payload);
+      } else {
+        await api.addCreditTransaction(selectedAccount.id, payload);
+      }
+      message.success(editingTx ? t.creditPage.updated : t.creditPage.created);
       setShowTxModal(false);
       fetchAccounts();
     } catch (e: unknown) {
-      message.error(getErrorMessage(e) || t.creditPage.createFailed);
+      setTxError(getErrorMessage(e) || (editingTx ? t.creditPage.updateFailed : t.creditPage.createFailed));
     } finally {
       setSavingTx(false);
     }
@@ -731,6 +865,8 @@ export default function CreditTracker() {
 
   async function handleDeleteTx(txId: string) {
     if (!selectedAccount) return;
+    const row = selectedAccount.transactions.find((tx) => tx.id === txId);
+    if (row && isFrozenTransaction(selectedAccount, row)) return;
     const linkedPlanId = selectedAccount.transactions.find((tx) => tx.id === txId)?.installmentId;
     if (linkedPlanId && selectedAccount.installments.some((i) => i.id === linkedPlanId && i.earlySettlementDate)) return;
     try {
@@ -794,6 +930,9 @@ export default function CreditTracker() {
             <div style={{ marginTop: 4, display: "flex", gap: 6, flexWrap: "wrap" }}>
               {renderAccountTypeTag(acc.type)}
               {acc.bank && <Tag>{acc.bank}</Tag>}
+              <Tag color={acc.balanceMode === "PRINCIPAL_SPLIT" ? "green" : "default"}>
+                {acc.balanceMode === "PRINCIPAL_SPLIT" ? t.creditPage.splitMode : t.creditPage.legacyMode}
+              </Tag>
               {acc.minPaymentCalcMode === "PRINCIPAL_PERCENT_PLUS_INTEREST" && (
                 <Tag color="cyan">เงินต้น + ดอกเบี้ย</Tag>
               )}
@@ -803,7 +942,7 @@ export default function CreditTracker() {
             </div>
           </div>
           <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>{t.creditPage.currentBalance}</div>
+            <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>{acc.balanceMode === "PRINCIPAL_SPLIT" ? t.creditPage.totalPostedDebt : t.creditPage.currentBalance}</div>
             <div style={{ fontSize: 18, fontWeight: 700, color: "#ef4444" }}>
               ฿{formatMoney(acc.currentBalance)}
             </div>
@@ -841,11 +980,16 @@ export default function CreditTracker() {
             </span>
           )}
         </div>
+        <Button size="small" style={{ marginTop: 12 }} onClick={(event) => {
+          event.stopPropagation();
+          setReconcileAccount(acc);
+        }}>{t.creditPage.reconcile}</Button>
       </Card>
     );
   }
 
   function renderAccountDetail(account: CreditAccountDetail) {
+    const isSplit = account.balanceMode === "PRINCIPAL_SPLIT";
     return (
       <Card
         bordered={false}
@@ -864,6 +1008,7 @@ export default function CreditTracker() {
               {account.name}
               {renderAccountTypeTag(account.type)}
               {account.bank && <Tag>{account.bank}</Tag>}
+              {isSplit && <Tag color="green">{t.creditPage.splitMode}</Tag>}
               {account.minPaymentCalcMode === "PRINCIPAL_PERCENT_PLUS_INTEREST" && (
                 <Tag color="cyan">เงินต้น + ดอกเบี้ย</Tag>
               )}
@@ -877,6 +1022,9 @@ export default function CreditTracker() {
           </div>
 
           <Space wrap size={isMobile ? "small" : "middle"}>
+            <Button onClick={() => setReconcileAccount(account)} size={isMobile ? "small" : "middle"}>
+              {t.creditPage.reconcile}
+            </Button>
             <Button
               type="primary"
               icon={<ThunderboltOutlined />}
@@ -909,6 +1057,17 @@ export default function CreditTracker() {
             </Popconfirm>
           </Space>
         </div>
+        {isSplit && (
+          <Space direction="vertical" size="small" style={{ width: "100%", marginBottom: 20 }}>
+            <Alert type="warning" showIcon title={t.creditPage.splitCashNotice} />
+            <Alert type="info" showIcon title={t.creditPage.splitInstallmentNotice} />
+            <div style={{ fontSize: 13, color: "var(--text-primary)", overflowWrap: "anywhere" }}>
+              <strong>{t.creditPage.baselineDate}: {account.balanceAsOfDate?.slice(0, 10)}</strong>
+              <div>{t.creditPage.baselineNote}: {account.balanceNote}</div>
+              <div style={{ color: "var(--text-secondary)", marginTop: 4 }}>{t.creditPage.frozenHistory}</div>
+            </div>
+          </Space>
+        )}
 
         {/* Account Specs Grid */}
         <Row
@@ -930,7 +1089,7 @@ export default function CreditTracker() {
             <div style={{ fontSize: isMobile ? 14 : 15, fontWeight: 700, color: "#10b981" }}>฿{formatMoney(account.availableCredit)}</div>
           </Col>
           <Col xs={12} sm={6}>
-            <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>{t.creditPage.currentBalance}</div>
+            <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>{isSplit ? t.creditPage.totalPostedDebt : t.creditPage.currentBalance}</div>
             <div style={{ fontSize: isMobile ? 14 : 15, fontWeight: 600, color: "#ef4444" }}>฿{formatMoney(account.currentBalance)}</div>
           </Col>
           <Col xs={12} sm={6}>
@@ -963,6 +1122,34 @@ export default function CreditTracker() {
             </div>
           </Col>
         </Row>
+        {isSplit && (
+          <section aria-label={t.creditPage.splitMode} style={{ marginBottom: 20 }}>
+            <Row gutter={[16, 12]}>
+              {[
+                [t.creditPage.principalBalance, principalOf(account)],
+                [t.creditPage.interestBalance, account.interestBalance],
+                [t.creditPage.feeBalance, account.feeBalance],
+                [t.creditPage.totalPostedDebt, account.currentBalance],
+              ].map(([label, amount]) => (
+                <Col xs={12} sm={6} key={String(label)}>
+                  <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>{label}</div>
+                  <strong style={{ color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>฿{formatMoney(amount as number)}</strong>
+                </Col>
+              ))}
+            </Row>
+            <p style={{ color: "var(--text-secondary)", fontSize: 12 }}>{t.creditPage.postedDebtHelp}</p>
+            <div style={{ fontSize: 13, color: "var(--text-primary)" }}>
+              {t.creditPage.limitBasis}: <strong>{account.creditLimitBasis === "TOTAL" ? t.creditPage.totalBasis : t.creditPage.principalBasis}</strong>
+              <br />{t.creditPage.allocationOrder}: {account.allocationOrder === "INTEREST_FEES_PRINCIPAL" ? t.creditPage.interestFirst : t.creditPage.feesFirst}
+            </div>
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border-subtle)", fontSize: 13, color: "var(--text-primary)" }}>
+              <div>{t.creditPage.forecastInterest}: ฿{formatMoney(account.nextCycleEstimatedInterest)}</div>
+              <div>{t.creditPage.forecastStatement}: ฿{formatMoney(account.nextCycleEstimatedStatement)}</div>
+              <div>{t.creditPage.nextCycleEstimatedMinimum}: ฿{formatMoney(account.nextCycleEstimatedMin)}</div>
+              <p style={{ color: "var(--text-secondary)", fontSize: 12, marginBottom: 0 }}>{t.creditPage.forecastHelp}</p>
+            </div>
+          </section>
+        )}
 
         {account.statementDate && (
           <div style={{ marginBottom: 20 }}>
@@ -986,7 +1173,7 @@ export default function CreditTracker() {
         )}
 
         {/* Breakdown explanation card */}
-        {(account.currentBalance > 0 || account.activeInstallmentCount > 0 || account.isPaidThisMonth || account.paidThisMonth > 0) && (
+        {!isSplit && (account.currentBalance > 0 || account.activeInstallmentCount > 0 || account.isPaidThisMonth || account.paidThisMonth > 0) && (
           <div
             style={{
               marginBottom: 20,
@@ -1212,7 +1399,7 @@ export default function CreditTracker() {
                           const isCharged = isInstallmentChargedThisCycle(record);
                           return (
                             <Space wrap size="small">
-                              {record.interestType === "EFFECTIVE" && (
+                              {!isSplit && record.interestType === "EFFECTIVE" && (
                                 <Button
                                   size="small"
                                   icon={<TableOutlined />}
@@ -1334,6 +1521,21 @@ export default function CreditTracker() {
                         ),
                       },
                       {
+                        title: t.creditPage.allocation,
+                        key: "allocation",
+                        hidden: !isSplit,
+                        render: (_, record) => record.allocationSource ? (
+                          <div style={{ fontSize: 12, minWidth: 160, fontVariantNumeric: "tabular-nums" }}>
+                            <Tag color={record.allocationSource === "ACTUAL" ? "blue" : "orange"}>
+                              {record.allocationSource === "ACTUAL" ? t.creditPage.actualAllocation : t.creditPage.ruleAllocation}
+                            </Tag>
+                            <div>{t.creditPage.principalAmount}: ฿{formatMoney(record.principalAmount)}</div>
+                            <div>{t.creditPage.interestAmount}: ฿{formatMoney(record.interestAmount)}</div>
+                            <div>{t.creditPage.feeAmount}: ฿{formatMoney(record.feeAmount)}</div>
+                          </div>
+                        ) : "—",
+                      },
+                      {
                         title: t.common.description,
                         dataIndex: "description",
                         key: "description",
@@ -1354,18 +1556,34 @@ export default function CreditTracker() {
                       {
                         title: t.common.actions,
                         key: "actions",
-                        width: 60,
-                        render: (_, record) => record.installmentId && account.installments.some((i) => i.id === record.installmentId && i.earlySettlementDate) ? null : (
-                          <Popconfirm
-                            title={t.creditPage.deleteTransactionConfirm}
-                            onConfirm={() => handleDeleteTx(record.id)}
-                            okText={t.common.delete}
-                            cancelText={t.common.cancel}
-                            okButtonProps={{ danger: true }}
-                          >
-                            <Button size="small" danger icon={<DeleteOutlined />} />
-                          </Popconfirm>
-                        ),
+                        width: isSplit ? 110 : 60,
+                        render: (_, record) => {
+                          const frozen = isFrozenTransaction(account, record);
+                          const settled = Boolean(record.installmentId && account.installments.some((i) => i.id === record.installmentId && i.earlySettlementDate));
+                          if (frozen) return (
+                            <Tooltip title={t.creditPage.frozenHistory}>
+                              <span tabIndex={0} aria-label={t.creditPage.frozenEntry}>
+                                <Button size="small" disabled icon={<DeleteOutlined />} aria-label={t.common.delete} />
+                                <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 4 }}>{t.creditPage.frozenEntry}</div>
+                              </span>
+                            </Tooltip>
+                          );
+                          if (settled) return null;
+                          return (
+                            <Space size="small">
+                              {isSplit && record.allocationSource && <Button size="small" icon={<EditOutlined />} onClick={() => openEditTransaction(record)} aria-label={t.creditPage.editTransaction} />}
+                              <Popconfirm
+                                title={t.creditPage.deleteTransactionConfirm}
+                                onConfirm={() => handleDeleteTx(record.id)}
+                                okText={t.common.delete}
+                                cancelText={t.common.cancel}
+                                okButtonProps={{ danger: true }}
+                              >
+                                <Button size="small" danger icon={<DeleteOutlined />} aria-label={t.common.delete} />
+                              </Popconfirm>
+                            </Space>
+                          );
+                        },
                       },
                     ]}
                   />
@@ -1579,6 +1797,14 @@ export default function CreditTracker() {
         </Row>
       )}
 
+      {reconcileAccount && (
+        <CreditReconciliation
+          key={reconcileAccount.id}
+          account={reconcileAccount}
+          onCancel={() => setReconcileAccount(null)}
+          onSaved={() => { setReconcileAccount(null); fetchAccounts(); }}
+        />
+      )}
       {/* Modal: Create / Edit Account */}
       <Modal
         title={editingAccountId ? t.creditPage.accountDetails : t.creditPage.newAccount}
@@ -1602,6 +1828,7 @@ export default function CreditTracker() {
             />
           </div>
 
+          <Alert type="info" showIcon title={editingSplitAccount ? t.creditPage.splitBalanceEdit : t.creditPage.legacyOptInHelp} />
           <Row gutter={12}>
             <Col span={12}>
               <label style={{ display: "block", marginBottom: 4, fontWeight: 500 }}>{t.creditPage.accountType}</label>
@@ -1642,6 +1869,7 @@ export default function CreditTracker() {
               <label style={{ display: "block", marginBottom: 4, fontWeight: 500 }}>{t.creditPage.currentBalance}</label>
               <InputNumber
                 value={accBalance}
+                disabled={editingSplitAccount}
                 onChange={(v) => setAccBalance(v || 0)}
                 style={{ width: "100%" }}
                 min={0}
@@ -1649,6 +1877,26 @@ export default function CreditTracker() {
               />
             </Col>
           </Row>
+          {editingSplitAccount && (
+            <>
+              <Row gutter={[12, 12]}>
+                <Col xs={24} sm={12}>
+                  <label htmlFor="credit-account-basis" style={{ display: "block", marginBottom: 4 }}>{t.creditPage.limitBasis}</label>
+                  <Select id="credit-account-basis" value={accLimitBasis} onChange={setAccLimitBasis} style={{ width: "100%" }} options={[
+                    { value: "PRINCIPAL", label: t.creditPage.principalBasis }, { value: "TOTAL", label: t.creditPage.totalBasis },
+                  ]} />
+                </Col>
+                <Col xs={24} sm={12}>
+                  <label htmlFor="credit-account-order" style={{ display: "block", marginBottom: 4 }}>{t.creditPage.allocationOrder}</label>
+                  <Select id="credit-account-order" value={accAllocationOrder} onChange={setAccAllocationOrder} style={{ width: "100%" }} options={[
+                    { value: "FEES_INTEREST_PRINCIPAL", label: t.creditPage.feesFirst }, { value: "INTEREST_FEES_PRINCIPAL", label: t.creditPage.interestFirst },
+                  ]} />
+                </Col>
+              </Row>
+              <Alert type="warning" showIcon title={t.creditPage.splitCashNotice} />
+              <Alert type="info" showIcon title={t.creditPage.splitInstallmentNotice} />
+            </>
+          )}
 
           <Row gutter={12}>
             <Col span={12}>
@@ -2030,26 +2278,33 @@ export default function CreditTracker() {
 
       {/* Modal: Record Transaction / Payment */}
       <Modal
-        title={txType === "PAYMENT" ? t.creditPage.payment : t.creditPage.charge}
+        title={editingTx ? t.creditPage.editTransaction : txType === "PAYMENT" ? t.creditPage.payment : t.creditPage.charge}
         open={showTxModal}
         onOk={handleSaveTransaction}
-        onCancel={() => setShowTxModal(false)}
+        onCancel={() => { if (!savingTx) setShowTxModal(false); }}
         confirmLoading={savingTx}
         okButtonProps={{ loading: savingTx, disabled: savingTx }}
         cancelButtonProps={{ disabled: savingTx }}
+        closable={!savingTx}
+        maskClosable={!savingTx}
+        keyboard={!savingTx}
         okText={t.common.save}
         cancelText={t.common.cancel}
-        width={isMobile ? "96%" : 480}
+        width={isMobile ? "96%" : splitAccount ? 600 : 480}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 10 }}>
+          {splitAccount && <Alert type="info" showIcon title={t.creditPage.newEntryDate} description={`${t.creditPage.baselineDate}: ${selectedAccount?.balanceAsOfDate?.slice(0, 10)}`} />}
           {/* Type selector */}
           <div style={{ display: "flex", gap: 8 }}>
             <Button
               type={txType === "CHARGE" ? "primary" : "default"}
               danger={txType === "CHARGE"}
+              disabled={Boolean(editingTx)}
               onClick={() => {
                 setTxType("CHARGE");
                 setTxPaymentOption("CUSTOM");
+                setTxAllocationSource("ACTUAL");
+                setTxAllocationTouched(false);
               }}
               style={{ flex: 1 }}
             >
@@ -2057,9 +2312,14 @@ export default function CreditTracker() {
             </Button>
             <Button
               type={txType === "PAYMENT" ? "primary" : "default"}
+              disabled={Boolean(editingTx)}
               style={{ flex: 1, ...(txType === "PAYMENT" ? { background: "#10b981", borderColor: "#10b981" } : {}) }}
               onClick={() => {
                 setTxType("PAYMENT");
+                setTxPrincipal(0);
+                setTxInterest(0);
+                setTxFees(0);
+                setTxAllocationTouched(false);
                 handleSelectPaymentOption("FULL");
               }}
             >
@@ -2068,7 +2328,7 @@ export default function CreditTracker() {
           </div>
 
           {/* Quick options when in CHARGE mode */}
-          {txType === "CHARGE" && selectedAccount && (
+          {txType === "CHARGE" && selectedAccount && !splitAccount && (
             <div style={{ background: isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.02)", border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid var(--border-subtle)", padding: 10, borderRadius: 8 }}>
               <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8 }}>
                 ประเภทรายการใช้จ่าย / ดอกเบี้ย:
@@ -2109,6 +2369,18 @@ export default function CreditTracker() {
               </div>
             </div>
           )}
+          {txType === "CHARGE" && splitAccount && (
+            <Space wrap>
+              <Button size="small" onClick={() => {
+                setTxDescription(t.creditPage.chargePrincipal);
+                setTxPrincipal(txAmount); setTxInterest(0); setTxFees(0); setTxAllocationTouched(false);
+              }}>{t.creditPage.chargePrincipal}</Button>
+              <Button size="small" onClick={() => {
+                setTxDescription(t.creditPage.chargeInterest);
+                setTxPrincipal(0); setTxInterest(txAmount); setTxFees(0); setTxAllocationTouched(true);
+              }}>{t.creditPage.chargeInterest}</Button>
+            </Space>
+          )}
 
           {/* Quick Payment Options Shortcuts when in PAYMENT mode */}
           {txType === "PAYMENT" && selectedAccount && (
@@ -2122,7 +2394,7 @@ export default function CreditTracker() {
                   type={txPaymentOption === "FULL" ? "primary" : "default"}
                   onClick={() => handleSelectPaymentOption("FULL")}
                 >
-                  {t.creditPage.payFull} (฿{formatMoney(selectedAccount.currentBalance)})
+                  {t.creditPage.payFull} (฿{formatMoney(splitAccount && editingTx ? paymentBalances.reduce((sum, value) => sum + value, 0) / 100 : selectedAccount.currentBalance)})
                 </Button>
                 {selectedAccount.estimatedMinPayment > 0 && (() => {
                   const minCalc = computeDateAdjustedMinPayment(selectedAccount, txDate);
@@ -2157,20 +2429,22 @@ export default function CreditTracker() {
               {/* Link to installment if available */}
               {selectedAccount.installments.filter((i) => i.status === "ACTIVE").length > 0 && (
                 <div style={{ marginTop: 10 }}>
-                  <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 4 }}>
-                    ตัดงวดรายการผ่อน (Optional):
+                  <label htmlFor="credit-payment-installment" style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 4 }}>
+                    {t.creditPage.installmentLink}
                   </label>
                   <Select
+                    id="credit-payment-installment"
+                    disabled={Boolean(editingTx)}
                     allowClear
-                    placeholder="เลือกรายการผ่อนที่ต้องการชำระ"
+                    placeholder={t.creditPage.installmentLink}
                     value={txInstallmentId}
                     onChange={setTxInstallmentId}
                     style={{ width: "100%" }}
                     options={selectedAccount.installments
-                      .filter((i) => i.status === "ACTIVE")
+                      .filter((i) => i.status === "ACTIVE" || i.id === txInstallmentId)
                       .map((i) => ({
                         value: i.id,
-                        label: `${i.itemName} (งวดที่ ${i.paidTerms + 1}/${i.totalTerms} - ฿${formatMoney(i.monthlyAmount)})`,
+                        label: `${i.itemName} (${i.paidTerms + 1}/${i.totalTerms} - ฿${formatMoney(i.monthlyAmount)})`,
                       }))}
                   />
                 </div>
@@ -2181,12 +2455,14 @@ export default function CreditTracker() {
           {/* Installment link for CHARGE mode if not in payment box */}
           {txType === "CHARGE" && selectedAccount && selectedAccount.installments.filter((i) => i.status === "ACTIVE").length > 0 && (
             <div style={{ background: isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.02)", border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid var(--border-subtle)", padding: 10, borderRadius: 8 }}>
-              <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 4 }}>
-                ผูกกับสัญญาผ่อน (Optional):
+              <label htmlFor="credit-charge-installment" style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 4 }}>
+                {t.creditPage.installmentLink}
               </label>
               <Select
+                id="credit-charge-installment"
+                disabled={Boolean(editingTx)}
                 allowClear
-                placeholder="เลือกรายการผ่อนที่ต้องการลงยอดหนี้"
+                placeholder={t.creditPage.installmentLink}
                 value={txInstallmentId}
                 onChange={(val) => {
                   setTxInstallmentId(val);
@@ -2194,16 +2470,16 @@ export default function CreditTracker() {
                     const inst = selectedAccount.installments.find((i) => i.id === val);
                     if (inst) {
                       setTxAmount(inst.monthlyAmount);
-                      setTxDescription(`ค่างวด ${inst.itemName} (งวดที่ ${inst.paidTerms + 1}/${inst.totalTerms})`);
+                      setTxDescription(`${t.creditPage.installmentDescription} ${inst.itemName} (${inst.paidTerms + 1}/${inst.totalTerms})`);
                     }
                   }
                 }}
                 style={{ width: "100%" }}
                 options={selectedAccount.installments
-                  .filter((i) => i.status === "ACTIVE")
+                  .filter((i) => i.status === "ACTIVE" || i.id === txInstallmentId)
                   .map((i) => ({
                     value: i.id,
-                    label: `${i.itemName} (งวดที่ ${i.paidTerms + 1}/${i.totalTerms} - ฿${formatMoney(i.monthlyAmount)})`,
+                    label: `${i.itemName} (${i.paidTerms + 1}/${i.totalTerms} - ฿${formatMoney(i.monthlyAmount)})`,
                   }))}
               />
             </div>
@@ -2217,15 +2493,67 @@ export default function CreditTracker() {
               onChange={(v) => setTxAmount(v || 0)}
               style={{ width: "100%" }}
               min={0}
+              precision={splitAccount ? 2 : undefined}
               formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
             />
           </div>
+          {splitAccount && (
+            <fieldset style={{ margin: 0, padding: 12, border: "1px solid var(--border-subtle)", borderRadius: 8, minWidth: 0 }}>
+              <legend style={{ width: "auto", padding: "0 4px", fontSize: 14 }}>{t.creditPage.allocation}</legend>
+              {txType === "PAYMENT" && (
+                <div style={{ marginBottom: 12 }}>
+                  <Select aria-label={t.creditPage.allocation} value={txAllocationSource} onChange={setTxAllocationSource} style={{ width: "100%" }} options={[
+                    { value: "ACTUAL", label: t.creditPage.actualAllocation },
+                    { value: "RULE", label: t.creditPage.ruleAllocation },
+                  ]} />
+                </div>
+              )}
+              {txType === "PAYMENT" && txAllocationSource === "RULE" ? (
+                <>
+                  <Alert type="warning" showIcon title={t.creditPage.ruleHelp} />
+                  <div style={{ marginTop: 10, fontSize: 12, color: "var(--text-secondary)" }}>
+                    {selectedAccount?.allocationOrder === "INTEREST_FEES_PRINCIPAL" ? t.creditPage.interestFirst : t.creditPage.feesFirst}
+                  </div>
+                  <div aria-live="polite" style={{ marginTop: 8, fontVariantNumeric: "tabular-nums" }}>
+                    {t.creditPage.principalAmount}: ฿{formatMoney(ruleAllocation[0])}<br />
+                    {t.creditPage.interestAmount}: ฿{formatMoney(ruleAllocation[1])}<br />
+                    {t.creditPage.feeAmount}: ฿{formatMoney(ruleAllocation[2])}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ marginBottom: 10, fontSize: 12, color: "var(--text-secondary)" }}>{t.creditPage.actualAllocation}</div>
+                  <Row gutter={[10, 10]}>
+                    {([
+                      [t.creditPage.principalAmount, txPrincipal, setTxPrincipal],
+                      [t.creditPage.interestAmount, txInterest, setTxInterest],
+                      [t.creditPage.feeAmount, txFees, setTxFees],
+                    ] as const).map(([label, value, setter], index) => (
+                      <Col xs={24} sm={8} key={label}>
+                        <label htmlFor={`credit-tx-part-${index}`} style={{ display: "block", marginBottom: 4 }}>{label} *</label>
+                        <InputNumber id={`credit-tx-part-${index}`} value={value} min={0} precision={2} style={{ width: "100%" }} onChange={(amount) => {
+                          setter(amount); setTxAllocationTouched(true);
+                        }} />
+                      </Col>
+                    ))}
+                  </Row>
+                  <div aria-live="polite" style={{ marginTop: 10, fontSize: 12, color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>
+                    {t.common.amount}: ฿{formatMoney((txPrincipal ?? 0) + (txInterest ?? 0) + (txFees ?? 0))} / ฿{formatMoney(txAmount)}
+                  </div>
+                  {[txPrincipal, txInterest, txFees].every((value) => moneyCents(value) !== null) &&
+                    [txPrincipal, txInterest, txFees].reduce<number>((sum, value) => sum + Math.round(value! * 100), 0) !== moneyCents(txAmount) &&
+                    <div role="alert" style={{ color: "var(--color-error, #dc2626)", marginTop: 6, fontSize: 12 }}>{t.creditPage.allocationMismatch}</div>}
+                </>
+              )}
+            </fieldset>
+          )}
 
           {/* Date input */}
           <div>
             <label style={{ display: "block", marginBottom: 4, fontWeight: 500 }}>{t.common.date}</label>
             <DatePicker
               value={txDate}
+              disabledDate={(date) => Boolean(splitAccount && selectedAccount?.balanceAsOfDate && date.format("YYYY-MM-DD") <= selectedAccount.balanceAsOfDate.slice(0, 10))}
               onChange={(d) => {
                 if (!d) return;
                 setTxDate(d);
@@ -2237,7 +2565,7 @@ export default function CreditTracker() {
               style={{ width: "100%" }}
               format="YYYY-MM-DD"
             />
-            {txType === "PAYMENT" && txPaymentOption === "MINIMUM" && selectedAccount && (() => {
+            {txType === "PAYMENT" && txPaymentOption === "MINIMUM" && selectedAccount && (!splitAccount || selectedAccount.usesStatementMinimum) && (() => {
               const minCalc = computeDateAdjustedMinPayment(selectedAccount, txDate);
               if (!minCalc.dueDate) return null;
               if (selectedAccount.usesStatementMinimum) {
@@ -2288,7 +2616,7 @@ export default function CreditTracker() {
             <Input
               value={txDescription}
               onChange={(e) => setTxDescription(e.target.value)}
-              placeholder="e.g. รูดซื้อของ Lotus's / จ่ายบิลรอบเดือน พ.ค."
+              placeholder={splitAccount ? t.creditPage.baselineNote : "e.g. รูดซื้อของ Lotus's / จ่ายบิลรอบเดือน พ.ค."}
             />
           </div>
 
@@ -2314,6 +2642,7 @@ export default function CreditTracker() {
               )}
             </Space>
           </div>
+          {txError && <Alert type="error" showIcon title={txError} />}
         </div>
       </Modal>
       {/* Modal: Amortization Schedule */}

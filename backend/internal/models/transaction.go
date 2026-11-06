@@ -22,25 +22,26 @@ const (
 // For INCOME transactions: Status and PaidAmount are always nil/null.
 // For EXPENSE transactions: Status is required (PENDING/PAID), PaidAmount >= 0.
 type Transaction struct {
-	ID                string          `json:"id"`
-	Type              TransactionType `json:"type"`
-	Category          string          `json:"category"`
-	Description       string          `json:"description"`
-	Amount            float64         `json:"amount"`
-	Date              string          `json:"date"`         // YYYY-MM-DD
-	Status            *ExpenseStatus  `json:"status"`        // nil for INCOME
-	PaidAmount        *float64        `json:"paidAmount"`    // nil for INCOME
-	GroupID           *string         `json:"groupId"`       // Owner group
-	UserID            *string         `json:"userId"`        // Wallet owner (manually selectable)
-	CreatedByID       *string         `json:"createdById"`   // Who recorded this (always JWT user)
-	ReceiptImage      *string         `json:"receiptImage"`
-	BillingCycle      *string         `json:"billingCycle,omitempty"`
-	CreditAccountID   *string         `json:"creditAccountId,omitempty"`
-	LoanID            *string         `json:"loanId,omitempty"`
-	CreatedByUsername *string         `json:"createdByUsername,omitempty"` // recorder username
-	OwnerUsername     *string         `json:"ownerUsername,omitempty"`     // wallet owner username
-	CreatedAt         string          `json:"createdAt"`
-	UpdatedAt         string          `json:"updatedAt"`
+	ID                  string          `json:"id"`
+	Type                TransactionType `json:"type"`
+	Category            string          `json:"category"`
+	Description         string          `json:"description"`
+	Amount              float64         `json:"amount"`
+	Date                string          `json:"date"`        // YYYY-MM-DD
+	Status              *ExpenseStatus  `json:"status"`      // nil for INCOME
+	PaidAmount          *float64        `json:"paidAmount"`  // nil for INCOME
+	GroupID             *string         `json:"groupId"`     // Owner group
+	UserID              *string         `json:"userId"`      // Wallet owner (manually selectable)
+	CreatedByID         *string         `json:"createdById"` // Who recorded this (always JWT user)
+	ReceiptImage        *string         `json:"receiptImage"`
+	BillingCycle        *string         `json:"billingCycle,omitempty"`
+	CreditAccountID     *string         `json:"creditAccountId,omitempty"`
+	LoanID              *string         `json:"loanId,omitempty"`
+	CreditPostingStatus string          `json:"creditPostingStatus,omitempty"` // response-only; split credit is recorded separately
+	CreatedByUsername   *string         `json:"createdByUsername,omitempty"`   // recorder username
+	OwnerUsername       *string         `json:"ownerUsername,omitempty"`       // wallet owner username
+	CreatedAt           string          `json:"createdAt"`
+	UpdatedAt           string          `json:"updatedAt"`
 }
 
 // TransactionRow is used for scanning database rows where nullable fields
@@ -138,33 +139,33 @@ func (r *TransactionRow) ToTransaction() Transaction {
 
 // CreateTransactionRequest is the payload for POST /api/transactions.
 type CreateTransactionRequest struct {
-	Type        TransactionType `json:"type"`
-	Category    string          `json:"category"`
-	Description string          `json:"description"`
-	Amount      float64         `json:"amount"`
-	Date        string          `json:"date"`
-	Status      *ExpenseStatus  `json:"status,omitempty"`
-	PaidAmount  *float64        `json:"paidAmount,omitempty"`
-	UserID      *string         `json:"userId,omitempty"`     // Optional: override wallet owner (must be group member)
-	ReceiptImage *string        `json:"receiptImage,omitempty"`
-	BillingCycle *string        `json:"billingCycle,omitempty"`
-	CreditAccountID *string     `json:"creditAccountId,omitempty"`
+	Type            TransactionType `json:"type"`
+	Category        string          `json:"category"`
+	Description     string          `json:"description"`
+	Amount          float64         `json:"amount"`
+	Date            string          `json:"date"`
+	Status          *ExpenseStatus  `json:"status,omitempty"`
+	PaidAmount      *float64        `json:"paidAmount,omitempty"`
+	UserID          *string         `json:"userId,omitempty"` // Optional: override wallet owner (must be group member)
+	ReceiptImage    *string         `json:"receiptImage,omitempty"`
+	BillingCycle    *string         `json:"billingCycle,omitempty"`
+	CreditAccountID *string         `json:"creditAccountId,omitempty"`
 	LoanID          *string         `json:"loanId,omitempty"`
 }
 
 // UpdateTransactionRequest is the payload for PATCH /api/transactions/{id}.
 type UpdateTransactionRequest struct {
-	Amount       *float64       `json:"amount,omitempty"`
-	Date         *string        `json:"date,omitempty"`
-	Category     *string        `json:"category,omitempty"`
-	Description  *string        `json:"description,omitempty"`
-	BillingCycle *string        `json:"billingCycle,omitempty"`
-	Status       *ExpenseStatus `json:"status,omitempty"`
-	PaidAmount   *float64       `json:"paidAmount,omitempty"`
-	UserID       *string        `json:"userId,omitempty"`     // Optional: change wallet owner (must be group member)
-	ReceiptImage *string        `json:"receiptImage,omitempty"`
-	CreditAccountID *string     `json:"creditAccountId,omitempty"`
-	LoanID          *string         `json:"loanId,omitempty"`
+	Amount          *float64       `json:"amount,omitempty"`
+	Date            *string        `json:"date,omitempty"`
+	Category        *string        `json:"category,omitempty"`
+	Description     *string        `json:"description,omitempty"`
+	BillingCycle    *string        `json:"billingCycle,omitempty"`
+	Status          *ExpenseStatus `json:"status,omitempty"`
+	PaidAmount      *float64       `json:"paidAmount,omitempty"`
+	UserID          *string        `json:"userId,omitempty"` // Optional: change wallet owner (must be group member)
+	ReceiptImage    *string        `json:"receiptImage,omitempty"`
+	CreditAccountID *string        `json:"creditAccountId,omitempty"`
+	LoanID          *string        `json:"loanId,omitempty"`
 }
 
 // TransactionSummary holds aggregated dashboard metrics for a given month.

@@ -86,6 +86,27 @@ When rebuilding an account from a statement, back up its card ledger, installmen
 
 Statement cutoffs and payment-day comparisons use the Bangkok calendar (`UTC+7`). Marking a linked dashboard bill paid records the credit payment on the actual payment day, independently of that bill's scheduled due date. This allows early payments to settle the current minimum without treating genuinely future-dated card payments as already paid.
 
+## Principal, interest, and fee accounting
+
+Each credit account operates independently in either **Legacy** (default) or **Principal / interest / fees** split mode. Legacy accounts retain their existing balance formulas and lump-sum payments without modification.
+
+Opting an account into split mode requires confirmed balances from an official statement or receipt via the **Reconcile balances** action (`POST /api/credit-accounts/{id}/reconcile`). The request specifies:
+
+- `asOfDate`: The snapshot date (no later than today in Bangkok, and on or after all recorded transactions and any prior baseline).
+- `principalBalance`, `interestBalance`, `feeBalance`: Exact non-negative integer cents from the official document. Total debt is the sum of these three components; `currentBalance` always represents total posted debt.
+- `creditLimitBasis`: `PRINCIPAL` (default for revolving personal loans like Money Thunder) or `TOTAL` (for standard cards where all debt reduces available credit).
+- `allocationOrder`: `FEES_INTEREST_PRINCIPAL` or `INTEREST_FEES_PRINCIPAL` for rule-based payments.
+- `historicalAllocations`: Optional list of `{ transactionId, principalAmount, interestAmount, feeAmount }` to annotate existing receipt records without creating duplicate payments or replaying balances.
+
+Transactions dated on or before the baseline date are permanently frozen against deletion or reversal. New transactions on a split account must be dated after the baseline date and no later than today in Bangkok.
+
+New split transactions support:
+- **ACTUAL allocations**: The user specifies explicit principal, interest, and fee amounts matching the payment receipt. Components must sum exactly to the transaction amount.
+- **RULE allocations**: For payments where the receipt does not detail components, payments are waterfall-allocated against current posted liabilities according to the account's configured order.
+- **Edits and reversals**: Editing a split transaction (`PUT /api/credit-accounts/{id}/transactions/{txId}`) updates stored components atomically by applying the net delta directly to liability buckets. Deleting a post-baseline transaction reverses its exact stored components.
+
+Dashboard cash expenses marked `PAID` do not automatically reduce split credit balances, because cash expense records lack debt allocation metadata. The dashboard shows a notification prompting users to record the allocated payment directly in Credit & Loans. Syncing dues estimates will not overwrite paid cash expenses linked to split accounts.
+
 ## Early installment settlement
 
 In an active installment's actions, choose **Settle early**, select the actual closure date, and optionally record a note. Record the real bank payment separately first: settlement does not create another payment, adjust the account's current balance, or close the credit account.

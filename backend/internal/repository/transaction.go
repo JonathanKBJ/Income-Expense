@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -12,6 +13,8 @@ import (
 
 	"github.com/google/uuid"
 )
+
+var ErrPaidSplitSyncConflict = errors.New("paid split-account expenses cannot be overwritten by due estimates")
 
 // TransactionRepository provides CRUD operations for transactions
 // using the Repository pattern to decouple data access from business logic.
@@ -759,6 +762,24 @@ func (r *TransactionRepository) BatchUpdateCreditLoanMapping(ctx context.Context
 	defer stmt.Close()
 
 	for _, u := range updates {
+		// An estimate must never rewrite actual cash history for an opted-in
+		// account, including attempts to replace or remove its existing mapping.
+		var protected bool
+		if err := dbTx.QueryRowContext(ctx, `
+			SELECT EXISTS (
+				SELECT 1 FROM transactions t
+				LEFT JOIN credit_accounts old_account ON old_account.id = t.credit_account_id
+				LEFT JOIN credit_accounts new_account ON new_account.id = ? AND new_account.group_id = ?
+				WHERE t.id = ? AND t.group_id = ?
+				AND (t.status = 'PAID' OR COALESCE(t.paid_amount, 0) > 0 OR COALESCE(t.receipt_image, '') <> '')
+				AND (old_account.balance_mode = 'PRINCIPAL_SPLIT' OR new_account.balance_mode = 'PRINCIPAL_SPLIT')
+			)`, u.CreditAccountID, groupID, u.TransactionID, groupID).Scan(&protected); err != nil {
+			return fmt.Errorf("failed to protect posted credit payment: %w", err)
+		}
+		if protected {
+			return ErrPaidSplitSyncConflict
+		}
+
 		var creditAccID, loanID *string
 		if u.CreditAccountID != nil && *u.CreditAccountID != "" {
 			creditAccID = u.CreditAccountID

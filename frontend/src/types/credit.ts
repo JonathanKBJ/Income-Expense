@@ -3,6 +3,10 @@ export type CreditStatus = "ACTIVE" | "CLOSED";
 export type InstallmentStatus = "ACTIVE" | "COMPLETED";
 export type CreditTxType = "CHARGE" | "PAYMENT";
 export type CreditPaymentType = "FULL" | "MINIMUM" | "INSTALLMENT" | "CUSTOM";
+export type CreditBalanceMode = "LEGACY" | "PRINCIPAL_SPLIT";
+export type CreditLimitBasis = "PRINCIPAL" | "TOTAL";
+export type CreditAllocationOrder = "FEES_INTEREST_PRINCIPAL" | "INTEREST_FEES_PRINCIPAL";
+export type CreditAllocationSource = "ACTUAL" | "RULE";
 
 export type CreditMinPaymentCalcMode =
   | "BALANCE_PERCENT"
@@ -16,6 +20,13 @@ export interface CreditAccount {
   bank: string;
   creditLimit: number;
   currentBalance: number;
+  balanceMode?: CreditBalanceMode;
+  interestBalance?: number;
+  feeBalance?: number;
+  creditLimitBasis?: CreditLimitBasis;
+  allocationOrder?: CreditAllocationOrder;
+  balanceAsOfDate?: string | null;
+  balanceNote?: string;
   statementDay?: number | null;
   paymentDueDay?: number | null;
   statementDate?: string | null;
@@ -65,11 +76,16 @@ export interface CreditTransaction {
   paymentType?: CreditPaymentType | null;
   installmentId?: string | null;
   receiptImage?: string | null;
+  principalAmount?: number | null;
+  interestAmount?: number | null;
+  feeAmount?: number | null;
+  allocationSource?: CreditAllocationSource | null;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface CreditAccountDetail extends CreditAccount {
+  principalBalance?: number;
   availableCredit: number;
   creditUtilization: number;
   unbilledInstallments: number;
@@ -128,6 +144,8 @@ export interface UpdateCreditAccountRequest {
   bank?: string;
   creditLimit?: number;
   currentBalance?: number;
+  creditLimitBasis?: CreditLimitBasis;
+  allocationOrder?: CreditAllocationOrder;
   statementDay?: number;
   paymentDueDay?: number;
   statementDate?: string | null;
@@ -184,4 +202,26 @@ export interface CreateCreditTxRequest {
   paymentType?: CreditPaymentType;
   installmentId?: string;
   receiptImage?: string;
+  principalAmount?: number;
+  interestAmount?: number;
+  feeAmount?: number;
+  allocationSource?: CreditAllocationSource;
+}
+
+export interface CreditHistoricalAllocation {
+  transactionId: string;
+  principalAmount: number;
+  interestAmount: number;
+  feeAmount: number;
+}
+
+export interface ReconcileCreditAccountRequest {
+  asOfDate: string;
+  principalBalance: number;
+  interestBalance: number;
+  feeBalance: number;
+  note: string;
+  creditLimitBasis?: CreditLimitBasis;
+  allocationOrder?: CreditAllocationOrder;
+  historicalAllocations?: CreditHistoricalAllocation[];
 }

@@ -214,6 +214,15 @@ func (h *CreditHandler) CronPostInstallments(w http.ResponseWriter, r *http.Requ
 			}
 
 			termNum := inst.PaidTerms + 1
+			if acc.BalanceMode == models.CreditBalancePrincipalSplit {
+				resp.Items = append(resp.Items, CronInstallmentItemResult{
+					AccountID: acc.ID, AccountName: acc.Name, InstallmentID: inst.ID,
+					ItemName: inst.ItemName, Term: termNum, TotalTerms: inst.TotalTerms,
+					Amount: inst.MonthlyAmount, NewBalance: currentAccBalance,
+					Status: "SKIPPED_ALLOCATION_REQUIRED", TelegramSent: false,
+				})
+				continue
+			}
 			alreadyCharged, err := h.creditRepo.IsInstallmentChargedInCycle(r.Context(), acc.ID, inst.ID, termNum, inst.TotalTerms, sinceDate)
 			if err != nil {
 				log.Printf("WARN: IsInstallmentChargedInCycle failed for acc %s, inst %s: %v", acc.ID, inst.ID, err)
@@ -466,6 +475,9 @@ func (h *CreditHandler) UpdateAccount(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.creditRepo.UpdateAccount(r.Context(), id, groupID, req, scopedUser); err != nil {
 		log.Printf("ERROR: UpdateAccount: %v", err)
+		if writeCreditMutationError(w, err) {
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "failed to update credit account")
 		return
 	}
@@ -711,32 +723,29 @@ func (h *CreditHandler) AddTransaction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tx := models.CreditTransaction{
-		AccountID:     id,
-		Type:          req.Type,
-		Amount:        req.Amount,
-		Date:          req.Date,
-		Description:   strings.TrimSpace(req.Description),
-		PaymentType:   req.PaymentType,
-		InstallmentID: req.InstallmentID,
-		ReceiptImage:  req.ReceiptImage,
+		AccountID:       id,
+		Type:            req.Type,
+		Amount:          req.Amount,
+		Date:            req.Date,
+		Description:     strings.TrimSpace(req.Description),
+		PaymentType:     req.PaymentType,
+		InstallmentID:   req.InstallmentID,
+		ReceiptImage:    req.ReceiptImage,
+		PrincipalAmount: req.PrincipalAmount,
+		InterestAmount:  req.InterestAmount,
+		FeeAmount:       req.FeeAmount,
 	}
 
 	if err := h.creditRepo.AddTransaction(r.Context(), &tx, id); err != nil {
 		log.Printf("ERROR: AddTransaction: %v", err)
-		if writeInstallmentMutationError(w, err) {
+		if writeCreditMutationError(w, err) {
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "failed to record transaction")
 		return
 	}
 
-	// Fetch updated account detail
-	updatedAcc, _ := h.creditRepo.GetAccountByID(r.Context(), id, groupID)
-	insts, _ := h.creditRepo.ListInstallments(r.Context(), id)
-	txs, _ := h.creditRepo.ListTransactions(r.Context(), id)
-
-	detail := computeAccountDetail(*updatedAcc, insts, txs)
-	writeJSON(w, http.StatusCreated, detail)
+	h.writeAccountDetail(w, r, id, groupID, scopedUser, http.StatusCreated)
 }
 
 // DeleteTransaction handles DELETE /api/credit-accounts/{id}/transactions/{tid}
@@ -758,14 +767,147 @@ func (h *CreditHandler) DeleteTransaction(w http.ResponseWriter, r *http.Request
 
 	if err := h.creditRepo.DeleteTransaction(r.Context(), tid, id); err != nil {
 		log.Printf("ERROR: DeleteTransaction: %v", err)
-		if writeInstallmentMutationError(w, err) {
+		if writeCreditMutationError(w, err) {
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "failed to delete transaction")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"message": "transaction deleted successfully"})
+	h.writeAccountDetail(w, r, id, groupID, scopedUser, http.StatusOK)
+}
+
+// ReconcileAccount adopts or corrects a split balance using an explicit baseline.
+func (h *CreditHandler) ReconcileAccount(w http.ResponseWriter, r *http.Request) {
+	groupID, userID := middleware.GetGroupID(r.Context()), middleware.GetUserID(r.Context())
+	id := chi.URLParam(r, "id")
+	if groupID == "" || userID == "" {
+		writeError(w, http.StatusForbidden, "group identification required")
+		return
+	}
+	scopedUser := h.getScopedUserID(r.Context(), groupID, userID)
+	acc, err := h.creditRepo.GetAccountByID(r.Context(), id, groupID, scopedUser)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get credit account")
+		return
+	}
+	if acc == nil {
+		writeError(w, http.StatusNotFound, "credit account not found")
+		return
+	}
+	var body struct {
+		models.ReconcileCreditAccountRequest
+		PrincipalBalance *float64 `json:"principalBalance"`
+		InterestBalance  *float64 `json:"interestBalance"`
+		FeeBalance       *float64 `json:"feeBalance"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if body.PrincipalBalance == nil || body.InterestBalance == nil || body.FeeBalance == nil {
+		writeError(w, http.StatusBadRequest, "principalBalance, interestBalance and feeBalance are required")
+		return
+	}
+	req := body.ReconcileCreditAccountRequest
+	req.PrincipalBalance, req.InterestBalance, req.FeeBalance = *body.PrincipalBalance, *body.InterestBalance, *body.FeeBalance
+	if err := h.creditRepo.ReconcileAccount(r.Context(), id, groupID, req, scopedUser); err != nil {
+		if !writeCreditMutationError(w, err) {
+			log.Printf("ERROR: ReconcileAccount: %v", err)
+			writeError(w, http.StatusInternalServerError, "failed to reconcile credit account")
+		}
+		return
+	}
+	h.writeAccountDetail(w, r, id, groupID, scopedUser, http.StatusOK)
+}
+
+// UpdateTransaction atomically replaces a post-baseline split ledger entry.
+func (h *CreditHandler) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
+	groupID, userID := middleware.GetGroupID(r.Context()), middleware.GetUserID(r.Context())
+	id, txID := chi.URLParam(r, "id"), chi.URLParam(r, "txId")
+	if groupID == "" || userID == "" {
+		writeError(w, http.StatusForbidden, "group identification required")
+		return
+	}
+	scopedUser := h.getScopedUserID(r.Context(), groupID, userID)
+	acc, err := h.creditRepo.GetAccountByID(r.Context(), id, groupID, scopedUser)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get credit account")
+		return
+	}
+	if acc == nil {
+		writeError(w, http.StatusNotFound, "credit account not found")
+		return
+	}
+	if acc.BalanceMode != models.CreditBalancePrincipalSplit {
+		writeError(w, http.StatusConflict, "transaction replacement requires PRINCIPAL_SPLIT mode")
+		return
+	}
+	var req models.CreateCreditTxRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Type != models.CreditTxCharge && req.Type != models.CreditTxPayment {
+		writeError(w, http.StatusBadRequest, "type must be CHARGE or PAYMENT")
+		return
+	}
+	if req.Amount <= 0 || req.Date == "" {
+		writeError(w, http.StatusBadRequest, "positive amount and date are required")
+		return
+	}
+	replacement := models.CreditTransaction{
+		AccountID: id, Type: req.Type, Amount: req.Amount, Date: req.Date,
+		Description: strings.TrimSpace(req.Description), PaymentType: req.PaymentType,
+		InstallmentID: req.InstallmentID, ReceiptImage: req.ReceiptImage,
+		PrincipalAmount: req.PrincipalAmount, InterestAmount: req.InterestAmount, FeeAmount: req.FeeAmount,
+	}
+	if err := h.creditRepo.UpdateTransaction(r.Context(), id, txID, &replacement); err != nil {
+		if !writeCreditMutationError(w, err) {
+			log.Printf("ERROR: UpdateTransaction: %v", err)
+			writeError(w, http.StatusInternalServerError, "failed to update credit transaction")
+		}
+		return
+	}
+	h.writeAccountDetail(w, r, id, groupID, scopedUser, http.StatusOK)
+}
+
+func writeCreditMutationError(w http.ResponseWriter, err error) bool {
+	switch {
+	case errors.Is(err, repository.ErrCreditInvalidAllocation):
+		writeError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, repository.ErrCreditConflict):
+		writeError(w, http.StatusConflict, err.Error())
+	case errors.Is(err, repository.ErrCreditNotFound):
+		writeError(w, http.StatusNotFound, err.Error())
+	default:
+		return writeInstallmentMutationError(w, err)
+	}
+	return true
+}
+
+// Always reload with the same owner/group scope used to authorize the mutation.
+func (h *CreditHandler) writeAccountDetail(w http.ResponseWriter, r *http.Request, id, groupID, scopedUser string, status int) {
+	acc, err := h.creditRepo.GetAccountByID(r.Context(), id, groupID, scopedUser)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get updated credit account")
+		return
+	}
+	if acc == nil {
+		writeError(w, http.StatusNotFound, "credit account not found")
+		return
+	}
+	insts, err := h.creditRepo.ListInstallments(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get credit installments")
+		return
+	}
+	txs, err := h.creditRepo.ListTransactions(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get credit transactions")
+		return
+	}
+	writeJSON(w, status, computeAccountDetail(*acc, insts, txs))
 }
 
 // --- Computation Helper ---
@@ -850,6 +992,9 @@ func currentStatementCutoff(day int, asOf time.Time) string {
 }
 
 func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstallment, txs []models.CreditTransaction, refDate ...time.Time) models.CreditAccountDetail {
+	if acc.BalanceMode == models.CreditBalancePrincipalSplit {
+		return computeSplitAccountDetail(acc, insts, txs, refDate...)
+	}
 	// Active installments monthly sum and unbilled future installments blocking credit limit
 	var monthlyInstDue float64
 	var unbilledInstallments float64
@@ -1100,6 +1245,7 @@ func computeAccountDetail(acc models.CreditAccount, insts []models.CreditInstall
 
 	return models.CreditAccountDetail{
 		CreditAccount:               acc,
+		PrincipalBalance:            acc.CurrentBalance,
 		AvailableCredit:             availableCredit,
 		CreditUtilization:           utilization,
 		UnbilledInstallments:        unbilledInstallments,
