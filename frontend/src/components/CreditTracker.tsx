@@ -71,36 +71,118 @@ interface AmortizationRow {
   isCurrent: boolean;
 }
 
-function generateAmortizationSchedule(inst: CreditInstallment): AmortizationRow[] {
-  const rows: AmortizationRow[] = [];
-  const totalTerms = inst.totalTerms || 48;
-  const currentTerm = (inst.paidTerms || 0) + 1;
-  const apr = (inst.interestRate || 23) / 100;
-  const start = inst.startDate ? dayjs(inst.startDate) : dayjs("2024-01-17");
-  let balance = 15176.0;
+function parseCustomScheduleNotes(notes?: string): { firstTerm?: number; regularTerm?: number; lastTerm?: number } | null {
+  if (!notes) return null;
+  try {
+    const parsed = JSON.parse(notes);
+    if (parsed && (parsed.firstTerm || parsed.regularTerm || parsed.lastTerm)) {
+      return {
+        firstTerm: Number(parsed.firstTerm) || undefined,
+        regularTerm: Number(parsed.regularTerm) || undefined,
+        lastTerm: Number(parsed.lastTerm) || undefined,
+      };
+    }
+  } catch {}
 
+  const firstMatch = notes.match(/(?:เดือนแรก|งวดแรก|firstTerm)[:\s=]+([\d,]+(?:\.\d+)?)/i);
+  const regMatch = notes.match(/(?:เดือนท*ที่\s*2\s*[-–]\s*\d+|ค่างวดปกติ|งวดปกติ|regularTerm)[:\s=]+([\d,]+(?:\.\d+)?)/i);
+  const lastMatch = notes.match(/(?:เดือนท*ที่\s*\d+|งวดสุดท้าย|เดือนสุดท้าย|lastTerm)[:\s=]+([\d,]+(?:\.\d+)?)/i);
+
+  const firstTerm = firstMatch ? parseFloat(firstMatch[1].replace(/,/g, "")) : undefined;
+  const regularTerm = regMatch ? parseFloat(regMatch[1].replace(/,/g, "")) : undefined;
+  const lastTerm = lastMatch ? parseFloat(lastMatch[1].replace(/,/g, "")) : undefined;
+
+  if (firstTerm !== undefined || regularTerm !== undefined || lastTerm !== undefined) {
+    return { firstTerm, regularTerm, lastTerm };
+  }
+  return null;
+}
+
+function generateAmortizationSchedule(inst: CreditInstallment): AmortizationRow[] {
+  if (inst.itemName && inst.itemName.includes("CPBCDB00001")) {
+    const rows: AmortizationRow[] = [];
+    const totalTerms = inst.totalTerms || 48;
+    const currentTerm = (inst.paidTerms || 0) + 1;
+    const apr = (inst.interestRate || 23) / 100;
+    const start = inst.startDate ? dayjs(inst.startDate) : dayjs("2024-01-17");
+    let balance = 15176.0;
+
+    for (let t = 1; t <= totalTerms; t++) {
+      const termDate = start.add(t - 1, "month").format("YYYY-MM");
+      let pay = inst.monthlyAmount || 486.41;
+      let interest = 0;
+      let prin = 0;
+
+      if (t === 1) {
+        pay = 396.36;
+        prin = 195.54;
+        interest = 200.82;
+        balance = Math.round((balance - prin) * 100) / 100;
+      } else if (t === totalTerms) {
+        pay = 489.83;
+        prin = 480.74;
+        interest = 9.09;
+        balance = 0;
+      } else {
+        pay = 486.41;
+        interest = Math.round((balance * (apr / 12)) * 100) / 100;
+        prin = Math.round((pay - interest) * 100) / 100;
+        balance = Math.max(0, Math.round((balance - prin) * 100) / 100);
+      }
+
+      rows.push({
+        term: t,
+        dateStr: termDate,
+        totalPayment: pay,
+        principal: prin,
+        interest: interest,
+        remainingBalance: balance,
+        isCurrent: t === currentTerm,
+      });
+    }
+    return rows;
+  }
+
+  // Dynamic amortization schedule for all plans
+  const rows: AmortizationRow[] = [];
+  const totalTerms = inst.totalTerms || 24;
+  const currentTerm = (inst.paidTerms || 0) + 1;
+  const apr = (inst.interestRate || 0) / 100;
+  const r = apr > 0 ? apr / 12 : 0;
+  const start = inst.startDate ? dayjs(inst.startDate) : dayjs();
+  const P = inst.totalAmount || 0;
+
+  // Standard PMT formula: P * r * (1+r)^n / ((1+r)^n - 1)
+  let standardPmt = P > 0 && totalTerms > 0
+    ? (r > 0 ? (P * (r * Math.pow(1 + r, totalTerms))) / (Math.pow(1 + r, totalTerms) - 1) : P / totalTerms)
+    : 0;
+  standardPmt = Math.round(standardPmt * 100) / 100;
+
+  const custom = parseCustomScheduleNotes(inst.notes);
+  const firstTermPay = custom?.firstTerm ?? (inst.monthlyAmount > 0 ? inst.monthlyAmount : standardPmt);
+  const regularTermPay = custom?.regularTerm ?? (inst.monthlyAmount > 0 && Math.abs(inst.monthlyAmount - standardPmt) < 1 ? inst.monthlyAmount : standardPmt);
+
+  let balance = P;
   for (let t = 1; t <= totalTerms; t++) {
     const termDate = start.add(t - 1, "month").format("YYYY-MM");
-    let pay = inst.monthlyAmount || 486.41;
-    let interest = 0;
-    let prin = 0;
+    let interest = Math.round(balance * r * 100) / 100;
+    let pay = regularTermPay;
 
     if (t === 1) {
-      pay = 396.36;
-      prin = 195.54;
-      interest = 200.82;
-      balance = Math.round((balance - prin) * 100) / 100;
+      pay = firstTermPay;
     } else if (t === totalTerms) {
-      pay = 489.83;
-      prin = 480.74;
-      interest = 9.09;
-      balance = 0;
-    } else {
-      pay = 486.41;
-      interest = Math.round((balance * (apr / 12)) * 100) / 100;
-      prin = Math.round((pay - interest) * 100) / 100;
-      balance = Math.max(0, Math.round((balance - prin) * 100) / 100);
+      if (custom?.lastTerm) {
+        pay = custom.lastTerm;
+      } else {
+        pay = Math.round((balance + interest) * 100) / 100;
+      }
     }
+
+    let prin = Math.round((pay - interest) * 100) / 100;
+    if (t === totalTerms && !custom?.lastTerm) {
+      prin = balance;
+    }
+    balance = Math.max(0, Math.round((balance - prin) * 100) / 100);
 
     rows.push({
       term: t,
@@ -2666,40 +2748,49 @@ export default function CreditTracker() {
         ]}
         width={isMobile ? "96%" : 760}
       >
-        {scheduleInstallment && (
-          <div>
-            <div style={{ background: isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.02)", border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid var(--border-subtle)", padding: "12px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
-              <Row gutter={[16, 8]}>
-                <Col xs={12} sm={8}>
-                  <span style={{ color: "var(--text-secondary)" }}>เงินต้นจัดตั้งต้น: </span>
-                  <strong style={{ color: "var(--text-primary)" }}>฿15,176.00</strong>
-                </Col>
-                <Col xs={12} sm={8}>
-                  <span style={{ color: "var(--text-secondary)" }}>ค่างวดปกติ (งวด 2-47): </span>
-                  <strong style={{ color: isDark ? "#f59e0b" : "#d97706" }}>฿486.41</strong>
-                </Col>
-                <Col xs={12} sm={8}>
-                  <span style={{ color: "var(--text-secondary)" }}>ยอดรวมทั้งสิ้น: </span>
-                  <strong style={{ color: "var(--text-primary)" }}>฿23,261.05</strong>
-                </Col>
-                <Col xs={12} sm={8}>
-                  <span style={{ color: "var(--text-secondary)" }}>งวดแรก (ม.ค. 2024): </span>
-                  <span style={{ color: "var(--text-primary)" }}>฿396.36</span>
-                </Col>
-                <Col xs={12} sm={8}>
-                  <span style={{ color: "var(--text-secondary)" }}>งวดสุดท้าย (ธ.ค. 2027): </span>
-                  <span style={{ color: "var(--text-primary)" }}>฿489.83</span>
-                </Col>
-                <Col xs={12} sm={8}>
-                  <span style={{ color: "var(--text-secondary)" }}>สถานะปัจจุบัน: </span>
-                  <Tag color="processing">งวดที่ {scheduleInstallment.paidTerms + 1} / {scheduleInstallment.totalTerms}</Tag>
-                </Col>
-              </Row>
-            </div>
+        {scheduleInstallment && (() => {
+          const scheduleRows = generateAmortizationSchedule(scheduleInstallment);
+          const isLegacyCPB = scheduleInstallment.itemName?.includes("CPBCDB00001");
+          const initialPrincipal = isLegacyCPB ? 15176.0 : (scheduleInstallment.totalAmount || 0);
+          const firstRow = scheduleRows[0];
+          const lastRow = scheduleRows[scheduleRows.length - 1];
+          const regularRow = scheduleRows.length > 2 ? scheduleRows[1] : firstRow;
+          const totalPaymentSum = scheduleRows.reduce((sum, r) => sum + r.totalPayment, 0);
 
-            <Table
-              rowKey="term"
-              dataSource={generateAmortizationSchedule(scheduleInstallment)}
+          return (
+            <div>
+              <div style={{ background: isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.02)", border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid var(--border-subtle)", padding: "12px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
+                <Row gutter={[16, 8]}>
+                  <Col xs={12} sm={8}>
+                    <span style={{ color: "var(--text-secondary)" }}>เงินต้นจัดตั้งต้น: </span>
+                    <strong style={{ color: "var(--text-primary)" }}>฿{formatMoney(initialPrincipal)}</strong>
+                  </Col>
+                  <Col xs={12} sm={8}>
+                    <span style={{ color: "var(--text-secondary)" }}>ค่างวดปกติ (งวด 2-{scheduleInstallment.totalTerms - 1}): </span>
+                    <strong style={{ color: isDark ? "#f59e0b" : "#d97706" }}>฿{formatMoney(regularRow?.totalPayment || 0)}</strong>
+                  </Col>
+                  <Col xs={12} sm={8}>
+                    <span style={{ color: "var(--text-secondary)" }}>ยอดรวมทั้งสิ้น: </span>
+                    <strong style={{ color: "var(--text-primary)" }}>฿{formatMoney(totalPaymentSum)}</strong>
+                  </Col>
+                  <Col xs={12} sm={8}>
+                    <span style={{ color: "var(--text-secondary)" }}>งวดแรก ({firstRow?.dateStr || ""}): </span>
+                    <span style={{ color: "var(--text-primary)" }}>฿{formatMoney(firstRow?.totalPayment || 0)}</span>
+                  </Col>
+                  <Col xs={12} sm={8}>
+                    <span style={{ color: "var(--text-secondary)" }}>งวดสุดท้าย ({lastRow?.dateStr || ""}): </span>
+                    <span style={{ color: "var(--text-primary)" }}>฿{formatMoney(lastRow?.totalPayment || 0)}</span>
+                  </Col>
+                  <Col xs={12} sm={8}>
+                    <span style={{ color: "var(--text-secondary)" }}>สถานะปัจจุบัน: </span>
+                    <Tag color="processing">งวดที่ {scheduleInstallment.paidTerms + 1} / {scheduleInstallment.totalTerms}</Tag>
+                  </Col>
+                </Row>
+              </div>
+
+              <Table
+                rowKey="term"
+                dataSource={scheduleRows}
               pagination={{ pageSize: 12, size: "small" }}
               size="small"
               scroll={{ x: 550 }}
@@ -2756,8 +2847,9 @@ export default function CreditTracker() {
                 },
               ]}
             />
-          </div>
-        )}
+            </div>
+          );
+        })()}
       </Modal>
     </div>
   );
