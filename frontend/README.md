@@ -95,3 +95,19 @@ Settlement retains the original contract amounts, schedule dates, notes, actual 
 The API is `POST /api/credit-accounts/{accountId}/installments/{installmentId}/settle-early` with `{ "settlementDate": "YYYY-MM-DD", "note": "optional" }`. It requires the existing editor/group/account permissions and an active plan with unpaid terms. The date must be a valid calendar date no later than today in Bangkok. It may precede the first scheduled installment: the plan's start date is not proof of when funds were disbursed. Invalid dates return 400, missing or inaccessible plans return 404, and repeated settlement or mutations of an early-settled plan return 409.
 
 Already-created Dashboard bills are account-level aggregates, not individual-plan records. Review them separately; settlement never deletes or rewrites them automatically. Existing payment receipts and unrelated active plans are preserved. The backend migration adds nullable settlement-date and default-empty settlement-note columns to existing installment records; deploy the backend before the frontend.
+
+## Install on Android
+
+The frontend includes `public/manifest.webmanifest` with a stable app ID, root start URL/scope, and `display: standalone`. Vite copies it and the launcher icons to `dist/`; no PWA plugin or extra dependency is required.
+
+After deploying the frontend over HTTPS:
+
+1. Open the deployed site directly in Chrome, not inside another app's browser.
+2. Use Chrome's menu → **Add to Home screen** → **Install** (some versions show **Install app** directly). Choose installation rather than creating a browser shortcut.
+3. Launch **Expenses** from the new icon. Pages within this site's scope should open without Chrome's address/title toolbar. Android's status and navigation bars remain visible. External sites may still open with browser controls.
+
+An old home-screen shortcut may keep opening in a browser. Remove only that shortcut and install again; do not clear browser/site storage or delete an existing installed app's data just to replace the shortcut. The app still needs an internet connection: no service worker, offline mode, or financial-data cache is added. An automatic install banner is not guaranteed.
+
+The PNG launcher icons use the existing app-header card emblem on an opaque dark background. `public/app-icon.svg` is their source; rasterize it at 192×192 and 512×512 when updating them. Keep the emblem inside the central 80%-diameter safe circle because the 512px icon also supports Android's maskable/adaptive shapes.
+
+Verification: run `npm run build`, then `npm run preview`. In Chrome DevTools → **Application → Manifest**, check that the manifest parses, the display mode is standalone, and both PNG icons load at their declared dimensions. Final home-screen launch behavior must also be checked on the target Android device after deployment.
